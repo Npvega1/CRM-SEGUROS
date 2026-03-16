@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -44,12 +44,15 @@ export default function RegistroPage() {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors }
   } = useForm<RegistroFormData>({
     resolver: zodResolver(registroSchema)
   });
 
   const watchAgencyName = watch('agencyName', '');
+  const watchSlug = watch('agencySlug', '');
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
 
   // Generar slug automático del nombre
   const generateSlug = (name: string): string => {
@@ -60,6 +63,16 @@ export default function RegistroPage() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   };
+
+  // Auto-generar slug cuando cambia el nombre de la agencia (si no fue editado manualmente)
+  useEffect(() => {
+    if (watchAgencyName && !slugManuallyEdited) {
+      const newSlug = generateSlug(watchAgencyName);
+      if (newSlug) {
+        setValue('agencySlug', newSlug, { shouldValidate: false });
+      }
+    }
+  }, [watchAgencyName, slugManuallyEdited, setValue]);
 
   const onSubmit = async (data: RegistroFormData) => {
     try {
@@ -223,12 +236,15 @@ export default function RegistroPage() {
                   id="agencySlug"
                   placeholder="mi-agencia"
                   disabled={isLoading}
-                  defaultValue={generateSlug(watchAgencyName)}
                   data-testid="registro-agency-slug-input"
                   {...register('agencySlug')}
+                  onChange={(e) => {
+                    setSlugManuallyEdited(true);
+                    register('agencySlug').onChange(e);
+                  }}
                 />
                 <p className="text-xs text-muted-foreground">
-                  URL: crm.tudominio.com/<span className="font-medium">{watch('agencySlug') || 'mi-agencia'}</span>
+                  URL: crm.tudominio.com/<span className="font-medium">{watchSlug || 'mi-agencia'}</span>
                 </p>
                 {errors.agencySlug && (
                   <p className="text-sm text-destructive">{errors.agencySlug.message}</p>
