@@ -191,8 +191,18 @@ export function TenantProvider({ children }: TenantProviderProps) {
    * Cerrar sesión
    */
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
-    setContext(null);
+    console.log('TenantContext: Cerrando sesión...');
+    try {
+      await supabase.auth.signOut();
+      setContext(null);
+      setIsLoading(false);
+      // Redirigir al login
+      window.location.href = '/login';
+    } catch (e) {
+      console.error('Error cerrando sesión:', e);
+      // Forzar redirección aunque falle
+      window.location.href = '/login';
+    }
   }, [supabase]);
 
   // Cargar contexto al montar
