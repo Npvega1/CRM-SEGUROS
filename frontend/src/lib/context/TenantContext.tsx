@@ -61,23 +61,30 @@ export function TenantProvider({ children }: TenantProviderProps) {
    * Carga los datos del tenant y usuario desde Supabase
    */
   const loadTenantContext = useCallback(async () => {
+    console.log('TenantContext: Iniciando carga...');
+    
     try {
       setIsLoading(true);
       setError(null);
 
       // Obtener sesión actual
+      console.log('TenantContext: Obteniendo sesión...');
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
+        console.error('TenantContext: Error de sesión', sessionError);
         throw new Error(`Error de sesión: ${sessionError.message}`);
       }
 
       if (!session?.user) {
+        console.log('TenantContext: No hay sesión activa');
         setContext(null);
+        setIsLoading(false);
         return;
       }
 
       const user = session.user;
+      console.log('TenantContext: Usuario encontrado', user.id);
       
       // Obtener claims del JWT (app_metadata)
       const appMetadata = user.app_metadata || {};
@@ -85,59 +92,78 @@ export function TenantProvider({ children }: TenantProviderProps) {
       const role = (appMetadata.role as Role) || 'readonly';
       const agentId = (appMetadata.agent_id as string) || user.id;
 
-      if (!tenantId) {
-        // Usuario sin tenant asignado (podría ser nuevo o superadmin)
-        setContext({
-          tenantId: '',
-          userId: user.id,
-          role,
-          agentId,
-          tenantName: '',
-          tenantSlug: '',
-          userEmail: user.email || '',
-          userFullName: ''
-        });
-        return;
+      console.log('TenantContext: Claims JWT', { tenantId, role, agentId });
+
+      // Valores por defecto
+      let userFullName = '';
+      let userEmail = user.email || '';
+      let tenantName = '';
+      let tenantSlug = '';
+      let finalRole = role;
+
+      // Intentar obtener datos del usuario (con timeout)
+      if (tenantId) {
+        try {
+          console.log('TenantContext: Consultando tabla users...');
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('full_name, email, role')
+            .eq('id', user.id)
+            .single();
+
+          if (userError) {
+            console.warn('TenantContext: Error consultando users', userError.message);
+          } else if (userData) {
+            console.log('TenantContext: Datos de usuario obtenidos', userData);
+            userFullName = userData.full_name || '';
+            userEmail = userData.email || user.email || '';
+            finalRole = userData.role || role;
+          }
+        } catch (e) {
+          console.warn('TenantContext: Excepción consultando users', e);
+        }
+
+        // Intentar obtener datos del tenant
+        try {
+          console.log('TenantContext: Consultando tabla tenants...');
+          const { data: tenantData, error: tenantError } = await supabase
+            .from('tenants')
+            .select('name, slug')
+            .eq('id', tenantId)
+            .single();
+
+          if (tenantError) {
+            console.warn('TenantContext: Error consultando tenants', tenantError.message);
+          } else if (tenantData) {
+            console.log('TenantContext: Datos de tenant obtenidos', tenantData);
+            tenantName = tenantData.name || '';
+            tenantSlug = tenantData.slug || '';
+          }
+        } catch (e) {
+          console.warn('TenantContext: Excepción consultando tenants', e);
+        }
       }
 
-      // Obtener datos del usuario desde la tabla users
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('full_name, email, role')
-        .eq('id', user.id)
-        .single();
-
-      if (userError && userError.code !== 'PGRST116') {
-        console.error('Error obteniendo usuario:', userError);
-      }
-
-      // Obtener datos del tenant
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenants')
-        .select('name, slug')
-        .eq('id', tenantId)
-        .single();
-
-      if (tenantError && tenantError.code !== 'PGRST116') {
-        console.error('Error obteniendo tenant:', tenantError);
-      }
-
-      setContext({
-        tenantId,
+      const contextData = {
+        tenantId: tenantId || '',
         userId: user.id,
-        role: userData?.role || role,
+        role: finalRole,
         agentId,
-        tenantName: tenantData?.name || '',
-        tenantSlug: tenantData?.slug || '',
-        userEmail: userData?.email || user.email || '',
-        userFullName: userData?.full_name || ''
-      });
+        tenantName,
+        tenantSlug,
+        userEmail,
+        userFullName
+      };
+
+      console.log('TenantContext: Configurando contexto', contextData);
+      setContext(contextData);
 
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       setError(message);
-      console.error('Error cargando contexto del tenant:', message);
+      console.error('TenantContext: Error cargando contexto:', message);
     } finally {
+      console.log('TenantContext: Finalizando carga');
       setIsLoading(false);
     }
   }, [supabase]);
