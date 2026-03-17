@@ -1,11 +1,11 @@
 'use client';
 
 // =====================================================
-// PÁGINA: Lista de Clientes (OPTIMIZADA)
+// PÁGINA: Lista de Clientes
 // /clientes
 // =====================================================
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -40,59 +40,41 @@ export default function ClientsPage() {
     thisMonth: number;
   } | null>(null);
 
-  // OPTIMIZACIÓN: Cargar datos en paralelo en un solo useEffect
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadData() {
-      setIsLoading(true);
-      
-      // OPTIMIZACIÓN: Cargar clientes y stats EN PARALELO
-      const [clientsResult, statsResult] = await Promise.all([
-        listClients({
-          page,
-          pageSize,
-          search: searchQuery || undefined,
-          segment: segmentFilter
-        }),
-        getClientStats()
-      ]);
-      
-      // Solo actualizar estado si el componente sigue montado
-      if (!isMounted) return;
-      
-      if (clientsResult.success) {
-        setClients(clientsResult.data.clients);
-        setTotal(clientsResult.data.total);
-      }
-      
-      if (statsResult.success) {
-        setStats(statsResult.data);
-      }
-      
-      setIsLoading(false);
+  const loadClients = useCallback(async () => {
+    setIsLoading(true);
+    const result = await listClients({
+      page,
+      pageSize,
+      search: searchQuery || undefined,
+      segment: segmentFilter
+    });
+    
+    if (result.success) {
+      setClients(result.data.clients);
+      setTotal(result.data.total);
     }
+    setIsLoading(false);
+  }, [page, pageSize, searchQuery, segmentFilter]);
 
-    if (!isLoadingTenant) {
-      loadData();
+  const loadStats = useCallback(async () => {
+    const result = await getClientStats();
+    if (result.success) {
+      setStats(result.data);
     }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isLoadingTenant, page, pageSize, searchQuery, segmentFilter]);
-
-  // OPTIMIZACIÓN: Debounce para el search
-  const handleSearch = useMemo(() => {
-    let timeoutId: NodeJS.Timeout;
-    return (query: string) => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
-        setSearchQuery(query);
-        setPage(1);
-      }, 300); // 300ms de debounce
-    };
   }, []);
+
+  useEffect(() => {
+    loadClients();
+  }, [loadClients]);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setPage(1);
+  };
 
   const handleSegmentFilter = (segment: string | undefined) => {
     setSegmentFilter(segment);
@@ -104,8 +86,8 @@ export default function ClientsPage() {
   };
 
   const handleImportSuccess = () => {
-    // Recargar datos después de importar
-    setPage(1);
+    loadClients();
+    loadStats();
   };
 
   if (isLoadingTenant) {
