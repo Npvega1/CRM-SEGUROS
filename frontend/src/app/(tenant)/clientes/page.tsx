@@ -5,7 +5,7 @@
 // /clientes
 // =====================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -39,37 +39,70 @@ export default function ClientsPage() {
     bySegment: Record<string, number>;
     thisMonth: number;
   } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadClients = useCallback(async () => {
-    setIsLoading(true);
-    const result = await listClients({
-      page,
-      pageSize,
-      search: searchQuery || undefined,
-      segment: segmentFilter
-    });
-    
-    if (result.success) {
-      setClients(result.data.clients);
-      setTotal(result.data.total);
-    }
-    setIsLoading(false);
-  }, [page, pageSize, searchQuery, segmentFilter]);
-
-  const loadStats = useCallback(async () => {
-    const result = await getClientStats();
-    if (result.success) {
-      setStats(result.data);
-    }
-  }, []);
-
+  // Cargar datos con timeout y mejor error handling
   useEffect(() => {
-    loadClients();
-  }, [loadClients]);
+    let isMounted = true;
+    const controller = new AbortController();
 
-  useEffect(() => {
-    loadStats();
-  }, [loadStats]);
+    async function loadData() {
+      if (isLoadingTenant) return;
+      
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // Timeout de 10 segundos
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        // Cargar clientes y stats en paralelo
+        const [clientsResult, statsResult] = await Promise.all([
+          listClients({
+            page,
+            pageSize,
+            search: searchQuery || undefined,
+            segment: segmentFilter
+          }),
+          getClientStats()
+        ]);
+        
+        clearTimeout(timeoutId);
+        
+        if (!isMounted) return;
+        
+        if (clientsResult.success) {
+          setClients(clientsResult.data.clients);
+          setTotal(clientsResult.data.total);
+        } else {
+          setError(clientsResult.error?.message || 'Error al cargar clientes');
+        }
+        
+        if (statsResult.success) {
+          setStats(statsResult.data);
+        }
+        
+      } catch (err) {
+        if (!isMounted) return;
+        if (err instanceof Error && err.name === 'AbortError') {
+          setError('La solicitud tardó demasiado. Por favor, recarga la página.');
+        } else {
+          setError('Error al cargar datos. Por favor, intenta de nuevo.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [isLoadingTenant, page, pageSize, searchQuery, segmentFilter]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -86,8 +119,10 @@ export default function ClientsPage() {
   };
 
   const handleImportSuccess = () => {
-    loadClients();
-    loadStats();
+    // Trigger reload by resetting page
+    setPage(1);
+    setSearchQuery('');
+    setSegmentFilter(undefined);
   };
 
   if (isLoadingTenant) {
@@ -120,6 +155,32 @@ export default function ClientsPage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error Message */}
+        {error && (
+          <Card className="mb-6 border-red-200 bg-red-50">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => window.location.reload()}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  Recargar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card>
