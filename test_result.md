@@ -101,3 +101,182 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  CRM Multi-tenant para Agencias de Seguros - Módulo 01: Gestión de Clientes y Pólizas
+  Stack: Next.js 14, Supabase, TypeScript, Zod, Shadcn/UI
+  Incluye: Tablas clients/policies, Server Actions, componentes UI, Edge Function alertas
+
+backend:
+  - task: "Migración SQL - Tablas clients, policies, policy_history"
+    implemented: true
+    working: "NA"
+    file: "supabase/migrations/00001_clients_policies.sql"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Migración creada. Necesita ejecutarse manualmente en Supabase Dashboard"
+
+  - task: "Server Actions - Clientes (CRUD, búsqueda, importación CSV)"
+    implemented: true
+    working: "NA"
+    file: "src/app/(tenant)/clientes/actions.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implementado: createClient, updateClient, deleteClient, searchClients, listClients, importClientsFromCSV"
+
+  - task: "Server Actions - Pólizas (CRUD, cambio estado, subida documento)"
+    implemented: true
+    working: "NA"
+    file: "src/app/(tenant)/polizas/actions.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implementado: createPolicy, updatePolicy, updatePolicyStatus, uploadPolicyDocument, getExpiringPolicies"
+
+  - task: "Edge Function - Alertas de vencimiento de pólizas"
+    implemented: true
+    working: "NA"
+    file: "supabase/functions/policy-expiry-alerts/index.ts"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Creada Edge Function para cron diario. Necesita deploy en Supabase"
+
+frontend:
+  - task: "Página lista de clientes con tabla, búsqueda y filtros"
+    implemented: true
+    working: "NA"
+    file: "src/app/(tenant)/clientes/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "ClientsTable con paginación, búsqueda full-text, filtros por segmento"
+
+  - task: "Formulario de cliente (crear/editar)"
+    implemented: true
+    working: "NA"
+    file: "src/components/modules/clients/ClientForm.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Formulario con react-hook-form + Zod, campos: nombre, documento, email, teléfono, segmento"
+
+  - task: "Vista 360° de cliente con tabs"
+    implemented: true
+    working: "NA"
+    file: "src/components/modules/clients/Client360View.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Tabs: Pólizas, Siniestros (stub), Cuotas (stub), Comparativos (stub)"
+
+  - task: "Importador CSV de clientes"
+    implemented: true
+    working: "NA"
+    file: "src/components/modules/clients/CSVImporter.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Drag-and-drop, preview, validación fila a fila, reporte de errores"
+
+  - task: "Página lista de pólizas"
+    implemented: true
+    working: "NA"
+    file: "src/app/(tenant)/polizas/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Tabla con filtros por estado y línea, alertas de vencimiento"
+
+  - task: "Formulario de póliza"
+    implemented: true
+    working: "NA"
+    file: "src/components/modules/policies/PolicyForm.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Formulario con campos: número, aseguradora, línea, estado, prima, fechas, comisión"
+
+  - task: "Stepper de estado de póliza"
+    implemented: true
+    working: "NA"
+    file: "src/components/modules/policies/PolicyStatusStepper.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Visualización flujo: cotización→activa→vencida/cancelada/renovación"
+
+  - task: "Uploader de documento PDF"
+    implemented: true
+    working: "NA"
+    file: "src/components/modules/policies/PDFUploader.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Drag-and-drop con barra de progreso, preview, integración Supabase Storage"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 0
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Página lista de clientes"
+    - "Formulario de cliente"
+    - "Página lista de pólizas"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      MÓDULO 01 IMPLEMENTADO - PENDIENTE MIGRACIÓN SQL
+      
+      La migración SQL está lista en: supabase/migrations/00001_clients_policies.sql
+      El usuario debe ejecutarla manualmente en el Dashboard de Supabase antes de probar.
+      
+      También se necesita crear el bucket 'policy-documents' en Supabase Storage.
+      
+      El frontend compila correctamente. Las funcionalidades están listas pero dependen
+      de que las tablas existan en la base de datos.

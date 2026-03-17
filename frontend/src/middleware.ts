@@ -36,7 +36,9 @@ function matchesRoute(pathname: string, routes: string[]): boolean {
  * Se implementará en el Módulo 10 - Planes y Pagos
  */
 function checkPlanLimit(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _tenantId: string, 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _feature: string
 ): { allowed: boolean; reason?: string } {
   // TODO: Implementar verificación real de límites del plan

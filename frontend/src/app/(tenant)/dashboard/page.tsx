@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +17,8 @@ import {
   LogOut
 } from 'lucide-react';
 import Link from 'next/link';
+import { getClientStats } from '../clientes/actions';
+import { getPolicyStats } from '../polizas/actions';
 
 export default function DashboardPage() {
   const { 
@@ -26,37 +29,53 @@ export default function DashboardPage() {
     signOut 
   } = useTenant();
 
+  const [clientStats, setClientStats] = useState<{ total: number; thisMonth: number } | null>(null);
+  const [policyStats, setPolicyStats] = useState<{ total: number; active: number; totalPremium: number } | null>(null);
+
+  useEffect(() => {
+    async function loadStats() {
+      const [clientResult, policyResult] = await Promise.all([
+        getClientStats(),
+        getPolicyStats()
+      ]);
+      if (clientResult.success) setClientStats(clientResult.data);
+      if (policyResult.success) setPolicyStats(policyResult.data);
+    }
+    if (!isLoading) {
+      loadStats();
+    }
+  }, [isLoading]);
+
   if (isLoading) {
     return <LoadingScreen message="Cargando dashboard..." />;
   }
 
-  // Stats de ejemplo (se conectarán con datos reales en módulos posteriores)
   const stats = [
     {
       title: 'Clientes Activos',
-      value: '0',
-      change: '+0%',
+      value: clientStats?.total?.toString() || '0',
+      change: clientStats?.thisMonth ? `+${clientStats.thisMonth} este mes` : '+0%',
       icon: Users,
       href: '/clientes'
     },
     {
-      title: 'Pólizas Vigentes',
-      value: '0',
-      change: '+0%',
+      title: 'Pólizas Activas',
+      value: policyStats?.active?.toString() || '0',
+      change: `${policyStats?.total || 0} total`,
       icon: FileText,
       href: '/polizas'
     },
     {
       title: 'Pipeline de Ventas',
       value: '$0',
-      change: '+0%',
+      change: 'Próximamente',
       icon: TrendingUp,
       href: '/pipeline'
     },
     {
       title: 'Siniestros Abiertos',
       value: '0',
-      change: '0%',
+      change: 'Próximamente',
       icon: AlertTriangle,
       href: '/siniestros'
     }

@@ -136,9 +136,11 @@ export function TenantProvider({ children }: TenantProviderProps) {
             console.warn('TenantContext: Error consultando users', userError.message);
           } else if (userData) {
             console.log('TenantContext: Datos de usuario obtenidos', userData);
-            userFullName = userData.full_name || userFullName;
-            userEmail = userData.email || userEmail;
-            finalRole = userData.role || role;
+            // Cast para TypeScript - los tipos de la DB real
+            const data = userData as { full_name?: string; email?: string; role?: Role };
+            userFullName = data.full_name || userFullName;
+            userEmail = data.email || userEmail;
+            finalRole = data.role || role;
           }
         } catch (e) {
           console.warn('TenantContext: Excepción consultando users', e);
@@ -156,8 +158,10 @@ export function TenantProvider({ children }: TenantProviderProps) {
             console.warn('TenantContext: Error consultando tenants', tenantError.message);
           } else if (tenantData) {
             console.log('TenantContext: Datos de tenant obtenidos', tenantData);
-            tenantName = tenantData.name || '';
-            tenantSlug = tenantData.slug || '';
+            // Cast para TypeScript - los tipos de la DB real
+            const data = tenantData as { name?: string; slug?: string };
+            tenantName = data.name || '';
+            tenantSlug = data.slug || '';
           }
         } catch (e) {
           console.warn('TenantContext: Excepción consultando tenants', e);
