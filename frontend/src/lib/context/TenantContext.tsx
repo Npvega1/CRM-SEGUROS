@@ -67,13 +67,34 @@ export function TenantProvider({ children }: TenantProviderProps) {
       setIsLoading(true);
       setError(null);
 
-      // Obtener sesión actual
+      // Obtener sesión actual con timeout
       console.log('TenantContext: Obteniendo sesión...');
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 5000)
+      );
+      
+      let session;
+      let sessionError;
+      
+      try {
+        const result = await Promise.race([sessionPromise, timeoutPromise]);
+        session = result.data?.session;
+        sessionError = result.error;
+      } catch (e) {
+        console.warn('TenantContext: Timeout o error en getSession', e);
+        // Continuar sin sesión
+        setContext(null);
+        setIsLoading(false);
+        return;
+      }
       
       if (sessionError) {
         console.error('TenantContext: Error de sesión', sessionError);
-        throw new Error(`Error de sesión: ${sessionError.message}`);
+        setContext(null);
+        setIsLoading(false);
+        return;
       }
 
       if (!session?.user) {
@@ -95,13 +116,13 @@ export function TenantProvider({ children }: TenantProviderProps) {
       console.log('TenantContext: Claims JWT', { tenantId, role, agentId });
 
       // Valores por defecto
-      let userFullName = '';
+      let userFullName = user.user_metadata?.full_name || '';
       let userEmail = user.email || '';
       let tenantName = '';
       let tenantSlug = '';
       let finalRole = role;
 
-      // Intentar obtener datos del usuario (con timeout)
+      // Intentar obtener datos adicionales solo si hay tenantId
       if (tenantId) {
         try {
           console.log('TenantContext: Consultando tabla users...');
@@ -109,28 +130,27 @@ export function TenantProvider({ children }: TenantProviderProps) {
             .from('users')
             .select('full_name, email, role')
             .eq('id', user.id)
-            .single();
+            .maybeSingle();
 
           if (userError) {
             console.warn('TenantContext: Error consultando users', userError.message);
           } else if (userData) {
             console.log('TenantContext: Datos de usuario obtenidos', userData);
-            userFullName = userData.full_name || '';
-            userEmail = userData.email || user.email || '';
+            userFullName = userData.full_name || userFullName;
+            userEmail = userData.email || userEmail;
             finalRole = userData.role || role;
           }
         } catch (e) {
           console.warn('TenantContext: Excepción consultando users', e);
         }
 
-        // Intentar obtener datos del tenant
         try {
           console.log('TenantContext: Consultando tabla tenants...');
           const { data: tenantData, error: tenantError } = await supabase
             .from('tenants')
             .select('name, slug')
             .eq('id', tenantId)
-            .single();
+            .maybeSingle();
 
           if (tenantError) {
             console.warn('TenantContext: Error consultando tenants', tenantError.message);
@@ -157,13 +177,12 @@ export function TenantProvider({ children }: TenantProviderProps) {
 
       console.log('TenantContext: Configurando contexto', contextData);
       setContext(contextData);
+      setIsLoading(false);
 
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       setError(message);
       console.error('TenantContext: Error cargando contexto:', message);
-    } finally {
-      console.log('TenantContext: Finalizando carga');
       setIsLoading(false);
     }
   }, [supabase]);
