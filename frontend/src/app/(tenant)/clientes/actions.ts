@@ -1,7 +1,7 @@
 'use server';
 
 // =====================================================
-// SERVER ACTIONS - Clientes
+// SERVER ACTIONS - Clientes (OPTIMIZADO)
 // Módulo 01: Gestión de Clientes
 // =====================================================
 
@@ -203,11 +203,7 @@ export async function getClientById(id: string): Promise<Result<Client, AppError
       .eq('id', id)
       .single();
 
-    if (error) {
-      return err({ code: 'DB_ERROR', message: error.message });
-    }
-
-    if (!data) {
+    if (error || !data) {
       return err({ code: 'NOT_FOUND', message: 'Cliente no encontrado' });
     }
 
@@ -282,7 +278,7 @@ export async function searchClients(
 }
 
 // =====================================================
-// LIST CLIENTS (con paginación y filtros)
+// LIST CLIENTS (con paginación y filtros) - OPTIMIZADO
 // =====================================================
 export async function listClients(options?: {
   page?: number;
@@ -304,7 +300,7 @@ export async function listClients(options?: {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    // Construir query
+    // Construir query base
     let queryBuilder = supabase
       .from('clients')
       .select('*', { count: 'exact' })
@@ -408,12 +404,12 @@ export async function importClientsFromCSV(
 
         // Validar tipo de documento
         const validDocTypes = ['rut', 'nit', 'cedula', 'pasaporte'];
-        const docType = row.doc_type?.toLowerCase() || 'cedula';
+        const docType = (row.doc_type?.toLowerCase() || 'cedula');
         if (!validDocTypes.includes(docType)) {
           errors.push({
             row: rowIndex,
             field: 'doc_type',
-            message: `Tipo de documento inválido. Valores permitidos: ${validDocTypes.join(', ')}`,
+            message: `Tipo de documento inválido. Debe ser uno de: ${validDocTypes.join(', ')}`,
             value: row.doc_type
           });
           continue;
@@ -421,56 +417,45 @@ export async function importClientsFromCSV(
 
         // Validar segmento
         const validSegments = ['individual', 'empresa', 'vip'];
-        const segment = row.segment?.toLowerCase() || 'individual';
+        const segment = (row.segment?.toLowerCase() || 'individual');
         if (!validSegments.includes(segment)) {
           errors.push({
             row: rowIndex,
             field: 'segment',
-            message: `Segmento inválido. Valores permitidos: ${validSegments.join(', ')}`,
+            message: `Segmento inválido. Debe ser uno de: ${validSegments.join(', ')}`,
             value: row.segment
           });
           continue;
         }
 
-        // Validar email si está presente
-        if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
-          errors.push({
-            row: rowIndex,
-            field: 'email',
-            message: 'Email inválido',
-            value: row.email
-          });
-          continue;
+        // Parsear tags si existen
+        let tags: string[] = [];
+        if (row.tags) {
+          tags = row.tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
         }
-
-        // Parsear tags
-        const tags = row.tags 
-          ? row.tags.split(',').map(t => t.trim()).filter(Boolean)
-          : [];
 
         validRows.push({
           tenant_id: tenantId,
           full_name: row.full_name.trim(),
           doc_type: docType,
-          doc_number: row.doc_number.trim().toUpperCase(),
-          email: row.email?.trim().toLowerCase() || null,
+          doc_number: row.doc_number.toUpperCase().trim(),
+          email: row.email?.trim() || null,
           phone: row.phone?.trim() || null,
-          segment,
+          segment: segment,
           tags
         });
       }
 
       // Insertar lote válido
       if (validRows.length > 0) {
-        const { error: insertError, data: insertedData } = await supabase
+        const { data: insertedData, error: insertError } = await supabase
           .from('clients')
           .insert(validRows)
           .select();
 
         if (insertError) {
-          // Manejar errores de inserción (duplicados, etc.)
+          // Si es error de duplicado, intentar insertar uno por uno
           if (insertError.code === '23505') {
-            // Intentar inserción individual para identificar duplicados
             for (const row of validRows) {
               const { error: singleError } = await supabase
                 .from('clients')
@@ -524,7 +509,7 @@ export async function importClientsFromCSV(
 }
 
 // =====================================================
-// GET CLIENT STATS
+// GET CLIENT STATS (OPTIMIZADO - Single Query)
 // =====================================================
 export async function getClientStats(): Promise<Result<{
   total: number;
@@ -539,48 +524,53 @@ export async function getClientStats(): Promise<Result<{
       return err({ code: 'UNAUTHORIZED', message: 'No tienes acceso a esta organización' });
     }
 
-    // Total de clientes activos
-    const { count: total } = await supabase
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    // OPTIMIZACIÓN: Una sola query trayendo solo lo necesario
+    const { data, error } = await supabase
       .from('clients')
-      .select('*', { count: 'exact', head: true })
+      .select('segment, created_at')
       .eq('tenant_id', tenantId)
       .eq('is_active', true);
 
-    // Por segmento
-    const { data: segmentData } = await supabase
-      .from('clients')
-      .select('segment')
-      .eq('tenant_id', tenantId)
-      .eq('is_active', true);
+    if (error) {
+      return err({ code: 'DB_ERROR', message: error.message });
+    }
 
+    const clients = data || [];
+    const total = clients.length;
+
+    // Calcular stats en memoria (más rápido que múltiples queries)
     const bySegment: Record<string, number> = {
       individual: 0,
       empresa: 0,
       vip: 0
     };
 
-    segmentData?.forEach(row => {
-      if (row.segment && bySegment[row.segment] !== undefined) {
-        bySegment[row.segment]++;
+    let thisMonth = 0;
+    const startOfMonthTime = startOfMonth.getTime();
+
+    clients.forEach(client => {
+      // Contar por segmento
+      if (client.segment && bySegment[client.segment] !== undefined) {
+        bySegment[client.segment]++;
+      }
+
+      // Contar este mes
+      if (client.created_at) {
+        const createdDate = new Date(client.created_at);
+        if (createdDate.getTime() >= startOfMonthTime) {
+          thisMonth++;
+        }
       }
     });
 
-    // Creados este mes
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const { count: thisMonth } = await supabase
-      .from('clients')
-      .select('*', { count: 'exact', head: true })
-      .eq('tenant_id', tenantId)
-      .eq('is_active', true)
-      .gte('created_at', startOfMonth.toISOString());
-
     return ok({
-      total: total || 0,
+      total,
       bySegment,
-      thisMonth: thisMonth || 0
+      thisMonth
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Error desconocido';
