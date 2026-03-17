@@ -19,6 +19,7 @@ Construir un CRM multi-tenant para agencias de seguros con Next.js 14, Supabase,
 - Multi-tenancy basado en `tenant_id` en JWT claims
 - RLS (Row Level Security) para aislamiento de datos
 - Sistema de roles jerárquico (superadmin > admin > senior_agent > agent > readonly)
+- API Route con service_role para registro (bypasa RLS)
 
 ---
 
@@ -38,7 +39,7 @@ Construir un CRM multi-tenant para agencias de seguros con Next.js 14, Supabase,
 ## Core Requirements (Estático)
 
 ### Seguridad
-- [ ] Autenticación con Supabase Auth
+- [x] Autenticación con Supabase Auth
 - [x] Row Level Security en todas las tablas
 - [x] JWT con claims personalizados (tenant_id, role, agent_id)
 - [x] Middleware de protección de rutas
@@ -49,7 +50,7 @@ Construir un CRM multi-tenant para agencias de seguros con Next.js 14, Supabase,
 - [ ] Límites por plan (pendiente Módulo 10)
 
 ### Módulos
-- [x] M00: Fundación
+- [x] M00: Fundación ✅ COMPLETADO
 - [ ] M01: Clientes y Pólizas
 - [ ] M02: Pipeline de Ventas
 - [ ] M03: Siniestros
@@ -64,14 +65,14 @@ Construir un CRM multi-tenant para agencias de seguros con Next.js 14, Supabase,
 
 ---
 
-## Lo Implementado (Fecha: 2026-01-16)
+## Lo Implementado (Fecha: 2026-01-17)
 
-### Fase 0 - Fundación ✅
+### Fase 0 - Fundación ✅ COMPLETADA Y PROBADA
 
-1. **Migraciones SQL** (`/supabase/migrations/00000_foundation.sql`)
+1. **Migraciones SQL ejecutadas en Supabase**
    - Tablas: tenants, users, user_roles, invitations, audit_logs
    - Enum: user_role
-   - Funciones: auth.tenant_id(), auth.user_role(), auth.is_superadmin()
+   - Funciones: get_tenant_id(), get_user_role(), is_superadmin()
    - Triggers: updated_at automático
    - Políticas RLS completas
 
@@ -81,53 +82,67 @@ Construir un CRM multi-tenant para agencias de seguros con Next.js 14, Supabase,
    - admin.ts: Cliente service role
    - database.types.ts: Tipos TypeScript
 
-3. **Middleware** (`/middleware.ts`)
+3. **API de Registro** (`/registro-api/route.ts`)
+   - Usa service_role para bypasear RLS
+   - Crea usuario, tenant y perfil en una transacción
+   - Configura JWT claims automáticamente
+
+4. **Middleware** (`/middleware.ts`)
    - Protección de rutas autenticadas
    - Verificación de tenant_id en JWT
    - Rutas públicas: /login, /registro
-   - Rutas superadmin: /superadmin/*
-   - Stub para verificación de planes
 
-4. **Tipos Globales** (`/lib/types/index.ts`)
+5. **Tipos Globales** (`/lib/types/index.ts`)
    - Schemas Zod para todas las entidades
    - Tipos TypeScript inferidos
    - TenantContext interface
-   - Result<T, E> pattern para manejo de errores
-   - Funciones helper: ok(), err(), hasMinimumRole()
 
-5. **TenantContext Provider** (`/lib/context/TenantContext.tsx`)
+6. **TenantContext Provider** (`/lib/context/TenantContext.tsx`)
    - React Context con información del tenant
    - Hook useTenant()
    - Hook useHasRole()
-   - Hook useIsAuthenticated()
-   - Auto-refresh en cambios de auth
 
-6. **Páginas de Auth**
-   - Login (/login): Formulario con validación Zod
-   - Registro (/registro): Crear agencia + admin
-   - Sin organización (/sin-organizacion): Estado de error
-
-7. **Dashboard** (`/(tenant)/dashboard`)
-   - Vista inicial con stats placeholder
-   - Acciones rápidas
-   - Setup progress para nuevos tenants
+7. **Páginas funcionales y probadas**
+   - ✅ Login (/login): Formulario con validación Zod
+   - ✅ Registro (/registro): Crear agencia + admin con API
+   - ✅ Dashboard (/dashboard): Vista inicial con stats
+   - ✅ Sin organización (/sin-organizacion)
 
 8. **Componentes UI**
    - Button, Card, Input, Label, Spinner
+
+### Flujo probado exitosamente:
+1. Usuario se registra → crea agencia + usuario admin
+2. Usuario hace login → va al dashboard
+3. Dashboard muestra nombre y rol del usuario
+
+---
+
+## Configuración de Supabase
+
+### Email Settings
+- Confirm email: **DESACTIVADO** (para desarrollo)
+
+### Tablas creadas
+- tenants
+- users
+- user_roles
+- invitations
+- audit_logs
 
 ---
 
 ## Backlog Priorizado
 
 ### P0 - Crítico (Próximo)
-- [ ] Ejecutar migraciones SQL en Supabase
-- [ ] Probar flujo completo de registro/login
-- [ ] Implementar Módulo 01: Clientes y Pólizas
+- [ ] Módulo 01 - Clientes y Pólizas
+  - CRUD de clientes
+  - CRUD de pólizas
+  - Relación cliente-póliza
 
 ### P1 - Alta Prioridad
 - [ ] Módulo 02: Pipeline de Ventas
 - [ ] Módulo 03: Siniestros
-- [ ] Edge Function auth-hook para JWT claims
 
 ### P2 - Media Prioridad
 - [ ] Módulo 04: Reportes
@@ -145,6 +160,7 @@ Construir un CRM multi-tenant para agencias de seguros con Next.js 14, Supabase,
 
 ## Próximas Tareas
 
-1. **USUARIO DEBE HACER**: Ejecutar `/supabase/migrations/00000_foundation.sql` en Supabase SQL Editor
-2. Probar registro de agencia y login
-3. Comenzar Módulo 01: Clientes y Pólizas
+1. Comenzar Módulo 01: Clientes y Pólizas
+2. Crear tablas: clients, policies
+3. CRUD completo con validaciones Zod
+4. Listados con filtros y paginación

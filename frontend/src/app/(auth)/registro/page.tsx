@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,8 +36,6 @@ export default function RegistroPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  
-  const supabase = createClient();
 
   const {
     register,
@@ -79,69 +76,29 @@ export default function RegistroPage() {
       setIsLoading(true);
       setError(null);
 
-      // 1. Crear usuario en Supabase Auth
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            full_name: data.fullName
-          }
-        }
+      // Llamar a la API de registro que usa service role
+      const response = await fetch('/registro-api', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          agencyName: data.agencyName,
+          agencySlug: data.agencySlug,
+          fullName: data.fullName,
+          email: data.email,
+          password: data.password
+        })
       });
 
-      if (signUpError) {
-        if (signUpError.message.includes('already registered')) {
-          setError('Este correo ya está registrado');
-        } else {
-          setError(signUpError.message);
-        }
+      const result = await response.json();
+
+      if (!response.ok) {
+        setError(result.error || 'Error al registrar');
         return;
       }
 
-      if (!authData.user) {
-        setError('Error al crear usuario');
-        return;
-      }
-
-      // 2. Crear tenant (agencia)
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenants')
-        .insert({
-          name: data.agencyName,
-          slug: data.agencySlug
-        })
-        .select('id')
-        .single();
-
-      if (tenantError) {
-        if (tenantError.message.includes('duplicate')) {
-          setError('Este identificador de agencia ya existe');
-        } else {
-          setError(`Error al crear agencia: ${tenantError.message}`);
-        }
-        // Eliminar usuario si falla la creación del tenant
-        await supabase.auth.admin?.deleteUser(authData.user.id);
-        return;
-      }
-
-      // 3. Crear registro en tabla users
-      const { error: userError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          tenant_id: tenantData.id,
-          email: data.email,
-          full_name: data.fullName,
-          role: 'admin' // El creador de la agencia es admin
-        });
-
-      if (userError) {
-        setError(`Error al crear perfil: ${userError.message}`);
-        return;
-      }
-
-      // Éxito
+      // Éxito - mostrar pantalla de éxito
       setSuccess(true);
 
     } catch (err) {
@@ -163,8 +120,8 @@ export default function RegistroPage() {
               </div>
               <h2 className="text-xl font-semibold">¡Registro exitoso!</h2>
               <p className="text-muted-foreground">
-                Hemos enviado un correo de verificación. 
-                Por favor revisa tu bandeja de entrada y confirma tu cuenta.
+                Tu agencia ha sido creada correctamente.
+                Ya puedes iniciar sesión con tus credenciales.
               </p>
               <Button 
                 onClick={() => router.push('/login')} 
