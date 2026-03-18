@@ -230,7 +230,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
       subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadTenantContext, supabase.auth]);
+  }, [supabase.auth]); // Solo depende de supabase.auth, no de loadTenantContext
 
   const value: TenantContextValue = context
     ? {
