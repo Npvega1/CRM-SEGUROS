@@ -11,7 +11,6 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ClientForm } from '@/components/modules/clients/ClientForm';
-import { createClient_action } from '../actions';
 import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -39,12 +38,25 @@ export default function NewClientPage() {
     setIsLoading(true);
     setError(null);
 
-    const result = await createClient_action(data);
+    try {
+      const response = await fetch('/api/clientes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
 
-    if (result.success) {
-      router.push(`/clientes/${result.data.id}`);
-    } else {
-      setError(result.error.message);
+      const result = await response.json();
+
+      if (response.ok) {
+        router.push(`/clientes/${result.id}`);
+      } else {
+        setError(result.error || 'Error al crear cliente');
+        setIsLoading(false);
+      }
+    } catch {
+      setError('Error de conexión. Por favor, intenta de nuevo.');
       setIsLoading(false);
     }
   };

@@ -13,7 +13,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ClientsTable } from '@/components/modules/clients/ClientsTable';
 import { CSVImporter } from '@/components/modules/clients/CSVImporter';
-import { listClients, getClientStats } from './actions';
 import type { Client } from '@/lib/validations/clients';
 import { 
   Plus, 
@@ -41,7 +40,7 @@ export default function ClientsPage() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Cargar datos con timeout y mejor error handling
+  // Cargar datos usando API Routes
   useEffect(() => {
     let isMounted = true;
     const controller = new AbortController();
@@ -53,33 +52,38 @@ export default function ClientsPage() {
       setError(null);
       
       try {
-        // Timeout de 10 segundos
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         
-        // Cargar clientes y stats en paralelo
-        const [clientsResult, statsResult] = await Promise.all([
-          listClients({
-            page,
-            pageSize,
-            search: searchQuery || undefined,
-            segment: segmentFilter
-          }),
-          getClientStats()
+        // Construir query params para clientes
+        const params = new URLSearchParams({
+          page: page.toString(),
+          pageSize: pageSize.toString(),
+        });
+        if (searchQuery) params.append('search', searchQuery);
+        if (segmentFilter) params.append('segment', segmentFilter);
+        
+        // Cargar clientes y stats en paralelo usando fetch
+        const [clientsRes, statsRes] = await Promise.all([
+          fetch(`/api/clientes?${params}`, { signal: controller.signal }),
+          fetch('/api/clientes/stats', { signal: controller.signal })
         ]);
         
         clearTimeout(timeoutId);
         
         if (!isMounted) return;
         
-        if (clientsResult.success) {
-          setClients(clientsResult.data.clients);
-          setTotal(clientsResult.data.total);
+        if (clientsRes.ok) {
+          const clientsData = await clientsRes.json();
+          setClients(clientsData.clients);
+          setTotal(clientsData.total);
         } else {
-          setError(clientsResult.error?.message || 'Error al cargar clientes');
+          const errorData = await clientsRes.json();
+          setError(errorData.error || 'Error al cargar clientes');
         }
         
-        if (statsResult.success) {
-          setStats(statsResult.data);
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setStats(statsData);
         }
         
       } catch (err) {
