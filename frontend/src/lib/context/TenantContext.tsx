@@ -210,12 +210,9 @@ export function TenantProvider({ children }: TenantProviderProps) {
     }
   }, [supabase]);
 
-  // Cargar contexto al montar (solo una vez)
+  // Cargar contexto al montar
   useEffect(() => {
-    // Solo cargar si no tenemos contexto ya cargado
-    if (!context && isLoading) {
-      loadTenantContext();
-    }
+    loadTenantContext();
 
     // Escuchar cambios de autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
