@@ -5,7 +5,7 @@
 // Para acceder a información del tenant en toda la app
 // =====================================================
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import type { TenantContext as TenantContextType, Role } from '@/lib/types';
 import { createClient } from '@/lib/supabase/client';
 
@@ -55,7 +55,8 @@ export function TenantProvider({ children }: TenantProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
+  // OPTIMIZACIÓN: Usar useMemo para evitar crear nuevo cliente en cada render
+  const supabase = useMemo(() => createClient(), []);
 
   /**
    * Carga los datos del tenant y usuario desde Supabase
@@ -209,9 +210,12 @@ export function TenantProvider({ children }: TenantProviderProps) {
     }
   }, [supabase]);
 
-  // Cargar contexto al montar
+  // Cargar contexto al montar (solo una vez)
   useEffect(() => {
-    loadTenantContext();
+    // Solo cargar si no tenemos contexto ya cargado
+    if (!context && isLoading) {
+      loadTenantContext();
+    }
 
     // Escuchar cambios de autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -228,6 +232,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
     return () => {
       subscription.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadTenantContext, supabase.auth]);
 
   const value: TenantContextValue = context
