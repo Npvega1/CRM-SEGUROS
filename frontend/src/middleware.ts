@@ -71,10 +71,19 @@ export async function middleware(request: NextRequest) {
 
   // Página principal: redirect a dashboard o login
   if (pathname === '/') {
+    // Verificar variables de entorno
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      // Durante build, redirigir a login
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    
     // Verificar si hay sesión sin modificar cookies
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      supabaseUrl,
+      supabaseKey,
       {
         cookies: {
           getAll() {
@@ -95,6 +104,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  // Verificar variables de entorno para rutas protegidas
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  
+  if (!supabaseUrl || !supabaseKey) {
+    // Durante build, permitir continuar
+    return NextResponse.next();
+  }
+
   // Rutas protegidas: verificar autenticación
   let response = NextResponse.next({
     request: {
@@ -107,8 +125,8 @@ export async function middleware(request: NextRequest) {
   const cookiesToSet: Array<{ name: string; value: string; options: CookieOptions }> = [];
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {

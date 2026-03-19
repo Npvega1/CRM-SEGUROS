@@ -29,7 +29,8 @@ const Home = () => {
           target="_blank"
           rel="noopener noreferrer"
         >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" alt="Emergent Logo" />
         </a>
         <p className="mt-5">Building something incredible ~!</p>
       </header>
