@@ -294,7 +294,8 @@ export default function ClaimsPage() {
           changed_by: userId,
           old_status: null,
           new_status: 'reported',
-          comment: 'Siniestro reportado'
+          comment: 'Siniestro reportado',
+          is_internal: false
         });
       
       // Limpiar y cerrar modal

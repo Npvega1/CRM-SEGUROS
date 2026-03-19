@@ -197,7 +197,8 @@ export default function ClaimDetailPage() {
           changed_by: userId,
           old_status: currentStatus,
           new_status: newStatus,
-          comment: comment || null
+          comment: comment || null,
+          is_internal: false
         })
         .select();
 
