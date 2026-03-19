@@ -7,7 +7,7 @@
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,13 +54,27 @@ export default function PolicyDetailPage() {
   const params = useParams();
   const policyId = params.id as string;
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
+  const router = useRouter();
 
   const [policy, setPolicy] = useState<PolicyWithClient | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Validar si el ID es un UUID válido
+  const isValidUUID = (id: string) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(id);
+  };
+
   const loadPolicy = useCallback(async () => {
     if (!tenantId || !policyId) return;
+    
+    // Si no es un UUID válido, redirigir o mostrar error
+    if (!isValidUUID(policyId)) {
+      setError('ID de póliza inválido');
+      setIsLoading(false);
+      return;
+    }
     
     setIsLoading(true);
     try {
