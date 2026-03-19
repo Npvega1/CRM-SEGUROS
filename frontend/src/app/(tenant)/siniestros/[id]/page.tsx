@@ -141,7 +141,7 @@ export default function ClaimDetailPage() {
     }
   }, [isLoadingTenant, tenantId, loadExpediente]);
 
-  const handleStatusChange = async (newStatus: ClaimStatus, comment: string, isInternal: boolean) => {
+  const handleStatusChange = async (newStatus: ClaimStatus, comment: string) => {
     if (!expediente || !userId || !tenantId) {
       console.error('Missing required data:', { expediente: !!expediente, userId, tenantId });
       alert('Faltan datos requeridos');
@@ -160,8 +160,7 @@ export default function ClaimDetailPage() {
       userId,
       currentStatus,
       newStatus,
-      comment,
-      isInternal
+      comment
     });
 
     setIsUpdating(true);

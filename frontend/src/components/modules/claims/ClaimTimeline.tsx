@@ -16,12 +16,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import {
   ArrowRight,
   MessageSquare,
   Lock,
-  Globe,
   Plus,
   User
 } from 'lucide-react';
@@ -37,7 +35,7 @@ import {
 interface ClaimTimelineProps {
   history: ClaimHistory[];
   currentStatus: ClaimStatus;
-  onStatusChange: (newStatus: ClaimStatus, comment: string, isInternal: boolean) => Promise<void>;
+  onStatusChange: (newStatus: ClaimStatus, comment: string) => Promise<void>;
   isUpdating?: boolean;
 }
 
@@ -50,20 +48,18 @@ export function ClaimTimeline({
   const [showChangeForm, setShowChangeForm] = useState(false);
   const [newStatus, setNewStatus] = useState<ClaimStatus | ''>('');
   const [comment, setComment] = useState('');
-  const [isInternal, setIsInternal] = useState(false);
 
   const validTransitions = getValidTransitions(currentStatus);
 
   const handleSubmit = async () => {
     if (!newStatus) return;
     
-    await onStatusChange(newStatus, comment, isInternal);
+    await onStatusChange(newStatus, comment);
     
     // Reset form
     setShowChangeForm(false);
     setNewStatus('');
     setComment('');
-    setIsInternal(false);
   };
 
   return (
@@ -114,28 +110,6 @@ export function ClaimTimeline({
               onChange={(e) => setComment(e.target.value)}
               data-testid="status-comment-input"
             />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="internal"
-                checked={isInternal}
-                onCheckedChange={setIsInternal}
-                data-testid="internal-toggle"
-              />
-              <Label htmlFor="internal" className="text-sm flex items-center gap-1">
-                {isInternal ? (
-                  <>
-                    <Lock className="h-3 w-3" /> Comentario interno
-                  </>
-                ) : (
-                  <>
-                    <Globe className="h-3 w-3" /> Comentario visible
-                  </>
-                )}
-              </Label>
-            </div>
           </div>
 
           <Button
