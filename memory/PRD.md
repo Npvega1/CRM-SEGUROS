@@ -1,166 +1,110 @@
 # PRD - CRM Multi-tenant para Agencias de Seguros
 
 ## Problema Original
+Desarrollo del Módulo 05 (Facturación y Comisiones) para un CRM multi-tenant de agencias de seguros.
 
-Construir un CRM multi-tenant para agencias de seguros con Next.js 14, Supabase, TypeScript estricto, Tailwind CSS, Shadcn/UI y Zod.
-
----
+## Stack Tecnológico
+- **Frontend:** Next.js 14, TypeScript, Tailwind CSS, Shadcn/UI
+- **Backend:** Supabase (PostgreSQL + RLS)
+- **Validaciones:** Zod
+- **Exports:** XLSX (sheetjs)
 
 ## Arquitectura
+- Multi-tenant con RLS basado en `tenant_id` del JWT (`app_metadata`)
+- Supabase Client directo (`getBrowserClient()`) - NO Server Actions ni API Routes
+- Despliegue en Vercel (rama modulo04 → modulo05)
 
-### Stack Tecnológico
-- **Frontend**: Next.js 14 (App Router)
-- **Backend/Auth/DB**: Supabase (PostgreSQL)
-- **Estilos**: Tailwind CSS + Shadcn/UI
-- **Validaciones**: Zod + React Hook Form
-- **Lenguaje**: TypeScript estricto
+## Personas de Usuario
+1. **Admin:** Gestión completa de facturación y comisiones
+2. **Senior Agent:** Puede registrar pagos y marcar comisiones cobradas
+3. **Agent:** Visualización de cuotas y comisiones propias
+4. **Readonly:** Solo lectura
 
-### Decisiones Técnicas
-- Multi-tenancy basado en `tenant_id` en JWT claims
-- RLS (Row Level Security) para aislamiento de datos
-- Sistema de roles jerárquico (superadmin > admin > senior_agent > agent > readonly)
-- API Route con service_role para registro (bypasa RLS)
+## Módulos Implementados
 
----
+### ✅ Módulo 00 - Fundación
+- Base del proyecto, autenticación, multi-tenancy
 
-## User Personas
+### ✅ Módulo 01 - Clientes y Pólizas
+- CRUD de clientes y pólizas
+- Storage para documentos
 
-1. **Administrador de Agencia (admin)**
-   - Gestiona usuarios, configuración y reportes de su agencia
-   
-2. **Agente de Seguros (agent/senior_agent)**
-   - Opera el día a día: clientes, pólizas, siniestros
-   
-3. **Super Admin (superadmin)**
-   - Gestiona todas las agencias y planes
+### ✅ Módulo 02 - Pipeline de Ventas
+- Oportunidades, etapas, actividades
 
----
+### ✅ Módulo 03 - Siniestros
+- Gestión de reclamos/siniestros
 
-## Core Requirements (Estático)
+### ✅ Módulo 04 - Reportes
+- Dashboard con métricas y gráficos
 
-### Seguridad
-- [x] Autenticación con Supabase Auth
-- [x] Row Level Security en todas las tablas
-- [x] JWT con claims personalizados (tenant_id, role, agent_id)
-- [x] Middleware de protección de rutas
+### ✅ Módulo 05 - Facturación y Comisiones (NUEVO - 19/03/2026)
+**Migración SQL (`00005_billing.sql`):**
+- Campo `frequency` agregado a `policies`
+- Tabla `invoices` (cuotas por cobrar)
+- Tabla `commission_rates` (tasas de comisión)
+- Tabla `commissions` (comisiones generadas)
+- Tabla `commission_splits` (división de comisiones)
+- Función `generate_installments()` - genera cuotas automáticamente
+- Función `calculate_policy_commission()` - calcula comisión al activar póliza
+- Trigger `on_policy_activated` - ejecuta funciones al activar póliza
+- Función `process_overdue_invoices()` - marca cuotas vencidas (cron manual)
+- RLS en todas las tablas
 
-### Multi-tenancy
-- [x] Aislamiento completo de datos entre tenants
-- [x] Tabla de tenants con slug único
-- [ ] Límites por plan (pendiente Módulo 10)
+**Componentes UI:**
+- `BillingPage` - Página principal con tabs
+- `InvoicesList` - Lista de cuotas con filtros y paginación
+- `PaymentModal` - Modal para registrar pagos
+- `CommissionsPanel` - Panel de comisiones con exportación XLSX
+- `CommissionRatesConfig` - Configuración de tasas CRUD
 
-### Módulos
-- [x] M00: Fundación ✅ COMPLETADO
-- [ ] M01: Clientes y Pólizas
-- [ ] M02: Pipeline de Ventas
-- [ ] M03: Siniestros
-- [ ] M04: Reportes
-- [ ] M05: Facturación
-- [ ] M06: Automatizaciones
-- [ ] M07: Portal del Cliente
-- [ ] M08: Configuración Visual
-- [ ] M09: Comparativos con IA
-- [ ] M10: Planes y Pagos
-- [ ] M11: Super Admin
+**Validaciones Zod:**
+- Schemas para invoices, commissions, commission_rates
+- Helpers para formateo de moneda, fechas, períodos
 
----
+## Backlog Pendiente
 
-## Lo Implementado (Fecha: 2026-01-17)
+### P0 - Crítico
+- [ ] Ejecutar migración SQL en Supabase
+- [ ] Crear bucket `invoice-documents` en Supabase Storage
+- [ ] Configurar políticas de Storage para el bucket
 
-### Fase 0 - Fundación ✅ COMPLETADA Y PROBADA
+### P1 - Módulos Siguientes
+- [ ] Módulo 06 - Automatizaciones
+- [ ] Módulo 07 - Portal del Cliente
+- [ ] Módulo 08 - Configuración Visual
 
-1. **Migraciones SQL ejecutadas en Supabase**
-   - Tablas: tenants, users, user_roles, invitations, audit_logs
-   - Enum: user_role
-   - Funciones: get_tenant_id(), get_user_role(), is_superadmin()
-   - Triggers: updated_at automático
-   - Políticas RLS completas
+### P2 - Mejoras Pendientes
+- [ ] Pólizas: permitir múltiples documentos
+- [ ] Clientes: más opciones de detalle
+- [ ] Exportación PDF (esperar M08)
+- [ ] Notificaciones de vencimiento automáticas
 
-2. **Clientes Supabase** (`/lib/supabase/`)
-   - client.ts: Cliente browser
-   - server.ts: Cliente server components
-   - admin.ts: Cliente service role
-   - database.types.ts: Tipos TypeScript
+## Instrucciones de Despliegue
 
-3. **API de Registro** (`/registro-api/route.ts`)
-   - Usa service_role para bypasear RLS
-   - Crea usuario, tenant y perfil en una transacción
-   - Configura JWT claims automáticamente
+### 1. Ejecutar Migración SQL
+```sql
+-- En Supabase SQL Editor, ejecutar el contenido de:
+-- supabase/migrations/00005_billing.sql
+```
 
-4. **Middleware** (`/middleware.ts`)
-   - Protección de rutas autenticadas
-   - Verificación de tenant_id en JWT
-   - Rutas públicas: /login, /registro
+### 2. Crear Bucket de Storage
+```
+1. Ir a Supabase Dashboard → Storage
+2. Crear bucket "invoice-documents" (privado)
+3. Ejecutar políticas de Storage del SQL
+```
 
-5. **Tipos Globales** (`/lib/types/index.ts`)
-   - Schemas Zod para todas las entidades
-   - Tipos TypeScript inferidos
-   - TenantContext interface
+### 3. Desplegar en Vercel
+```bash
+git checkout modulo04
+git checkout -b modulo05
+git add .
+git commit -m "feat(M05): Módulo de Facturación y Comisiones"
+git push origin modulo05
+```
 
-6. **TenantContext Provider** (`/lib/context/TenantContext.tsx`)
-   - React Context con información del tenant
-   - Hook useTenant()
-   - Hook useHasRole()
-
-7. **Páginas funcionales y probadas**
-   - ✅ Login (/login): Formulario con validación Zod
-   - ✅ Registro (/registro): Crear agencia + admin con API
-   - ✅ Dashboard (/dashboard): Vista inicial con stats
-   - ✅ Sin organización (/sin-organizacion)
-
-8. **Componentes UI**
-   - Button, Card, Input, Label, Spinner
-
-### Flujo probado exitosamente:
-1. Usuario se registra → crea agencia + usuario admin
-2. Usuario hace login → va al dashboard
-3. Dashboard muestra nombre y rol del usuario
-
----
-
-## Configuración de Supabase
-
-### Email Settings
-- Confirm email: **DESACTIVADO** (para desarrollo)
-
-### Tablas creadas
-- tenants
-- users
-- user_roles
-- invitations
-- audit_logs
-
----
-
-## Backlog Priorizado
-
-### P0 - Crítico (Próximo)
-- [ ] Módulo 01 - Clientes y Pólizas
-  - CRUD de clientes
-  - CRUD de pólizas
-  - Relación cliente-póliza
-
-### P1 - Alta Prioridad
-- [ ] Módulo 02: Pipeline de Ventas
-- [ ] Módulo 03: Siniestros
-
-### P2 - Media Prioridad
-- [ ] Módulo 04: Reportes
-- [ ] Módulo 05: Facturación
-- [ ] Módulo 06: Automatizaciones
-
-### P3 - Baja Prioridad
-- [ ] Módulo 07: Portal del Cliente
-- [ ] Módulo 08: Configuración Visual
-- [ ] Módulo 09: Comparativos con IA
-- [ ] Módulo 10: Planes y Pagos
-- [ ] Módulo 11: Super Admin
-
----
-
-## Próximas Tareas
-
-1. Comenzar Módulo 01: Clientes y Pólizas
-2. Crear tablas: clients, policies
-3. CRUD completo con validaciones Zod
-4. Listados con filtros y paginación
+## Última Actualización
+- **Fecha:** 19 de Marzo de 2026
+- **Módulo:** 05 - Facturación y Comisiones
+- **Estado:** Código completo, pendiente despliegue
