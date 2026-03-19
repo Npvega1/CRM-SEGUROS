@@ -162,15 +162,16 @@ export function PDFUploader({
         .eq('tenant_id', tenantId)
         .single();
       
-      if (policy?.document_url) {
+      const policyData = policy as { document_url?: string } | null;
+      if (policyData?.document_url) {
         // Si es una URL completa, abrir directamente
-        if (policy.document_url.startsWith('http')) {
-          window.open(policy.document_url, '_blank');
+        if (policyData.document_url.startsWith('http')) {
+          window.open(policyData.document_url, '_blank');
         } else {
           // Si es un path, obtener signed URL
           const { data } = await supabase.storage
             .from('policy-documents')
-            .createSignedUrl(policy.document_url, 3600);
+            .createSignedUrl(policyData.document_url, 3600);
           
           if (data?.signedUrl) {
             window.open(data.signedUrl, '_blank');

@@ -448,38 +448,6 @@ export type Database = {
           uploaded_at?: string;
         };
       };
-      automation_queue: {
-        Row: {
-          id: string;
-          tenant_id: string;
-          trigger_type: string;
-          entity_type: string;
-          entity_id: string;
-          payload: Json | null;
-          processed: boolean;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          tenant_id: string;
-          trigger_type: string;
-          entity_type: string;
-          entity_id: string;
-          payload?: Json | null;
-          processed?: boolean;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          tenant_id?: string;
-          trigger_type?: string;
-          entity_type?: string;
-          entity_id?: string;
-          payload?: Json | null;
-          processed?: boolean;
-          created_at?: string;
-        };
-      };
     };
     Views: {
       [_ in never]: never;
@@ -498,6 +466,134 @@ export type Database = {
           email: string | null;
           phone: string | null;
           segment: string;
+        }[];
+      };
+      get_executive_dashboard: {
+        Args: {
+          p_tenant_id: string;
+          p_start_date?: string | null;
+          p_end_date?: string | null;
+        };
+        Returns: {
+          active_policies_count: number;
+          total_premium_month: number;
+          open_claims_count: number;
+          renewals_next_30_days: number;
+          pending_commissions_total: number;
+          active_policies_prev: number;
+          total_premium_prev: number;
+          open_claims_prev: number;
+        }[];
+      };
+      get_agent_performance: {
+        Args: {
+          p_tenant_id: string;
+          p_agent_id?: string | null;
+          p_start_date?: string | null;
+          p_end_date?: string | null;
+        };
+        Returns: {
+          agent_id: string;
+          agent_name: string;
+          policies_created_month: number;
+          total_premium: number;
+          pipeline_total: number;
+          pipeline_won_month: number;
+          close_rate: number;
+          commissions_earned_month: number;
+        }[];
+      };
+      get_portfolio_by_line: {
+        Args: {
+          p_tenant_id: string;
+        };
+        Returns: {
+          line: string;
+          count: number;
+          premium: number;
+          percentage: number;
+        }[];
+      };
+      get_portfolio_by_insurer: {
+        Args: {
+          p_tenant_id: string;
+        };
+        Returns: {
+          insurer: string;
+          count: number;
+          premium: number;
+          percentage: number;
+        }[];
+      };
+      get_premium_trend: {
+        Args: {
+          p_tenant_id: string;
+        };
+        Returns: {
+          month: string;
+          month_date: string;
+          premium: number;
+          policies_count: number;
+        }[];
+      };
+      get_claims_analytics: {
+        Args: {
+          p_tenant_id: string;
+        };
+        Returns: {
+          total_claims: number;
+          open_claims: number;
+          resolved_claims: number;
+          avg_claimed_amount: number;
+          avg_approved_amount: number;
+          total_claimed: number;
+          total_approved: number;
+          loss_ratio: number;
+          claims_by_status: { status: string; count: number }[];
+          claims_by_line: { line: string; count: number; amount: number }[];
+        }[];
+      };
+      get_renewal_report: {
+        Args: {
+          p_tenant_id: string;
+          p_days?: number;
+        };
+        Returns: {
+          policy_id: string;
+          policy_number: string;
+          client_id: string;
+          client_name: string;
+          client_email: string | null;
+          client_phone: string | null;
+          insurer: string;
+          line: string;
+          premium: number;
+          commission: number;
+          end_date: string;
+          days_remaining: number;
+          renewal_status: string;
+        }[];
+      };
+      get_commissions_report: {
+        Args: {
+          p_tenant_id: string;
+          p_agent_id?: string | null;
+          p_start_date?: string | null;
+          p_end_date?: string | null;
+        };
+        Returns: {
+          policy_id: string;
+          policy_number: string;
+          client_name: string;
+          insurer: string;
+          line: string;
+          premium: number;
+          commission_pct: number;
+          commission_amount: number;
+          policy_status: string;
+          created_at: string;
+          agent_id: string | null;
+          agent_name: string | null;
         }[];
       };
     };

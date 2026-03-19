@@ -7,7 +7,6 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import type { SupabaseClient, User } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database-types';
 
 // =====================================================

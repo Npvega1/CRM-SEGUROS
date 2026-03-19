@@ -114,9 +114,10 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookies: Array<{ name: string; value: string; options: CookieOptions }>) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setAll(cookies: any[]) {
           // Acumular cookies para setear después
-          cookies.forEach(cookie => {
+          cookies.forEach((cookie: { name: string; value: string; options: CookieOptions }) => {
             // Verificar si la cookie realmente cambió
             const existingCookie = request.cookies.get(cookie.name);
             if (!existingCookie || existingCookie.value !== cookie.value) {

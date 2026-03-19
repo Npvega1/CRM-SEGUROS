@@ -18,7 +18,7 @@ import {
   FileText,
   TrendingUp,
   AlertTriangle,
-  Settings,
+  BarChart3,
   LogOut,
   Menu,
   X,
@@ -39,6 +39,7 @@ const navItems: NavItem[] = [
   { title: 'Pólizas', href: '/polizas', icon: FileText },
   { title: 'Pipeline', href: '/pipeline', icon: TrendingUp },
   { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle },
+  { title: 'Reportes', href: '/reports', icon: BarChart3 },
 ];
 
 export default function TenantLayout({

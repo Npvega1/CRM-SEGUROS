@@ -152,7 +152,8 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
           continue;
         }
 
-        const { error: insertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: insertError } = await (supabase as any)
           .from('clients')
           .insert(clientData);
 

@@ -27,7 +27,7 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const allPolicies = policies || [];
+    const allPolicies = (policies || []) as Array<{ id: string; status: string; line: string; premium: number }>;
     
     // Calcular estadísticas
     const total = allPolicies.length;
