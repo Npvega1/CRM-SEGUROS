@@ -91,6 +91,24 @@ export function PolicyForm({
 
   const line = watch('line');
   const status = watch('status');
+  const startDate = watch('start_date');
+
+  // Auto-calcular fecha de vencimiento cuando cambia la fecha de inicio
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newStartDate = e.target.value;
+    setValue('start_date', newStartDate);
+    
+    // Si hay fecha de inicio, calcular vencimiento = inicio + 1 año
+    if (newStartDate) {
+      const start = new Date(newStartDate);
+      const end = new Date(start);
+      end.setFullYear(end.getFullYear() + 1);
+      
+      // Formatear como YYYY-MM-DD
+      const endDateStr = end.toISOString().split('T')[0];
+      setValue('end_date', endDateStr);
+    }
+  };
 
   const handleFormSubmit = async (data: PolicyFormData) => {
     await onSubmit(data);
@@ -247,10 +265,14 @@ export function PolicyForm({
           <Input
             id="start_date"
             type="date"
-            {...register('start_date')}
+            value={startDate || ''}
+            onChange={handleStartDateChange}
             disabled={loading}
             data-testid="policy-start-date-input"
           />
+          <p className="text-xs text-muted-foreground">
+            Al cambiar, se calcula automáticamente el vencimiento a 1 año
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -262,6 +284,9 @@ export function PolicyForm({
             disabled={loading}
             data-testid="policy-end-date-input"
           />
+          <p className="text-xs text-muted-foreground">
+            Puedes ajustar manualmente si la póliza no es anual
+          </p>
         </div>
       </div>
 
