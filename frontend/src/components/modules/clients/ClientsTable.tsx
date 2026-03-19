@@ -43,7 +43,7 @@ import {
 } from 'lucide-react';
 
 interface ClientsTableProps {
-  clients: Client[];
+  clients: (Client & { policies_count?: number })[];
   total: number;
   page: number;
   pageSize: number;
@@ -176,8 +176,7 @@ export function ClientsTable({
                   <TableCell className="hidden lg:table-cell">
                     <Badge variant="outline" className="gap-1">
                       <FileText className="w-3 h-3" />
-                      {/* TODO: Agregar conteo real de pólizas */}
-                      0
+                      {client.policies_count ?? 0}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">

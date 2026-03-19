@@ -28,7 +28,7 @@ import {
 export default function ClientsPage() {
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
   
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clients, setClients] = useState<(Client & { policies_count?: number })[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
@@ -79,8 +79,36 @@ export default function ClientsPage() {
         if (clientsError) {
           console.error('Error loading clients:', clientsError);
           setError(clientsError.message || 'Error al cargar clientes');
-        } else {
-          setClients(clientsData as Client[] || []);
+        } else if (clientsData) {
+          // Cargar conteo de pólizas para cada cliente
+          const clientIds = clientsData.map((c: Client) => c.id);
+          
+          if (clientIds.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: policiesCount } = await (supabase as any)
+              .from('policies')
+              .select('client_id')
+              .eq('tenant_id', tenantId)
+              .in('client_id', clientIds);
+            
+            // Contar pólizas por cliente
+            const countMap: Record<string, number> = {};
+            if (policiesCount) {
+              policiesCount.forEach((p: { client_id: string }) => {
+                countMap[p.client_id] = (countMap[p.client_id] || 0) + 1;
+              });
+            }
+            
+            // Agregar conteo a cada cliente
+            const clientsWithCount = clientsData.map((client: Client) => ({
+              ...client,
+              policies_count: countMap[client.id] || 0
+            }));
+            
+            setClients(clientsWithCount);
+          } else {
+            setClients(clientsData as Client[]);
+          }
           setTotal(count || 0);
         }
         
