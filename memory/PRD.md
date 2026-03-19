@@ -19,10 +19,11 @@ Stack: Next.js 14, Supabase, TypeScript, Tailwind CSS, Shadcn/UI, Zod
 - TenantContext
 
 ### Módulo 01 - Clientes y Pólizas ✓
-- CRUD de clientes
-- CRUD de pólizas
+- CRUD de clientes (listar, crear, ver, editar)
+- CRUD de pólizas (listar, crear, ver, editar) ✅ **Página de editar póliza añadida (19 Marzo 2026)**
 - Búsqueda y filtros
 - Estadísticas
+- Subida de documentos PDF
 - **Refactorizado a Supabase Client directo (19 Marzo 2026)**
 
 ### Módulo 02 - Pipeline de Ventas ✓ (Marzo 2026)
@@ -48,10 +49,14 @@ Refactorización de TODAS las páginas para usar `getBrowserClient()` directamen
 - `/app/(tenant)/clientes/page.tsx`
 - `/app/(tenant)/clientes/nuevo/page.tsx`
 - `/app/(tenant)/clientes/[id]/page.tsx`
+- `/app/(tenant)/clientes/[id]/editar/page.tsx`
 - `/app/(tenant)/polizas/page.tsx`
 - `/app/(tenant)/polizas/nueva/page.tsx`
 - `/app/(tenant)/polizas/[id]/page.tsx`
+- `/app/(tenant)/polizas/[id]/editar/page.tsx` ✅ **Añadida (19 Marzo 2026)**
 - `/app/(tenant)/pipeline/page.tsx`
+- `/app/(tenant)/siniestros/page.tsx`
+- `/app/(tenant)/siniestros/[id]/page.tsx`
 
 **Archivos Eliminados:**
 - `/app/(tenant)/clientes/actions.ts`
@@ -71,14 +76,16 @@ Refactorización de TODAS las páginas para usar `getBrowserClient()` directamen
 ## Backlog Priorizado
 
 ### P0 - Alta prioridad
-- [ ] Módulo 03: Siniestros
+- [x] Módulo 03: Siniestros ✅ (migraciones SQL + UI completa)
 - [ ] Módulo 04: Reportes
 
 ### P1 - Media prioridad
 - [ ] Módulo 05: Facturación
 - [ ] Módulo 06: Automatizaciones
+- [ ] Limpiar API Routes obsoletas (16 archivos en `/app/api/`)
 
 ### P2 - Baja prioridad
+- [ ] Regenerar tipos de Supabase y eliminar `ignoreBuildErrors: true`
 - [ ] Módulo 07: Portal del Cliente
 - [ ] Módulo 08: Configuración Visual
 - [ ] Módulo 09: Comparativos con IA
