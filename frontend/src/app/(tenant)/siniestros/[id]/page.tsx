@@ -142,7 +142,11 @@ export default function ClaimDetailPage() {
   }, [isLoadingTenant, tenantId, loadExpediente]);
 
   const handleStatusChange = async (newStatus: ClaimStatus, comment: string, isInternal: boolean) => {
-    if (!expediente || !userId || !tenantId) return;
+    if (!expediente || !userId || !tenantId) {
+      console.error('Missing required data:', { expediente: !!expediente, userId, tenantId });
+      alert('Faltan datos requeridos');
+      return;
+    }
 
     const currentStatus = expediente.claim.status as ClaimStatus;
     if (!isValidClaimStatusTransition(currentStatus, newStatus)) {
@@ -150,31 +154,44 @@ export default function ClaimDetailPage() {
       return;
     }
 
+    console.log('Updating claim status:', {
+      claimId,
+      tenantId,
+      userId,
+      currentStatus,
+      newStatus,
+      comment,
+      isInternal
+    });
+
     setIsUpdating(true);
     try {
       const supabase = getBrowserClient();
 
       // Actualizar estado del siniestro
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase as any)
+      const { data: updateData, error: updateError } = await (supabase as any)
         .from('claims')
         .update({ 
           status: newStatus,
           updated_at: new Date().toISOString()
         })
         .eq('id', claimId)
-        .eq('tenant_id', tenantId);
+        .eq('tenant_id', tenantId)
+        .select();
+
+      console.log('Update result:', { updateData, updateError });
 
       if (updateError) {
         console.error('Error updating status:', updateError);
-        alert('Error al actualizar el estado: ' + (updateError.message || 'Error desconocido'));
+        alert('Error al actualizar el estado: ' + (updateError.message || JSON.stringify(updateError)));
         setIsUpdating(false);
         return;
       }
 
       // Insertar en historial con comentario
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      const { data: historyData, error: historyError } = await (supabase as any)
         .from('claims_history')
         .insert({
           claim_id: claimId,
@@ -183,13 +200,21 @@ export default function ClaimDetailPage() {
           new_status: newStatus,
           comment: comment || null,
           is_internal: isInternal
-        });
+        })
+        .select();
+
+      console.log('History insert result:', { historyData, historyError });
+
+      if (historyError) {
+        console.error('Error inserting history:', historyError);
+        // No mostrar error al usuario porque el estado ya se actualizó
+      }
 
       // Recargar datos
       await loadExpediente();
     } catch (error) {
       console.error('Error changing status:', error);
-      alert('Error al cambiar el estado');
+      alert('Error al cambiar el estado: ' + (error instanceof Error ? error.message : 'Error desconocido'));
     }
     setIsUpdating(false);
   };
