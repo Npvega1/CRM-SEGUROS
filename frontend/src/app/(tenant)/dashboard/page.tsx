@@ -5,6 +5,7 @@ import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { getBrowserClient } from '@/lib/supabase/client';
 import { 
   Users, 
   FileText, 
@@ -21,6 +22,7 @@ import Link from 'next/link';
 export default function DashboardPage() {
   const { 
     tenantName, 
+    tenantId,
     userFullName, 
     role, 
     isLoading, 
@@ -33,36 +35,54 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadStats() {
+      if (!tenantId) return;
+      
       try {
-        const [clientRes, policyRes, pipelineRes] = await Promise.all([
-          fetch('/api/clientes/stats'),
-          fetch('/api/polizas/stats'),
-          fetch('/api/pipeline/stats')
-        ]);
-
-        if (clientRes.ok) {
-          const data = await clientRes.json();
-          setClientStats({ total: data.total, thisMonth: data.thisMonth });
-        }
-        if (policyRes.ok) {
-          const data = await policyRes.json();
-          setPolicyStats({ total: data.total, active: data.active, totalPremium: data.totalPremium });
-        }
-        if (pipelineRes.ok) {
-          const data = await pipelineRes.json();
-          setPipelineStats({ 
-            total_active: data.stats?.total_active || 0, 
-            weighted_premium: data.stats?.weighted_premium || 0 
-          });
-        }
+        const supabase = getBrowserClient();
+        
+        // Load client stats
+        const { data: clients, count: clientCount } = await supabase
+          .from('clients')
+          .select('created_at', { count: 'exact' })
+          .eq('tenant_id', tenantId);
+        
+        const thisMonth = new Date();
+        thisMonth.setDate(1);
+        thisMonth.setHours(0, 0, 0, 0);
+        
+        const thisMonthClients = clients?.filter(c => new Date(c.created_at) >= thisMonth).length || 0;
+        setClientStats({ total: clientCount || 0, thisMonth: thisMonthClients });
+        
+        // Load policy stats
+        const { data: policies } = await supabase
+          .from('policies')
+          .select('status, premium')
+          .eq('tenant_id', tenantId);
+        
+        const activePolicies = policies?.filter(p => p.status === 'active').length || 0;
+        const totalPremium = policies?.reduce((sum, p) => sum + (p.premium || 0), 0) || 0;
+        setPolicyStats({ total: policies?.length || 0, active: activePolicies, totalPremium });
+        
+        // Load pipeline stats
+        const { data: opportunities } = await supabase
+          .from('opportunities')
+          .select('status, estimated_premium, probability')
+          .eq('tenant_id', tenantId);
+        
+        const activeOpps = opportunities?.filter(o => o.status === 'active').length || 0;
+        const weightedPremium = opportunities
+          ?.filter(o => o.status === 'active')
+          .reduce((sum, o) => sum + ((o.estimated_premium || 0) * (o.probability || 0) / 100), 0) || 0;
+        setPipelineStats({ total_active: activeOpps, weighted_premium: weightedPremium });
+        
       } catch (error) {
         console.error('Error loading stats:', error);
       }
     }
-    if (!isLoading) {
+    if (!isLoading && tenantId) {
       loadStats();
     }
-  }, [isLoading]);
+  }, [isLoading, tenantId]);
 
   if (isLoading) {
     return <LoadingScreen message="Cargando dashboard..." />;

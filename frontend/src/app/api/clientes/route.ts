@@ -62,14 +62,20 @@ export async function GET(request: NextRequest) {
 // POST /api/clientes - Crear cliente
 export async function POST(request: NextRequest) {
   try {
+    console.log('POST /api/clientes - Starting');
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    console.log('POST /api/clientes - User:', user?.id, 'Auth Error:', authError?.message);
     
     if (!user) {
+      console.log('POST /api/clientes - No user found');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
     const tenantId = user.app_metadata?.tenant_id;
+    console.log('POST /api/clientes - Tenant ID:', tenantId);
+    
     if (!tenantId) {
       return NextResponse.json({ error: 'No tenant found' }, { status: 403 });
     }

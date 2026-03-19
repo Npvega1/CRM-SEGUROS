@@ -36,3 +36,6 @@ export function getClient() {
   }
   return browserClient;
 }
+
+// Alias para compatibilidad
+export const getBrowserClient = getClient;

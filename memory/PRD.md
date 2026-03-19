@@ -7,7 +7,7 @@ Stack: Next.js 14, Supabase, TypeScript, Tailwind CSS, Shadcn/UI, Zod
 ## Arquitectura
 - Frontend: Next.js 14 (App Router) con SSR/SSG
 - Backend: Supabase (PostgreSQL + Auth + Storage + Realtime)
-- **API Routes en lugar de Server Actions** (por compatibilidad con Kubernetes/Emergent)
+- **Supabase Client directo en el browser** (las API Routes no funcionan en el proxy de Kubernetes)
 - RLS en todas las tablas para aislamiento multi-tenant
 
 ## Módulos Implementados
@@ -23,7 +23,7 @@ Stack: Next.js 14, Supabase, TypeScript, Tailwind CSS, Shadcn/UI, Zod
 - CRUD de pólizas
 - Búsqueda y filtros
 - Estadísticas
-- **Refactorizado de Server Actions a API Routes (19 Marzo 2026)**
+- **Refactorizado de Server Actions a Supabase Client directo (19 Marzo 2026)**
 
 ### Módulo 02 - Pipeline de Ventas ✓ (Marzo 2026)
 - Tablero Kanban con drag-and-drop (@dnd-kit/core)
@@ -40,24 +40,35 @@ Stack: Next.js 14, Supabase, TypeScript, Tailwind CSS, Shadcn/UI, Zod
 - **Causa:** Headers x-forwarded-host no coincidían con origin en ambiente de preview
 - **Solución:** 
   - Eliminados archivos actions.ts obsoletos
-  - Refactorizados componentes a usar API Routes:
-    - CSVImporter.tsx → /api/clientes/import
-    - PDFUploader.tsx → /api/polizas/[id]/documento
-    - Client360View.tsx → /api/clientes/[id]/polizas
-  - Aumentado timeout de sesión en TenantContext a 15s
+  - Refactorizados componentes a usar Supabase Client directo (getBrowserClient)
 
-### Archivos Eliminados
-- /app/(tenant)/clientes/actions.ts
-- /app/(tenant)/polizas/actions.ts
+### Bug de API Routes 502 Resuelto
+- **Problema:** Todas las rutas /api/* devolvían 502 Bad Gateway
+- **Causa:** Problema de proxy de Kubernetes
+- **Solución:**
+  - Refactorizadas páginas a usar getBrowserClient() directamente
+  - Dashboard, Clientes, y páginas de detalle ahora usan Supabase directo
 
-### Nuevas API Routes Creadas
-- /api/clientes/import/route.ts
-- /api/clientes/[id]/polizas/route.ts
-- /api/polizas/[id]/documento/route.ts
+### Archivos Actualizados
+- `/lib/supabase/client.ts` - Agregado alias getBrowserClient
+- `/app/(tenant)/dashboard/page.tsx` - Usa Supabase directo
+- `/app/(tenant)/clientes/page.tsx` - Usa Supabase directo
+- `/app/(tenant)/clientes/nuevo/page.tsx` - Usa Supabase directo
+- `/app/(tenant)/clientes/[id]/page.tsx` - Usa Supabase directo
+
+## Estado Actual
+- ✅ Login funciona
+- ✅ Dashboard carga con estadísticas
+- ✅ Lista de clientes funciona
+- ✅ Crear cliente funciona
+- ✅ Ver detalle de cliente funciona
+- ⚠️ Algunas páginas aún pueden necesitar refactorización (pólizas, pipeline)
 
 ## Backlog Priorizado
 
 ### P0 - Alta prioridad
+- [ ] Refactorizar páginas de Pólizas a usar Supabase directo
+- [ ] Refactorizar Pipeline a usar Supabase directo (si tiene problemas)
 - [ ] Módulo 03: Siniestros
 - [ ] Módulo 04: Reportes
 

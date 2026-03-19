@@ -18,6 +18,9 @@ const PUBLIC_ROUTES = [
 // Rutas de webhooks (acceso libre)
 const WEBHOOK_ROUTES = ['/api/webhooks'];
 
+// Rutas API que necesitan auth pero no deben redirigir (devuelven 401)
+const API_ROUTES = ['/api/'];
+
 // Rutas del portal del cliente (validación diferente - magic link)
 const PORTAL_ROUTES = ['/portal'];
 
@@ -55,6 +58,12 @@ export async function middleware(request: NextRequest) {
 
   // ===== WEBHOOKS: Acceso libre =====
   if (matchesRoute(pathname, WEBHOOK_ROUTES)) {
+    return response;
+  }
+
+  // ===== API ROUTES: Dejar que las rutas API manejen su propia autenticación =====
+  // Esto evita doble validación y posibles timeouts del middleware
+  if (matchesRoute(pathname, API_ROUTES)) {
     return response;
   }
 
@@ -99,6 +108,7 @@ export async function middleware(request: NextRequest) {
 
   // ===== RUTAS PROTEGIDAS: Requieren autenticación =====
   if (!user) {
+    // Para otras rutas, redirigir al login
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);

@@ -3,6 +3,7 @@
 // =====================================================
 // PÁGINA: Nuevo Cliente
 // /clientes/nuevo
+// Usa Supabase client directamente (evita API Routes con problemas de proxy)
 // =====================================================
 
 import { useState } from 'react';
@@ -14,6 +15,7 @@ import { ClientForm } from '@/components/modules/clients/ClientForm';
 import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
+import { getBrowserClient } from '@/lib/supabase/client';
 
 // Tipo para el formulario
 interface ClientFormData {
@@ -38,24 +40,55 @@ export default function NewClientPage() {
     setIsLoading(true);
     setError(null);
 
+    // Re-obtener el contexto actual para asegurar que tenemos la sesión más reciente
+    const supabase = getBrowserClient();
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    
+    if (!currentUser) {
+      setError('No hay sesión activa. Por favor, inicia sesión de nuevo.');
+      setIsLoading(false);
+      return;
+    }
+    
+    const currentTenantId = currentUser.app_metadata?.tenant_id;
+    if (!currentTenantId) {
+      setError('No se pudo obtener la información del tenant.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch('/api/clientes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
+      const { data: newClient, error: insertError } = await supabase
+        .from('clients')
+        .insert({
+          tenant_id: currentTenantId,
+          full_name: data.full_name,
+          doc_type: data.doc_type,
+          doc_number: data.doc_number,
+          email: data.email || null,
+          phone: data.phone || null,
+          segment: data.segment,
+          agent_id: data.agent_id || currentUser.id,
+          tags: data.tags || [],
+          metadata: data.metadata || {},
+        })
+        .select()
+        .single();
 
-      const result = await response.json();
-
-      if (response.ok) {
-        router.push(`/clientes/${result.id}`);
-      } else {
-        setError(result.error || 'Error al crear cliente');
+      if (insertError) {
+        console.error('Error creating client:', insertError);
+        if (insertError.code === '23505') {
+          setError('Ya existe un cliente con este número de documento.');
+        } else {
+          setError(insertError.message || 'Error al crear cliente');
+        }
         setIsLoading(false);
+        return;
       }
-    } catch {
+
+      router.push(`/clientes/${newClient.id}`);
+    } catch (err) {
+      console.error('Error:', err);
       setError('Error de conexión. Por favor, intenta de nuevo.');
       setIsLoading(false);
     }

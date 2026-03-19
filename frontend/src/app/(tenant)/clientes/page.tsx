@@ -3,6 +3,7 @@
 // =====================================================
 // PÁGINA: Lista de Clientes
 // /clientes
+// Usa Supabase client directamente (evita API Routes con problemas de proxy)
 // =====================================================
 
 import { useState, useEffect } from 'react';
@@ -14,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { ClientsTable } from '@/components/modules/clients/ClientsTable';
 import { CSVImporter } from '@/components/modules/clients/CSVImporter';
 import type { Client } from '@/lib/validations/clients';
+import { getBrowserClient } from '@/lib/supabase/client';
 import { 
   Plus, 
   Users, 
@@ -24,7 +26,7 @@ import {
 } from 'lucide-react';
 
 export default function ClientsPage() {
-  const { isLoading: isLoadingTenant, tenantName } = useTenant();
+  const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
   
   const [clients, setClients] = useState<Client[]>([]);
   const [total, setTotal] = useState(0);
@@ -40,59 +42,87 @@ export default function ClientsPage() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Cargar datos usando API Routes
+  // Cargar datos usando Supabase client directamente
   useEffect(() => {
     let isMounted = true;
-    const controller = new AbortController();
 
     async function loadData() {
-      if (isLoadingTenant) return;
+      if (isLoadingTenant || !tenantId) return;
       
       setIsLoading(true);
       setError(null);
       
       try {
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const supabase = getBrowserClient();
         
-        // Construir query params para clientes
-        const params = new URLSearchParams({
-          page: page.toString(),
-          pageSize: pageSize.toString(),
-        });
-        if (searchQuery) params.append('search', searchQuery);
-        if (segmentFilter) params.append('segment', segmentFilter);
+        // Build query for clients
+        let query = supabase
+          .from('clients')
+          .select('*', { count: 'exact' })
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: false })
+          .range((page - 1) * pageSize, page * pageSize - 1);
         
-        // Cargar clientes y stats en paralelo usando fetch
-        const [clientsRes, statsRes] = await Promise.all([
-          fetch(`/api/clientes?${params}`, { signal: controller.signal }),
-          fetch('/api/clientes/stats', { signal: controller.signal })
-        ]);
+        if (searchQuery) {
+          query = query.or(`full_name.ilike.%${searchQuery}%,doc_number.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+        }
         
-        clearTimeout(timeoutId);
+        if (segmentFilter) {
+          query = query.eq('segment', segmentFilter);
+        }
+        
+        // Load clients
+        const { data: clientsData, count, error: clientsError } = await query;
         
         if (!isMounted) return;
         
-        if (clientsRes.ok) {
-          const clientsData = await clientsRes.json();
-          setClients(clientsData.clients);
-          setTotal(clientsData.total);
+        if (clientsError) {
+          console.error('Error loading clients:', clientsError);
+          setError(clientsError.message || 'Error al cargar clientes');
         } else {
-          const errorData = await clientsRes.json();
-          setError(errorData.error || 'Error al cargar clientes');
+          setClients(clientsData as Client[] || []);
+          setTotal(count || 0);
         }
         
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
+        // Load stats
+        const { data: allClients, error: statsError } = await supabase
+          .from('clients')
+          .select('segment, created_at')
+          .eq('tenant_id', tenantId);
+        
+        if (!statsError && allClients) {
+          const thisMonth = new Date();
+          thisMonth.setDate(1);
+          thisMonth.setHours(0, 0, 0, 0);
+          
+          const bySegment: Record<string, number> = {
+            individual: 0,
+            empresa: 0,
+            vip: 0
+          };
+          
+          let thisMonthCount = 0;
+          
+          allClients.forEach(client => {
+            if (client.segment && bySegment[client.segment] !== undefined) {
+              bySegment[client.segment]++;
+            }
+            if (new Date(client.created_at) >= thisMonth) {
+              thisMonthCount++;
+            }
+          });
+          
+          setStats({
+            total: allClients.length,
+            bySegment,
+            thisMonth: thisMonthCount
+          });
         }
         
       } catch (err) {
         if (!isMounted) return;
-        if (err instanceof Error && err.name === 'AbortError') {
-          setError('La solicitud tardó demasiado. Por favor, recarga la página.');
-        } else {
-          setError('Error al cargar datos. Por favor, intenta de nuevo.');
-        }
+        console.error('Error:', err);
+        setError('Error al cargar datos. Por favor, intenta de nuevo.');
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -104,9 +134,8 @@ export default function ClientsPage() {
 
     return () => {
       isMounted = false;
-      controller.abort();
     };
-  }, [isLoadingTenant, page, pageSize, searchQuery, segmentFilter]);
+  }, [isLoadingTenant, tenantId, page, pageSize, searchQuery, segmentFilter]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);

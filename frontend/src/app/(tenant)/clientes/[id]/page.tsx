@@ -2,7 +2,8 @@
 
 // =====================================================
 // PÁGINA: Detalle de Cliente (Vista 360°)
-// /clientes/[id] (Usando API Routes)
+// /clientes/[id]
+// Usa Supabase client directamente (evita API Routes con problemas de proxy)
 // =====================================================
 
 import { useState, useEffect } from 'react';
@@ -14,11 +15,12 @@ import type { Client } from '@/lib/validations/clients';
 import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
+import { getBrowserClient } from '@/lib/supabase/client';
 
 export default function ClientDetailPage() {
   const params = useParams();
   const clientId = params.id as string;
-  const { isLoading: isLoadingTenant, tenantName } = useTenant();
+  const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
   
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,26 +28,36 @@ export default function ClientDetailPage() {
 
   useEffect(() => {
     async function loadClient() {
+      if (!tenantId || !clientId) return;
+      
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/clientes/${clientId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setClient(data);
+        const supabase = getBrowserClient();
+        
+        const { data, error: fetchError } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', clientId)
+          .eq('tenant_id', tenantId)
+          .single();
+        
+        if (fetchError) {
+          console.error('Error fetching client:', fetchError);
+          setError(fetchError.message || 'Error al cargar el cliente');
         } else {
-          const errData = await response.json();
-          setError(errData.error || 'Error al cargar el cliente');
+          setClient(data as Client);
         }
       } catch (err) {
+        console.error('Error:', err);
         setError('Error de conexión');
       }
       setIsLoading(false);
     }
     
-    if (clientId) {
+    if (clientId && tenantId) {
       loadClient();
     }
-  }, [clientId]);
+  }, [clientId, tenantId]);
 
   if (isLoadingTenant || isLoading) {
     return <LoadingScreen message="Cargando cliente..." />;
