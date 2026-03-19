@@ -72,7 +72,10 @@ export function PDFUploader({
   };
 
   const handleUpload = async () => {
-    if (!file || !tenantId) return;
+    if (!file || !tenantId) {
+      setError('No hay archivo o sesión de tenant');
+      return;
+    }
 
     setIsUploading(true);
     setError(null);
@@ -90,8 +93,10 @@ export function PDFUploader({
       const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const path = `${tenantId}/policies/${policyId}/${timestamp}_${safeName}`;
 
+      console.log('Uploading to path:', path);
+
       // Subir a storage
-      const { error: uploadError } = await supabase.storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('policy-documents')
         .upload(path, file, {
           cacheControl: '3600',
@@ -99,34 +104,41 @@ export function PDFUploader({
         });
 
       clearInterval(progressInterval);
-      setUploadProgress(100);
 
       if (uploadError) {
-        setError(uploadError.message || 'Error al subir el archivo');
+        console.error('Upload error:', uploadError);
+        setError(`Error al subir: ${uploadError.message}`);
+        setIsUploading(false);
         return;
       }
+
+      console.log('Upload successful:', uploadData);
+      setUploadProgress(100);
 
       // Obtener URL
       const { data: urlData } = supabase.storage
         .from('policy-documents')
         .getPublicUrl(path);
 
-      // Actualizar póliza con la URL del documento
-      const { error: updateError } = await supabase
+      // Actualizar póliza con la URL del documento (guardar el path, no la URL pública)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: updateError } = await (supabase as any)
         .from('policies')
-        .update({ document_url: urlData.publicUrl || path })
+        .update({ document_url: path })
         .eq('id', policyId)
         .eq('tenant_id', tenantId);
 
       if (updateError) {
         console.error('Error updating policy:', updateError);
+        // No es error crítico, el archivo ya se subió
       }
 
       setSuccess(true);
       onUploadComplete?.(urlData.publicUrl || path);
-    } catch {
+    } catch (err) {
       clearInterval(progressInterval);
-      setError('Error al subir el archivo');
+      console.error('Upload exception:', err);
+      setError('Error inesperado al subir el archivo');
     } finally {
       setIsUploading(false);
     }
