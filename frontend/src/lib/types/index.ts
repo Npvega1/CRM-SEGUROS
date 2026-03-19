@@ -40,7 +40,7 @@ export const TenantSchema = z.object({
   slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
   is_active: z.boolean().default(true),
   stripe_customer_id: z.string().max(100).nullable().optional(),
-  settings: z.record(z.unknown()).default({}),
+  settings: z.record(z.string(), z.unknown()).default({}),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime()
 });
@@ -49,7 +49,7 @@ export const TenantCreateSchema = TenantSchema.pick({
   name: true,
   slug: true
 }).extend({
-  settings: z.record(z.unknown()).optional()
+  settings: z.record(z.string(), z.unknown()).optional()
 });
 
 export const TenantUpdateSchema = TenantSchema.partial().omit({
@@ -131,8 +131,8 @@ export const AuditLogSchema = z.object({
   action: z.string().max(100),
   entity_type: z.string().max(100).nullable().optional(),
   entity_id: z.string().uuid().nullable().optional(),
-  old_values: z.record(z.unknown()).nullable().optional(),
-  new_values: z.record(z.unknown()).nullable().optional(),
+  old_values: z.record(z.string(), z.unknown()).nullable().optional(),
+  new_values: z.record(z.string(), z.unknown()).nullable().optional(),
   ip_address: z.string().nullable().optional(),
   user_agent: z.string().nullable().optional(),
   created_at: z.string().datetime()

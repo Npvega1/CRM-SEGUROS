@@ -1,119 +1,151 @@
 'use client';
 
 // =====================================================
-// CONTEXTO DEL TENANT - Provider y Hook
-// Para acceder a información del tenant en toda la app
+// CONTEXT: TenantContext con Cache Optimizado
+// Evita re-fetch en cada navegación
 // =====================================================
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import type { TenantContext as TenantContextType, Role } from '@/lib/types';
-import { createClient } from '@/lib/supabase/client';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient, User } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/database-types';
 
 // =====================================================
 // TIPOS
 // =====================================================
 
-interface TenantProviderProps {
-  children: ReactNode;
+export type Role = 'superadmin' | 'admin' | 'senior_agent' | 'agent' | 'readonly';
+
+interface TenantContextData {
+  // Usuario
+  userId: string;
+  userEmail: string;
+  userFullName: string;
+  role: Role;
+  
+  // Tenant
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  
+  // Agente asignado (puede ser diferente al userId)
+  agentId: string;
 }
 
-interface TenantContextValue extends TenantContextType {
+interface TenantContextValue extends Partial<TenantContextData> {
   isLoading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
-// Valor inicial para el contexto (nunca se usa directamente)
 const defaultContextValue: TenantContextValue = {
-  tenantId: '',
   userId: '',
-  role: 'readonly',
-  agentId: '',
-  tenantName: '',
-  tenantSlug: '',
   userEmail: '',
   userFullName: '',
+  role: 'readonly',
+  tenantId: '',
+  tenantName: '',
+  tenantSlug: '',
+  agentId: '',
   isLoading: true,
   error: null,
   refresh: async () => {},
-  signOut: async () => {}
+  signOut: async () => {},
 };
 
 // =====================================================
-// CONTEXTO
+// CACHE - Evita re-fetch en navegación
 // =====================================================
 
-const TenantContext = createContext<TenantContextValue | null>(null);
+interface CachedContext {
+  data: TenantContextData | null;
+  timestamp: number;
+  userId: string;
+}
+
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+let contextCache: CachedContext | null = null;
+
+function getCachedContext(userId: string): TenantContextData | null {
+  if (!contextCache) return null;
+  if (contextCache.userId !== userId) return null;
+  if (Date.now() - contextCache.timestamp > CACHE_DURATION) return null;
+  return contextCache.data;
+}
+
+function setCachedContext(userId: string, data: TenantContextData | null) {
+  contextCache = {
+    data,
+    timestamp: Date.now(),
+    userId
+  };
+}
+
+function clearCache() {
+  contextCache = null;
+}
 
 // =====================================================
-// PROVIDER
+// CONTEXT
 // =====================================================
 
-export function TenantProvider({ children }: TenantProviderProps) {
-  const [context, setContext] = useState<TenantContextType | null>(null);
+const TenantContext = createContext<TenantContextValue>(defaultContextValue);
+
+export function TenantProvider({ children }: { children: React.ReactNode }) {
+  const [context, setContext] = useState<TenantContextData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isLoadingRef = useRef(false);
+  const initialLoadDone = useRef(false);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createBrowserClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  ), []);
 
-  /**
-   * Carga los datos del tenant y usuario desde Supabase
-   */
-  const loadTenantContext = useCallback(async () => {
-    console.log('TenantContext: Iniciando carga...');
-    
+  const loadTenantContext = useCallback(async (forceRefresh = false) => {
+    // Evitar cargas simultáneas
+    if (isLoadingRef.current && !forceRefresh) return;
+    isLoadingRef.current = true;
+
     try {
-      setIsLoading(true);
-      setError(null);
-
-      // Obtener sesión actual con timeout
-      console.log('TenantContext: Obteniendo sesión...');
-      
-      const sessionPromise = supabase.auth.getSession();
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 5000)
-      );
-      
-      let session;
-      let sessionError;
-      
-      try {
-        const result = await Promise.race([sessionPromise, timeoutPromise]);
-        session = result.data?.session;
-        sessionError = result.error;
-      } catch (e) {
-        console.warn('TenantContext: Timeout o error en getSession', e);
-        // Continuar sin sesión
-        setContext(null);
-        setIsLoading(false);
-        return;
-      }
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
-        console.error('TenantContext: Error de sesión', sessionError);
+        console.error('Session error:', sessionError);
         setContext(null);
         setIsLoading(false);
+        isLoadingRef.current = false;
         return;
       }
 
       if (!session?.user) {
-        console.log('TenantContext: No hay sesión activa');
         setContext(null);
         setIsLoading(false);
+        isLoadingRef.current = false;
+        clearCache();
         return;
       }
 
       const user = session.user;
-      console.log('TenantContext: Usuario encontrado', user.id);
-      
-      // Obtener claims del JWT (app_metadata)
+
+      // Verificar cache (solo si no es refresh forzado)
+      if (!forceRefresh) {
+        const cached = getCachedContext(user.id);
+        if (cached) {
+          setContext(cached);
+          setIsLoading(false);
+          isLoadingRef.current = false;
+          return;
+        }
+      }
+
+      // Obtener datos del JWT
       const appMetadata = user.app_metadata || {};
       const tenantId = appMetadata.tenant_id as string | undefined;
       const role = (appMetadata.role as Role) || 'readonly';
       const agentId = (appMetadata.agent_id as string) || user.id;
-
-      console.log('TenantContext: Claims JWT', { tenantId, role, agentId });
 
       // Valores por defecto
       let userFullName = user.user_metadata?.full_name || '';
@@ -122,125 +154,110 @@ export function TenantProvider({ children }: TenantProviderProps) {
       let tenantSlug = '';
       let finalRole = role;
 
-      // Intentar obtener datos adicionales solo si hay tenantId
+      // Cargar datos adicionales solo si hay tenantId
       if (tenantId) {
         try {
-          console.log('TenantContext: Consultando tabla users...');
-          const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('full_name, email, role')
-            .eq('id', user.id)
-            .maybeSingle();
+          // Cargar datos de usuario y tenant en paralelo
+          const [userResult, tenantResult] = await Promise.all([
+            supabase
+              .from('users')
+              .select('full_name, email, role')
+              .eq('id', user.id)
+              .maybeSingle(),
+            supabase
+              .from('tenants')
+              .select('name, slug')
+              .eq('id', tenantId)
+              .maybeSingle()
+          ]);
 
-          if (userError) {
-            console.warn('TenantContext: Error consultando users', userError.message);
-          } else if (userData) {
-            console.log('TenantContext: Datos de usuario obtenidos', userData);
+          if (userResult.data) {
+            const userData = userResult.data as { full_name?: string; email?: string; role?: Role };
             userFullName = userData.full_name || userFullName;
             userEmail = userData.email || userEmail;
             finalRole = userData.role || role;
           }
-        } catch (e) {
-          console.warn('TenantContext: Excepción consultando users', e);
-        }
 
-        try {
-          console.log('TenantContext: Consultando tabla tenants...');
-          const { data: tenantData, error: tenantError } = await supabase
-            .from('tenants')
-            .select('name, slug')
-            .eq('id', tenantId)
-            .maybeSingle();
-
-          if (tenantError) {
-            console.warn('TenantContext: Error consultando tenants', tenantError.message);
-          } else if (tenantData) {
-            console.log('TenantContext: Datos de tenant obtenidos', tenantData);
+          if (tenantResult.data) {
+            const tenantData = tenantResult.data as { name?: string; slug?: string };
             tenantName = tenantData.name || '';
             tenantSlug = tenantData.slug || '';
           }
-        } catch (e) {
-          console.warn('TenantContext: Excepción consultando tenants', e);
+        } catch {
+          // Silenciar errores - usar valores del JWT
         }
       }
 
-      const contextData = {
-        tenantId: tenantId || '',
+      const contextData: TenantContextData = {
         userId: user.id,
+        userEmail,
+        userFullName,
         role: finalRole,
-        agentId,
+        tenantId: tenantId || '',
         tenantName,
         tenantSlug,
-        userEmail,
-        userFullName
+        agentId
       };
 
-      console.log('TenantContext: Configurando contexto', contextData);
+      // Guardar en cache
+      setCachedContext(user.id, contextData);
       setContext(contextData);
+      setError(null);
+    } catch (e) {
+      console.error('Error loading context:', e);
+      setError('Error al cargar datos');
+    } finally {
       setIsLoading(false);
-
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error desconocido';
-      setError(message);
-      console.error('TenantContext: Error cargando contexto:', message);
-      setIsLoading(false);
+      isLoadingRef.current = false;
+      initialLoadDone.current = true;
     }
   }, [supabase]);
 
-  /**
-   * Cerrar sesión
-   */
   const signOut = useCallback(async () => {
-    console.log('TenantContext: Cerrando sesión...');
     try {
+      clearCache();
       await supabase.auth.signOut();
       setContext(null);
-      setIsLoading(false);
-      // Redirigir al login
       window.location.href = '/login';
     } catch (e) {
-      console.error('Error cerrando sesión:', e);
-      // Forzar redirección aunque falle
-      window.location.href = '/login';
+      console.error('Error signing out:', e);
     }
   }, [supabase]);
 
-  // Cargar contexto al montar
+  // Cargar contexto inicial
   useEffect(() => {
-    loadTenantContext();
+    if (!initialLoadDone.current) {
+      loadTenantContext();
+    }
+  }, [loadTenantContext]);
 
-    // Escuchar cambios de autenticación
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          await loadTenantContext();
-        } else if (event === 'SIGNED_OUT') {
-          setContext(null);
-          setIsLoading(false);
+  // Escuchar cambios de autenticación
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        clearCache();
+        setContext(null);
+        setIsLoading(false);
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        // Solo recargar si no tenemos contexto o el usuario cambió
+        if (!context || context.userId !== session?.user?.id) {
+          loadTenantContext(true);
         }
       }
-    );
+    });
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [loadTenantContext, supabase.auth]);
+    return () => subscription.unsubscribe();
+  }, [supabase.auth, loadTenantContext, context]);
 
-  const value: TenantContextValue = context
-    ? {
-        ...context,
-        isLoading,
-        error,
-        refresh: loadTenantContext,
-        signOut
-      }
-    : {
-        ...defaultContextValue,
-        isLoading,
-        error,
-        refresh: loadTenantContext,
-        signOut
-      };
+  // Memoizar el valor del contexto
+  const value: TenantContextValue = useMemo(() => ({
+    ...defaultContextValue,
+    ...context,
+    isLoading,
+    error,
+    refresh: () => loadTenantContext(true),
+    signOut
+  }), [context, isLoading, error, loadTenantContext, signOut]);
 
   return (
     <TenantContext.Provider value={value}>
@@ -249,50 +266,16 @@ export function TenantProvider({ children }: TenantProviderProps) {
   );
 }
 
-// =====================================================
-// HOOK
-// =====================================================
-
-/**
- * Hook para acceder al contexto del tenant
- * Debe usarse dentro de TenantProvider
- * 
- * @throws Error si se usa fuera del Provider
- */
-export function useTenant(): TenantContextValue {
+export function useTenant() {
   const context = useContext(TenantContext);
-  
-  if (context === null) {
-    throw new Error(
-      'useTenant debe ser usado dentro de un TenantProvider. ' +
-      'Asegúrate de envolver tu aplicación con <TenantProvider>.'
-    );
+  if (!context) {
+    throw new Error('useTenant must be used within a TenantProvider');
   }
-  
   return context;
 }
 
-/**
- * Hook para verificar si el usuario tiene al menos cierto rol
- */
-export function useHasRole(minimumRole: Role): boolean {
-  const { role } = useTenant();
-  
-  const hierarchy: Record<Role, number> = {
-    superadmin: 100,
-    admin: 80,
-    senior_agent: 60,
-    agent: 40,
-    readonly: 20
-  };
-  
-  return hierarchy[role] >= hierarchy[minimumRole];
-}
-
-/**
- * Hook para verificar si el usuario está autenticado
- */
-export function useIsAuthenticated(): boolean {
+// Hook para verificar si el usuario está autenticado
+export function useIsAuthenticated() {
   const { userId, isLoading } = useTenant();
   return !isLoading && !!userId;
 }

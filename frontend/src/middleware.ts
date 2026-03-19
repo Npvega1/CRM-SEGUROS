@@ -1,62 +1,111 @@
 // =====================================================
-// MIDDLEWARE GLOBAL - Next.js 14
-// Protección de rutas y verificación de autenticación
+// MIDDLEWARE: Optimizado para evitar full reloads
+// Solo modifica cookies cuando es necesario
 // =====================================================
 
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import type { Role } from '@/lib/types';
+import { createServerClient } from '@supabase/ssr';
 
-// Rutas públicas que no requieren autenticación
+interface CookieOptions {
+  name: string;
+  value: string;
+  maxAge?: number;
+  domain?: string;
+  path?: string;
+  secure?: boolean;
+  httpOnly?: boolean;
+  sameSite?: 'lax' | 'strict' | 'none';
+}
+
+// =====================================================
+// RUTAS CONFIGURACIÓN
+// =====================================================
+
 const PUBLIC_ROUTES = [
   '/login',
   '/registro',
-  '/recuperar-password',
-  '/invitacion'
+  '/registro-api',
+  '/forgot-password',
+  '/reset-password',
+  '/sin-organizacion'
 ];
 
-// Rutas de webhooks (acceso libre)
-const WEBHOOK_ROUTES = ['/api/webhooks'];
+const API_ROUTES = [
+  '/api/'
+];
 
-// Rutas del portal del cliente (validación diferente - magic link)
-const PORTAL_ROUTES = ['/portal'];
+const WEBHOOK_ROUTES = [
+  '/api/webhooks/'
+];
 
-// Rutas de superadmin
-const SUPERADMIN_ROUTES = ['/superadmin'];
-
-/**
- * Verifica si una ruta coincide con algún patrón
- */
 function matchesRoute(pathname: string, routes: string[]): boolean {
-  return routes.some(route => pathname.startsWith(route));
+  return routes.some(route => {
+    if (route.endsWith('/')) {
+      return pathname.startsWith(route);
+    }
+    return pathname === route || pathname.startsWith(route + '/');
+  });
 }
 
-/**
- * Stub para verificar límites del plan
- * Se implementará en el Módulo 10 - Planes y Pagos
- */
-function checkPlanLimit(
-  _tenantId: string, 
-  _feature: string
-): { allowed: boolean; reason?: string } {
-  // TODO: Implementar verificación real de límites del plan
-  return { allowed: true };
-}
+// =====================================================
+// MIDDLEWARE
+// =====================================================
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Webhooks: acceso libre sin modificar nada
+  if (matchesRoute(pathname, WEBHOOK_ROUTES)) {
+    return NextResponse.next();
+  }
+
+  // API routes: dejar pasar sin modificar
+  if (matchesRoute(pathname, API_ROUTES)) {
+    return NextResponse.next();
+  }
+
+  // Rutas públicas: dejar pasar
+  if (matchesRoute(pathname, PUBLIC_ROUTES)) {
+    return NextResponse.next();
+  }
+
+  // Página principal: redirect a dashboard o login
+  if (pathname === '/') {
+    // Verificar si hay sesión sin modificar cookies
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll() {
+            // No setear cookies en esta verificación
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // Rutas protegidas: verificar autenticación
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   });
 
-  // ===== WEBHOOKS: Acceso libre =====
-  if (matchesRoute(pathname, WEBHOOK_ROUTES)) {
-    return response;
-  }
+  // Crear cliente Supabase con manejo de cookies optimizado
+  let cookiesModified = false;
+  const cookiesToSet: Array<{ name: string; value: string; options: CookieOptions }> = [];
 
-  // ===== Crear cliente de Supabase con cookies =====
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -65,118 +114,57 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet: Array<{ name: string; value: string; options: CookieOptions }>) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+        setAll(cookies: Array<{ name: string; value: string; options: CookieOptions }>) {
+          // Acumular cookies para setear después
+          cookies.forEach(cookie => {
+            // Verificar si la cookie realmente cambió
+            const existingCookie = request.cookies.get(cookie.name);
+            if (!existingCookie || existingCookie.value !== cookie.value) {
+              cookiesModified = true;
+              cookiesToSet.push(cookie);
+            }
           });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
         },
       },
     }
   );
 
-  // Obtener sesión actual
-  const { data: { user } } = await supabase.auth.getUser();
+  // Obtener sesión
+  const { data: { session }, error } = await supabase.auth.getSession();
 
-  // ===== RUTAS PÚBLICAS =====
-  if (matchesRoute(pathname, PUBLIC_ROUTES)) {
-    // Si ya está autenticado, redirigir al dashboard
-    if (user) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-    return response;
+  // Solo crear nueva response si las cookies cambiaron
+  if (cookiesModified && cookiesToSet.length > 0) {
+    response = NextResponse.next({
+      request: {
+        headers: request.headers,
+      },
+    });
+    
+    cookiesToSet.forEach(({ name, value, options }) => {
+      request.cookies.set(name, value);
+      response.cookies.set(name, value, options);
+    });
   }
 
-  // ===== PORTAL DEL CLIENTE: Validación diferente =====
-  if (matchesRoute(pathname, PORTAL_ROUTES)) {
-    // El portal usa magic links, validación separada
-    // Se implementará en Módulo 07
-    return response;
-  }
-
-  // ===== RUTAS PROTEGIDAS: Requieren autenticación =====
-  if (!user) {
+  // Sin sesión: redirect a login
+  if (error || !session) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Obtener claims del usuario
-  const appMetadata = user.app_metadata || {};
-  const tenantId = appMetadata.tenant_id as string | undefined;
-  const role = (appMetadata.role as Role) || 'readonly';
-
-  // ===== RUTAS DE SUPERADMIN =====
-  if (matchesRoute(pathname, SUPERADMIN_ROUTES)) {
-    if (role !== 'superadmin') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-    return response;
-  }
-
-  // ===== VERIFICACIÓN DE TENANT =====
-  // Usuarios normales deben tener un tenant asignado
-  if (!tenantId && role !== 'superadmin') {
-    // Usuario sin tenant - redirigir a página de onboarding o error
+  // Verificar tenant_id en el JWT
+  const tenantId = session.user?.app_metadata?.tenant_id;
+  
+  if (!tenantId && pathname !== '/sin-organizacion') {
     return NextResponse.redirect(new URL('/sin-organizacion', request.url));
   }
-
-  // ===== VERIFICACIÓN DE LÍMITES DEL PLAN =====
-  if (tenantId) {
-    // Mapear rutas a features del plan
-    const featureMap: Record<string, string> = {
-      '/siniestros': 'claims',
-      '/reportes': 'reports',
-      '/facturacion': 'billing',
-      '/automatizaciones': 'automations',
-      '/comparativos': 'ai_comparisons'
-    };
-
-    for (const [route, feature] of Object.entries(featureMap)) {
-      if (pathname.startsWith(route)) {
-        const { allowed, reason } = checkPlanLimit(tenantId, feature);
-        if (!allowed) {
-          const upgradeUrl = new URL('/configuracion/plan', request.url);
-          if (reason) {
-            upgradeUrl.searchParams.set('reason', reason);
-          }
-          return NextResponse.redirect(upgradeUrl);
-        }
-        break;
-      }
-    }
-  }
-
-  // Agregar headers con información del usuario para Server Components
-  response.headers.set('x-user-id', user.id);
-  if (tenantId) {
-    response.headers.set('x-tenant-id', tenantId);
-  }
-  response.headers.set('x-user-role', role);
 
   return response;
 }
 
-// =====================================================
-// CONFIGURACIÓN DEL MATCHER
-// =====================================================
-
 export const config = {
   matcher: [
-    /*
-     * Coincide con todas las rutas excepto:
-     * - _next/static (archivos estáticos)
-     * - _next/image (optimización de imágenes)
-     * - favicon.ico (favicon)
-     * - Archivos públicos con extensión
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

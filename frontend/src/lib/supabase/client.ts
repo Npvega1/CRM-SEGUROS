@@ -4,7 +4,7 @@
 // =====================================================
 
 import { createBrowserClient } from '@supabase/ssr';
-import type { Database } from './database.types';
+import type { Database } from './database-types';
 
 /**
  * Crea un cliente de Supabase para uso en el navegador
@@ -36,3 +36,6 @@ export function getClient() {
   }
   return browserClient;
 }
+
+// Alias para compatibilidad
+export const getBrowserClient = getClient;

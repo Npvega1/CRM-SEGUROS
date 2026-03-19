@@ -4,8 +4,12 @@
 // NUNCA exponer en el cliente
 // =====================================================
 
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import type { Database } from './database.types';
+import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from './database-types';
+
+// Tipo helper para manejar operaciones admin
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySupabaseClient = SupabaseClient<any>;
 
 /**
  * Crea un cliente de Supabase con permisos de service_role
@@ -15,7 +19,7 @@ import type { Database } from './database.types';
  * - Webhooks
  * - Tareas de administración del sistema
  */
-export function createAdminClient() {
+export function createAdminClient(): AnySupabaseClient {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
