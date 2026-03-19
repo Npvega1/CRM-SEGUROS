@@ -99,7 +99,6 @@ function NewPolicyContent() {
         .insert({
           tenant_id: tenantId,
           client_id: selectedClientId,
-          agent_id: userId,
           policy_number: data.policy_number,
           insurer: data.insurer,
           line: data.line,
