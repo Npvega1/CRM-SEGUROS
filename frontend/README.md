@@ -128,8 +128,8 @@ Todas las tablas tienen RLS habilitado para garantizar aislamiento entre tenants
 ## 🛠️ Módulos Planificados
 
 - [x] **Módulo 00**: Fundación (completado)
-- [ ] **Módulo 01**: Clientes y Pólizas
-- [ ] **Módulo 02**: Pipeline de Ventas
+- [x] **Módulo 01**: Clientes y Pólizas (completado)
+- [x] **Módulo 02**: Pipeline de Ventas (completado)
 - [ ] **Módulo 03**: Siniestros
 - [ ] **Módulo 04**: Reportes
 - [ ] **Módulo 05**: Facturación
@@ -139,6 +139,59 @@ Todas las tablas tienen RLS habilitado para garantizar aislamiento entre tenants
 - [ ] **Módulo 09**: Comparativos con IA
 - [ ] **Módulo 10**: Planes y Pagos
 - [ ] **Módulo 11**: Super Admin
+
+---
+
+## 📋 Módulo 02 - Pipeline de Ventas
+
+### Características Implementadas
+
+1. **Tablero Kanban** con drag-and-drop (@dnd-kit/core)
+   - Columnas por etapa del pipeline
+   - Mover oportunidades arrastrando entre columnas
+   - Indicadores visuales de cantidad y prima por etapa
+
+2. **Oportunidades de Venta**
+   - Crear, editar, eliminar oportunidades
+   - Asociar a cliente existente
+   - Prima estimada y probabilidad de cierre
+   - Fecha esperada de cierre
+
+3. **Flujos Especiales**
+   - **Ganar oportunidad**: Convierte automáticamente en póliza
+   - **Perder oportunidad**: Requiere motivo obligatorio
+
+4. **Actividades**
+   - Registro de llamadas, emails, reuniones, tareas, notas
+   - Timeline de actividades por oportunidad
+   - Marcar como completadas
+
+5. **Forecast**
+   - Gráfico de barras con Recharts
+   - Prima ponderada por mes
+   - Filtros por período
+
+6. **Realtime**
+   - Suscripción a cambios en tiempo real vía Supabase
+
+### Ejecutar Migración del Módulo 02
+
+1. Ve a **SQL Editor** en Supabase Dashboard
+2. Copia el contenido de `/supabase/migrations/00002_pipeline.sql`
+3. Ejecuta el SQL
+
+### Habilitar Realtime (Opcional pero Recomendado)
+
+Para ver cambios en tiempo real:
+
+```sql
+-- Ejecutar en Supabase SQL Editor
+ALTER PUBLICATION supabase_realtime ADD TABLE pipeline_stages;
+ALTER PUBLICATION supabase_realtime ADD TABLE opportunities;
+ALTER PUBLICATION supabase_realtime ADD TABLE activities;
+```
+
+O desde el Dashboard: Database > Replication > Habilitar para las tablas mencionadas.
 
 ---
 
