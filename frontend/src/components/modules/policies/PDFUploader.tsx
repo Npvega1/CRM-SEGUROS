@@ -3,11 +3,11 @@
 // =====================================================
 // COMPONENTE: PDFUploader
 // Drag and drop para subir documentos de póliza
+// Refactorizado para usar API Routes
 // =====================================================
 
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { uploadPolicyDocument, getDocumentSignedUrl } from '@/app/(tenant)/polizas/actions';
 import { 
   Upload, 
   FileText, 
@@ -81,16 +81,24 @@ export function PDFUploader({
     }, 200);
 
     try {
-      const result = await uploadPolicyDocument(policyId, file);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`/api/polizas/${policyId}/documento`, {
+        method: 'POST',
+        body: formData,
+      });
 
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      if (result.success) {
+      const result = await response.json();
+
+      if (response.ok) {
         setSuccess(true);
-        onUploadComplete?.(result.data);
+        onUploadComplete?.(result.url);
       } else {
-        setError(result.error.message);
+        setError(result.error || 'Error al subir el archivo');
       }
     } catch {
       clearInterval(progressInterval);
@@ -103,11 +111,13 @@ export function PDFUploader({
   const handleViewDocument = async () => {
     setIsLoadingUrl(true);
     try {
-      const result = await getDocumentSignedUrl(policyId);
-      if (result.success) {
-        window.open(result.data, '_blank');
+      const response = await fetch(`/api/polizas/${policyId}/documento`);
+      const result = await response.json();
+      
+      if (response.ok) {
+        window.open(result.url, '_blank');
       } else {
-        setError(result.error.message);
+        setError(result.error || 'Error al obtener el documento');
       }
     } catch {
       setError('Error al obtener el documento');

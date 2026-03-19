@@ -3,6 +3,7 @@
 // =====================================================
 // COMPONENTE: CSVImporter
 // Importador de clientes desde CSV
+// Refactorizado para usar API Routes
 // =====================================================
 
 import { useState, useCallback } from 'react';
@@ -24,8 +25,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { importClientsFromCSV } from '@/app/(tenant)/clientes/actions';
-import type { CSVImportResult, CSVRowError } from '@/lib/validations/clients';
 import { 
   Upload, 
   FileText, 
@@ -35,6 +34,20 @@ import {
   Loader2,
   X
 } from 'lucide-react';
+
+// Types for CSV import
+interface CSVRowError {
+  row: number;
+  field: string;
+  message: string;
+  value?: string;
+}
+
+interface CSVImportResult {
+  success: number;
+  failed: number;
+  errors: CSVRowError[];
+}
 
 interface CSVImporterProps {
   onSuccess?: () => void;
@@ -108,7 +121,8 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
       const text = await file.text();
       const data = parseCSV(text);
       
-      const importResult = await importClientsFromCSV(data.map(row => ({
+      // Map CSV data to the expected format
+      const mappedData = data.map(row => ({
         full_name: row.full_name || row.nombre || '',
         doc_type: row.doc_type || row.tipo_documento || 'cedula',
         doc_number: row.doc_number || row.documento || '',
@@ -116,15 +130,24 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
         phone: row.phone || row.telefono || undefined,
         segment: row.segment || row.segmento || 'individual',
         tags: row.tags || row.etiquetas || undefined
-      })));
+      }));
 
-      if (importResult.success) {
-        setResult(importResult.data);
-        if (importResult.data.success > 0) {
+      // Call API Route instead of Server Action
+      const response = await fetch('/api/clientes/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: mappedData }),
+      });
+
+      const importResult = await response.json();
+
+      if (response.ok) {
+        setResult(importResult);
+        if (importResult.success > 0) {
           onSuccess?.();
         }
       } else {
-        setError(importResult.error.message);
+        setError(importResult.error || 'Error al importar clientes');
       }
     } catch {
       setError('Error al procesar el archivo');

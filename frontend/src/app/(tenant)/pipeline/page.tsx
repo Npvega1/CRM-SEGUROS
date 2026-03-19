@@ -118,10 +118,11 @@ export default function PipelinePage() {
 
   // Cargar al montar
   useEffect(() => {
-    if (tenantId && !tenantLoading) {
+    // Cargar datos cuando tenemos tenantId o cuando termine de cargar el tenant
+    if (!tenantLoading) {
       loadData();
     }
-  }, [tenantId, tenantLoading, loadData]);
+  }, [tenantLoading, loadData]);
 
   // Suscribirse a Realtime
   useEffect(() => {
@@ -304,7 +305,7 @@ export default function PipelinePage() {
     setIsRefreshing(false);
   };
 
-  if (tenantLoading || isLoading) {
+  if (tenantLoading) {
     return (
       <div className="p-6 space-y-6">
         <div className="flex justify-between items-center">

@@ -3,6 +3,7 @@
 // =====================================================
 // COMPONENTE: Client360View
 // Vista 360° del cliente con tabs
+// Refactorizado para usar API Routes
 // =====================================================
 
 import { useState, useEffect } from 'react';
@@ -29,7 +30,6 @@ import {
   type PolicyStatus,
   type PolicyLine
 } from '@/lib/validations/policies';
-import { getPoliciesByClient } from '@/app/(tenant)/polizas/actions';
 import {
   User,
   Mail,
@@ -55,9 +55,14 @@ export function Client360View({ client }: Client360ViewProps) {
   useEffect(() => {
     async function loadPolicies() {
       setIsLoadingPolicies(true);
-      const result = await getPoliciesByClient(client.id);
-      if (result.success) {
-        setPolicies(result.data);
+      try {
+        const response = await fetch(`/api/clientes/${client.id}/polizas`);
+        if (response.ok) {
+          const data = await response.json();
+          setPolicies(data);
+        }
+      } catch (error) {
+        console.error('Error loading policies:', error);
       }
       setIsLoadingPolicies(false);
     }

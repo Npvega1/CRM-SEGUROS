@@ -73,7 +73,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
       
       const sessionPromise = supabase.auth.getSession();
       const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 5000)
+        setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 15000)
       );
       
       let session;
