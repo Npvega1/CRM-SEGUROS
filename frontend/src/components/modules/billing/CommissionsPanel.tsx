@@ -374,7 +374,12 @@ export function CommissionsPanel({ summary, onUpdate }: CommissionsPanelProps) {
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={handlePrevPeriod}>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={handlePrevPeriod}
+                data-testid="prev-month-btn"
+              >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-md">
@@ -386,6 +391,7 @@ export function CommissionsPanel({ summary, onUpdate }: CommissionsPanelProps) {
                 size="icon" 
                 onClick={handleNextPeriod}
                 disabled={isNextDisabled()}
+                data-testid="next-month-btn"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
