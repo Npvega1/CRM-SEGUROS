@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + days);
 
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
       .from('policies')
       .select(`
         id,
@@ -47,11 +48,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    type ExpiringPolicy = {
+      id: string;
+      policy_number: string;
+      insurer: string;
+      line: string;
+      premium: number;
+      end_date: string;
+      client: { id: string; full_name: string; email: string | null; phone: string | null } | null;
+    };
+
     // Calcular días restantes
-    const policies = (data || []).map(policy => {
+    const policies = ((data || []) as ExpiringPolicy[]).map(policy => {
       const endDate = new Date(policy.end_date);
       const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      const client = policy.client as { id: string; full_name: string; email: string | null; phone: string | null } | null;
+      const client = policy.client;
       
       return {
         id: policy.id,

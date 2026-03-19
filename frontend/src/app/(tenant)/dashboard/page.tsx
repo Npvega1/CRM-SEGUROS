@@ -11,7 +11,6 @@ import {
   FileText, 
   TrendingUp, 
   AlertTriangle,
-  Plus,
   ArrowRight,
   Building2,
   Shield,
@@ -50,7 +49,8 @@ export default function DashboardPage() {
         thisMonth.setDate(1);
         thisMonth.setHours(0, 0, 0, 0);
         
-        const thisMonthClients = clients?.filter(c => new Date(c.created_at) >= thisMonth).length || 0;
+        const clientsTyped = clients as Array<{ created_at: string }> | null;
+        const thisMonthClients = clientsTyped?.filter(c => new Date(c.created_at) >= thisMonth).length || 0;
         setClientStats({ total: clientCount || 0, thisMonth: thisMonthClients });
         
         // Load policy stats
@@ -59,9 +59,10 @@ export default function DashboardPage() {
           .select('status, premium')
           .eq('tenant_id', tenantId);
         
-        const activePolicies = policies?.filter(p => p.status === 'active').length || 0;
-        const totalPremium = policies?.reduce((sum, p) => sum + (p.premium || 0), 0) || 0;
-        setPolicyStats({ total: policies?.length || 0, active: activePolicies, totalPremium });
+        const policiesTyped = policies as Array<{ status: string; premium: number }> | null;
+        const activePolicies = policiesTyped?.filter(p => p.status === 'activa').length || 0;
+        const totalPremium = policiesTyped?.reduce((sum, p) => sum + (p.premium || 0), 0) || 0;
+        setPolicyStats({ total: policiesTyped?.length || 0, active: activePolicies, totalPremium });
         
         // Load pipeline stats
         const { data: opportunities } = await supabase
@@ -69,8 +70,9 @@ export default function DashboardPage() {
           .select('status, estimated_premium, probability')
           .eq('tenant_id', tenantId);
         
-        const activeOpps = opportunities?.filter(o => o.status === 'active').length || 0;
-        const weightedPremium = opportunities
+        const oppsTyped = opportunities as Array<{ status: string; estimated_premium: number; probability: number }> | null;
+        const activeOpps = oppsTyped?.filter(o => o.status === 'active').length || 0;
+        const weightedPremium = oppsTyped
           ?.filter(o => o.status === 'active')
           .reduce((sum, o) => sum + ((o.estimated_premium || 0) * (o.probability || 0) / 100), 0) || 0;
         setPipelineStats({ total_active: activeOpps, weighted_premium: weightedPremium });

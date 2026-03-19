@@ -58,7 +58,8 @@ export default function NewClientPage() {
     }
 
     try {
-      const { data: newClient, error: insertError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: newClient, error: insertError } = await (supabase as any)
         .from('clients')
         .insert({
           tenant_id: currentTenantId,
@@ -87,8 +88,8 @@ export default function NewClientPage() {
       }
 
       router.push(`/clientes/${newClient.id}`);
-    } catch (err) {
-      console.error('Error:', err);
+    } catch {
+      console.error('Error de conexión');
       setError('Error de conexión. Por favor, intenta de nuevo.');
       setIsLoading(false);
     }

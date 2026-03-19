@@ -83,7 +83,8 @@ export default function EditClientPage() {
     try {
       const supabase = getBrowserClient();
       
-      const { error: updateError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: updateError } = await (supabase as any)
         .from('clients')
         .update({
           full_name: data.full_name,
@@ -176,8 +177,7 @@ export default function EditClientPage() {
               <ClientForm
                 onSubmit={handleSubmit}
                 isLoading={isSaving}
-                initialData={client}
-                mode="edit"
+                client={client}
               />
             )}
           </CardContent>

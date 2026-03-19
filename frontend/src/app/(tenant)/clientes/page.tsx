@@ -103,7 +103,7 @@ export default function ClientsPage() {
           
           let thisMonthCount = 0;
           
-          allClients.forEach(client => {
+          (allClients as Array<{ segment: string; created_at: string }>).forEach(client => {
             if (client.segment && bySegment[client.segment] !== undefined) {
               bySegment[client.segment]++;
             }

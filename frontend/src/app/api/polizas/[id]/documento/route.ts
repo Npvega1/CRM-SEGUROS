@@ -112,7 +112,8 @@ export async function GET(
     const { id: policyId } = await params;
 
     // Get policy with document URL
-    const { data: policy, error: policyError } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: policy, error: policyError } = await (supabase as any)
       .from('policies')
       .select('document_url')
       .eq('id', policyId)
@@ -123,14 +124,15 @@ export async function GET(
       return NextResponse.json({ error: 'Póliza no encontrada' }, { status: 404 });
     }
 
-    if (!policy.document_url) {
+    const policyTyped = policy as { document_url: string | null };
+    if (!policyTyped.document_url) {
       return NextResponse.json({ error: 'La póliza no tiene documento adjunto' }, { status: 404 });
     }
 
     // Get signed URL
     const { data: signedUrl, error: signError } = await supabase.storage
       .from('policy-documents')
-      .createSignedUrl(policy.document_url, 3600); // 1 hour expiry
+      .createSignedUrl(policyTyped.document_url, 3600); // 1 hour expiry
 
     if (signError) {
       console.error('Sign error:', signError);

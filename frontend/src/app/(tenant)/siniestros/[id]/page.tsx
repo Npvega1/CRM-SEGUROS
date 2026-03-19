@@ -7,7 +7,7 @@
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -15,7 +15,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getBrowserClient } from '@/lib/supabase/client';
 import { ClaimStatusStepper, ClaimTimeline, ClaimDocuments } from '@/components/modules/claims';
@@ -37,19 +36,16 @@ import {
   User,
   Phone,
   Mail,
-  FileText,
   Shield,
   Calendar,
   DollarSign,
   Clock,
   History,
-  Paperclip,
-  Building
+  Paperclip
 } from 'lucide-react';
 
 export default function ClaimDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const claimId = params.id as string;
   const { isLoading: isLoadingTenant, tenantId, userId } = useTenant();
 
@@ -69,7 +65,8 @@ export default function ClaimDetailPage() {
       const supabase = getBrowserClient();
 
       // Cargar siniestro con relaciones
-      const { data: claimData, error: claimError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: claimData, error: claimError } = await (supabase as any)
         .from('claims')
         .select(`
           *,
@@ -88,7 +85,8 @@ export default function ClaimDetailPage() {
       }
 
       // Cargar historial
-      const { data: historyData } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: historyData } = await (supabase as any)
         .from('claims_history')
         .select(`
           *,
@@ -98,7 +96,8 @@ export default function ClaimDetailPage() {
         .order('changed_at', { ascending: false });
 
       // Cargar documentos
-      const { data: docsData } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: docsData } = await (supabase as any)
         .from('claim_documents')
         .select(`
           *,
@@ -107,20 +106,24 @@ export default function ClaimDetailPage() {
         .eq('claim_id', claimId)
         .order('uploaded_at', { ascending: false });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const claimDataTyped = claimData as any;
       const exp: ClaimExpediente = {
         claim: {
-          ...claimData,
-          agent_name: (claimData.users as { full_name: string } | null)?.full_name || undefined
+          ...claimDataTyped,
+          agent_name: claimDataTyped.users?.full_name || undefined
         },
-        policy: claimData.policies as ClaimExpediente['policy'],
-        client: claimData.clients as ClaimExpediente['client'],
-        history: (historyData || []).map((h: Record<string, unknown>) => ({
+        policy: claimDataTyped.policies as ClaimExpediente['policy'],
+        client: claimDataTyped.clients as ClaimExpediente['client'],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        history: (historyData || []).map((h: any) => ({
           ...h,
-          changed_by_name: (h.users as { full_name: string } | null)?.full_name || null
+          changed_by_name: h.users?.full_name || null
         })) as ClaimExpediente['history'],
-        documents: (docsData || []).map((d: Record<string, unknown>) => ({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        documents: (docsData || []).map((d: any) => ({
           ...d,
-          uploader_name: (d.users as { full_name: string } | null)?.full_name || null
+          uploader_name: d.users?.full_name || null
         })) as ClaimExpediente['documents']
       };
 
@@ -152,7 +155,8 @@ export default function ClaimDetailPage() {
       const supabase = getBrowserClient();
 
       // Actualizar estado del siniestro
-      const { error: updateError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: updateError } = await (supabase as any)
         .from('claims')
         .update({ status: newStatus })
         .eq('id', claimId);
@@ -166,7 +170,8 @@ export default function ClaimDetailPage() {
 
       // Insertar en historial con comentario
       if (comment) {
-        await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
           .from('claims_history')
           .insert({
             claim_id: claimId,
@@ -200,7 +205,8 @@ export default function ClaimDetailPage() {
     try {
       const supabase = getBrowserClient();
 
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from('claims')
         .update({ approved_amount: amount })
         .eq('id', claimId);
@@ -258,7 +264,8 @@ export default function ClaimDetailPage() {
           .getPublicUrl(path);
 
         // Insertar registro en claim_documents
-        const { error: insertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: insertError } = await (supabase as any)
           .from('claim_documents')
           .insert({
             claim_id: claimId,
@@ -443,7 +450,7 @@ export default function ClaimDetailPage() {
                   ) : (
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-lg text-green-600">
-                        {claim.approved_amount !== null ? formatClaimAmount(claim.approved_amount) : '-'}
+                        {claim.approved_amount != null ? formatClaimAmount(claim.approved_amount || 0) : '-'}
                       </p>
                       <Button
                         size="sm"

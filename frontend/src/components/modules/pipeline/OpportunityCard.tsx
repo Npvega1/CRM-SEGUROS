@@ -101,6 +101,7 @@ export function OpportunityCard({
         {opportunity.agent && (
           <div className="flex items-center gap-1">
             {opportunity.agent.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={opportunity.agent.avatar_url}
                 alt={opportunity.agent.full_name}

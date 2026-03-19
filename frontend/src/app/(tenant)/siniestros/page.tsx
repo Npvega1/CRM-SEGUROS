@@ -58,7 +58,6 @@ import {
   ChevronRight,
   Eye,
   ArrowLeft,
-  AlertTriangle,
   FileWarning,
   CheckCircle2,
   Clock
@@ -160,24 +159,28 @@ export default function ClaimsPage() {
     try {
       const supabase = getBrowserClient();
       
-      const { data: allClaims } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: allClaims } = await (supabase as any)
         .from('claims')
         .select('status, claimed_amount, approved_amount')
         .eq('tenant_id', tenantId);
       
       if (allClaims) {
+        type ClaimStats = { status: string; claimed_amount: number; approved_amount: number };
+        const claimsTyped = allClaims as ClaimStats[];
+        
         const byStatus: Record<string, number> = {};
         let totalClaimed = 0;
         let totalApproved = 0;
         
-        allClaims.forEach(c => {
+        claimsTyped.forEach(c => {
           byStatus[c.status] = (byStatus[c.status] || 0) + 1;
           totalClaimed += c.claimed_amount || 0;
           totalApproved += c.approved_amount || 0;
         });
         
         setStats({
-          total: allClaims.length,
+          total: claimsTyped.length,
           byStatus,
           totalClaimed,
           totalApproved
@@ -250,7 +253,8 @@ export default function ClaimsPage() {
       
       const validation = OpenClaimInputSchema.safeParse(input);
       if (!validation.success) {
-        setFormError(validation.error.errors[0]?.message || 'Datos inválidos');
+        const zodError = validation.error as { errors?: Array<{ message?: string }> };
+        setFormError(zodError.errors?.[0]?.message || 'Datos inválidos');
         setIsSubmitting(false);
         return;
       }
@@ -258,7 +262,8 @@ export default function ClaimsPage() {
       const supabase = getBrowserClient();
       
       // Crear el siniestro
-      const { data: newClaim, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: newClaim, error } = await (supabase as any)
         .from('claims')
         .insert({
           tenant_id: tenantId,
@@ -281,7 +286,8 @@ export default function ClaimsPage() {
       }
       
       // Insertar historial inicial
-      await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
         .from('claims_history')
         .insert({
           claim_id: newClaim.id,
@@ -461,7 +467,7 @@ export default function ClaimsPage() {
                     </TableCell>
                     <TableCell>{formatClaimAmount(claim.claimed_amount)}</TableCell>
                     <TableCell>
-                      {claim.approved_amount !== null ? formatClaimAmount(claim.approved_amount) : '-'}
+                      {claim.approved_amount != null ? formatClaimAmount(claim.approved_amount || 0) : '-'}
                     </TableCell>
                     <TableCell>{formatClaimDate(claim.incident_date)}</TableCell>
                     <TableCell>{claim.agent?.full_name || '-'}</TableCell>

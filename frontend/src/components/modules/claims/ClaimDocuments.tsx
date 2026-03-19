@@ -20,7 +20,6 @@ import {
   Image as ImageIcon,
   Table,
   Download,
-  X,
   Loader2,
   Eye
 } from 'lucide-react';
@@ -51,8 +50,6 @@ const FILE_ICONS: Record<string, typeof File> = {
 
 export function ClaimDocuments({
   documents,
-  claimId,
-  tenantId,
   onUpload,
   onGetSignedUrl,
   isUploading = false,
@@ -262,6 +259,7 @@ export function ClaimDocuments({
               </div>
             ) : previewUrl ? (
               previewDoc && isImageFile(previewDoc.file_type) ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={previewUrl}
                   alt={previewDoc.file_name}

@@ -93,7 +93,8 @@ function NewPolicyContent() {
     try {
       const supabase = getBrowserClient();
       
-      const { data: newPolicy, error: insertError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: newPolicy, error: insertError } = await (supabase as any)
         .from('policies')
         .insert({
           tenant_id: tenantId,
@@ -119,7 +120,7 @@ function NewPolicyContent() {
       } else {
         router.push(`/polizas/${newPolicy.id}`);
       }
-    } catch (err) {
+    } catch {
       setError('Error de conexión');
       setIsLoading(false);
     }
@@ -232,7 +233,6 @@ function NewPolicyContent() {
                 <PolicyForm
                   onSubmit={handleSubmit}
                   isLoading={isLoading}
-                  initialData={{ client_id: selectedClientId }}
                 />
               )}
             </CardContent>

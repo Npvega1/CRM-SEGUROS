@@ -50,7 +50,6 @@ import {
   ArrowLeft,
   Shield,
   AlertTriangle,
-  CheckCircle,
   Clock
 } from 'lucide-react';
 
@@ -150,6 +149,9 @@ export default function PoliciesPage() {
         .eq('tenant_id', tenantId);
       
       if (allPolicies) {
+        type PolicyStats = { status: string; line: string; premium: number; end_date: string | null };
+        const policiesTyped = allPolicies as PolicyStats[];
+        
         const byStatus: Record<string, number> = {};
         const byLine: Record<string, number> = {};
         let totalPremium = 0;
@@ -160,16 +162,16 @@ export default function PoliciesPage() {
         endOfMonth.setMonth(endOfMonth.getMonth() + 1);
         endOfMonth.setDate(0);
         
-        allPolicies.forEach(p => {
+        policiesTyped.forEach(p => {
           byStatus[p.status] = (byStatus[p.status] || 0) + 1;
           byLine[p.line] = (byLine[p.line] || 0) + 1;
           totalPremium += p.premium || 0;
-          if (p.status === 'active') active++;
+          if (p.status === 'activa') active++;
           if (p.end_date && new Date(p.end_date) <= endOfMonth) expiringThisMonth++;
         });
         
         setStats({
-          total: allPolicies.length,
+          total: policiesTyped.length,
           active,
           byStatus,
           byLine,

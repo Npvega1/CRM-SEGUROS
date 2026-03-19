@@ -27,7 +27,8 @@ export async function GET(request: NextRequest) {
 
     const offset = (page - 1) * pageSize;
 
-    let query = supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query = (supabase as any)
       .from('policies')
       .select(`
         *,
@@ -60,9 +61,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    type PolicyRow = {
+      id: string;
+      client: { id: string; full_name: string; doc_number: string } | null;
+      [key: string]: unknown;
+    };
+
     // Formatear para incluir client_name
-    const policies = (data || []).map(policy => {
-      const client = policy.client as { id: string; full_name: string; doc_number: string } | null;
+    const policies = ((data || []) as PolicyRow[]).map(policy => {
+      const client = policy.client;
       return {
         ...policy,
         client_name: client?.full_name || 'N/A',

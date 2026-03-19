@@ -57,7 +57,6 @@ export default function PolicyDetailPage() {
 
   const [policy, setPolicy] = useState<PolicyWithClient | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadPolicy = useCallback(async () => {
@@ -67,7 +66,8 @@ export default function PolicyDetailPage() {
     try {
       const supabase = getBrowserClient();
       
-      const { data, error: fetchError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: fetchError } = await (supabase as any)
         .from('policies')
         .select(`
           *,
@@ -79,13 +79,13 @@ export default function PolicyDetailPage() {
       
       if (fetchError) {
         setError(fetchError.message || 'Error al cargar la póliza');
-      } else {
+      } else if (data) {
         setPolicy({
           ...data,
           client: data.clients
         } as PolicyWithClient);
       }
-    } catch (err) {
+    } catch {
       setError('Error de conexión');
     }
     setIsLoading(false);
@@ -100,11 +100,11 @@ export default function PolicyDetailPage() {
   const handleStatusChange = async (newStatus: PolicyStatus) => {
     if (!tenantId) return;
     
-    setIsUpdatingStatus(true);
     try {
       const supabase = getBrowserClient();
       
-      const { data, error: updateError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: updateError } = await (supabase as any)
         .from('policies')
         .update({ status: newStatus, updated_at: new Date().toISOString() })
         .eq('id', policyId)
@@ -117,16 +117,15 @@ export default function PolicyDetailPage() {
 
       if (updateError) {
         setError(updateError.message || 'Error al actualizar');
-      } else {
+      } else if (data) {
         setPolicy({
           ...data,
           client: data.clients
         } as PolicyWithClient);
       }
-    } catch (err) {
+    } catch {
       setError('Error de conexión');
     }
-    setIsUpdatingStatus(false);
   };
 
   if (isLoadingTenant || isLoading) {
@@ -189,7 +188,6 @@ export default function PolicyDetailPage() {
                 <PolicyStatusStepper
                   currentStatus={policy.status as PolicyStatus}
                   onStatusChange={handleStatusChange}
-                  isUpdating={isUpdatingStatus}
                 />
               </CardContent>
             </Card>

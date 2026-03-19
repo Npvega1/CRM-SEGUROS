@@ -78,6 +78,8 @@ export type Database = {
           phone: string | null;
           address: string | null;
           segment: 'individual' | 'empresa' | 'vip';
+          agent_id: string | null;
+          tags: string[];
           metadata: Json | null;
           created_at: string;
           updated_at: string;
@@ -92,6 +94,8 @@ export type Database = {
           phone?: string | null;
           address?: string | null;
           segment?: 'individual' | 'empresa' | 'vip';
+          agent_id?: string | null;
+          tags?: string[];
           metadata?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -106,6 +110,8 @@ export type Database = {
           phone?: string | null;
           address?: string | null;
           segment?: 'individual' | 'empresa' | 'vip';
+          agent_id?: string | null;
+          tags?: string[];
           metadata?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -238,11 +244,14 @@ export type Database = {
           line: 'vida' | 'auto' | 'salud' | 'hogar' | 'soat' | 'otro';
           estimated_premium: number;
           close_probability: number;
+          probability: number;
           expected_close_date: string | null;
           status: 'active' | 'won' | 'lost';
           lost_reason: string | null;
           converted_policy_id: string | null;
           notes: string | null;
+          won_at: string | null;
+          lost_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -255,11 +264,14 @@ export type Database = {
           line?: 'vida' | 'auto' | 'salud' | 'hogar' | 'soat' | 'otro';
           estimated_premium?: number;
           close_probability?: number;
+          probability?: number;
           expected_close_date?: string | null;
           status?: 'active' | 'won' | 'lost';
           lost_reason?: string | null;
           converted_policy_id?: string | null;
           notes?: string | null;
+          won_at?: string | null;
+          lost_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -272,11 +284,14 @@ export type Database = {
           line?: 'vida' | 'auto' | 'salud' | 'hogar' | 'soat' | 'otro';
           estimated_premium?: number;
           close_probability?: number;
+          probability?: number;
           expected_close_date?: string | null;
           status?: 'active' | 'won' | 'lost';
           lost_reason?: string | null;
           converted_policy_id?: string | null;
           notes?: string | null;
+          won_at?: string | null;
+          lost_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -322,6 +337,149 @@ export type Database = {
           created_at?: string;
         };
       };
+      claims: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          policy_id: string;
+          client_id: string;
+          agent_id: string | null;
+          status: 'reported' | 'investigating' | 'docs_complete' | 'processing' | 'resolved' | 'closed';
+          incident_date: string;
+          claimed_amount: number;
+          approved_amount: number | null;
+          description: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          policy_id: string;
+          client_id: string;
+          agent_id?: string | null;
+          status?: 'reported' | 'investigating' | 'docs_complete' | 'processing' | 'resolved' | 'closed';
+          incident_date: string;
+          claimed_amount?: number;
+          approved_amount?: number | null;
+          description: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          policy_id?: string;
+          client_id?: string;
+          agent_id?: string | null;
+          status?: 'reported' | 'investigating' | 'docs_complete' | 'processing' | 'resolved' | 'closed';
+          incident_date?: string;
+          claimed_amount?: number;
+          approved_amount?: number | null;
+          description?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      claims_history: {
+        Row: {
+          id: string;
+          claim_id: string;
+          changed_by: string | null;
+          old_status: 'reported' | 'investigating' | 'docs_complete' | 'processing' | 'resolved' | 'closed' | null;
+          new_status: 'reported' | 'investigating' | 'docs_complete' | 'processing' | 'resolved' | 'closed';
+          comment: string | null;
+          is_internal: boolean;
+          changed_at: string;
+        };
+        Insert: {
+          id?: string;
+          claim_id: string;
+          changed_by?: string | null;
+          old_status?: 'reported' | 'investigating' | 'docs_complete' | 'processing' | 'resolved' | 'closed' | null;
+          new_status: 'reported' | 'investigating' | 'docs_complete' | 'processing' | 'resolved' | 'closed';
+          comment?: string | null;
+          is_internal?: boolean;
+          changed_at?: string;
+        };
+        Update: {
+          id?: string;
+          claim_id?: string;
+          changed_by?: string | null;
+          old_status?: 'reported' | 'investigating' | 'docs_complete' | 'processing' | 'resolved' | 'closed' | null;
+          new_status?: 'reported' | 'investigating' | 'docs_complete' | 'processing' | 'resolved' | 'closed';
+          comment?: string | null;
+          is_internal?: boolean;
+          changed_at?: string;
+        };
+      };
+      claim_documents: {
+        Row: {
+          id: string;
+          claim_id: string;
+          tenant_id: string;
+          uploader_id: string | null;
+          file_name: string;
+          file_url: string;
+          file_type: string;
+          file_size: number | null;
+          uploaded_at: string;
+        };
+        Insert: {
+          id?: string;
+          claim_id: string;
+          tenant_id: string;
+          uploader_id?: string | null;
+          file_name: string;
+          file_url: string;
+          file_type: string;
+          file_size?: number | null;
+          uploaded_at?: string;
+        };
+        Update: {
+          id?: string;
+          claim_id?: string;
+          tenant_id?: string;
+          uploader_id?: string | null;
+          file_name?: string;
+          file_url?: string;
+          file_type?: string;
+          file_size?: number | null;
+          uploaded_at?: string;
+        };
+      };
+      automation_queue: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          trigger_type: string;
+          entity_type: string;
+          entity_id: string;
+          payload: Json | null;
+          processed: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          trigger_type: string;
+          entity_type: string;
+          entity_id: string;
+          payload?: Json | null;
+          processed?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          trigger_type?: string;
+          entity_type?: string;
+          entity_id?: string;
+          payload?: Json | null;
+          processed?: boolean;
+          created_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
@@ -351,6 +509,7 @@ export type Database = {
       policy_status: 'cotizacion' | 'activa' | 'vencida' | 'cancelada' | 'renovacion';
       opportunity_status: 'active' | 'won' | 'lost';
       activity_type: 'call' | 'email' | 'meeting' | 'task' | 'note';
+      claim_status: 'reported' | 'investigating' | 'docs_complete' | 'processing' | 'resolved' | 'closed';
     };
   };
 };
