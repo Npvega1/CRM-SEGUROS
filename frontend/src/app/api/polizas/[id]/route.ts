@@ -1,55 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { UpdateClientInputSchema } from '@/lib/validations/clients';
+import { UpdatePolicyInputSchema } from '@/lib/validations/policies';
 
-// GET /api/clientes/[id] - Obtener cliente por ID
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+interface RouteParams {
+  params: Promise<{ id: string }>;
+}
+
+// GET /api/polizas/[id] - Obtener póliza por ID
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', params.id)
-      .single();
-
-    if (error || !data) {
-      return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
-    }
-
-    return NextResponse.json(data);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
-
-// PUT /api/clientes/[id] - Actualizar cliente
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  return handleUpdate(request, params.id);
-}
-
-// PATCH /api/clientes/[id] - Actualizar cliente (parcial)
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  return handleUpdate(request, params.id);
-}
-
-async function handleUpdate(request: NextRequest, id: string) {
-  try {
+    const { id } = await params;
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -62,8 +22,56 @@ async function handleUpdate(request: NextRequest, id: string) {
       return NextResponse.json({ error: 'No tenant found' }, { status: 403 });
     }
 
+    const { data, error } = await supabase
+      .from('policies')
+      .select(`
+        *,
+        client:clients(id, full_name, doc_type, doc_number, email, phone, segment)
+      `)
+      .eq('id', id)
+      .eq('tenant_id', tenantId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return NextResponse.json({ error: 'Póliza no encontrada' }, { status: 404 });
+      }
+      console.error('Error fetching policy:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error in GET /api/polizas/[id]:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+// PATCH /api/polizas/[id] - Actualizar póliza
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { id } = await params;
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const tenantId = user.app_metadata?.tenant_id;
+    const userRole = user.app_metadata?.role;
+    
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant found' }, { status: 403 });
+    }
+    
+    if (!['admin', 'senior_agent', 'agent'].includes(userRole)) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    }
+
     const body = await request.json();
-    const validationResult = UpdateClientInputSchema.safeParse(body);
+    const validationResult = UpdatePolicyInputSchema.safeParse(body);
     
     if (!validationResult.success) {
       return NextResponse.json(
@@ -72,43 +80,31 @@ async function handleUpdate(request: NextRequest, id: string) {
       );
     }
 
-    const validatedData = validationResult.data;
-
     const { data, error } = await supabase
-      .from('clients')
-      .update(validatedData as never)
+      .from('policies')
+      .update(validationResult.data as never)
       .eq('id', id)
       .eq('tenant_id', tenantId)
       .select()
       .single();
 
     if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json(
-          { error: 'Ya existe un cliente con este número de documento' },
-          { status: 409 }
-        );
-      }
+      console.error('Error updating policy:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    if (!data) {
-      return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
     }
 
     return NextResponse.json(data);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error in PATCH /api/polizas/[id]:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-// DELETE /api/clientes/[id] - Eliminar cliente (soft delete)
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// DELETE /api/polizas/[id] - Eliminar póliza
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
+    const { id } = await params;
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -117,23 +113,31 @@ export async function DELETE(
     }
     
     const tenantId = user.app_metadata?.tenant_id;
+    const userRole = user.app_metadata?.role;
+    
     if (!tenantId) {
       return NextResponse.json({ error: 'No tenant found' }, { status: 403 });
     }
+    
+    if (!['admin', 'senior_agent'].includes(userRole)) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    }
 
     const { error } = await supabase
-      .from('clients')
-      .update({ is_active: false } as never)
-      .eq('id', params.id)
+      .from('policies')
+      .delete()
+      .eq('id', id)
       .eq('tenant_id', tenantId);
 
     if (error) {
+      console.error('Error deleting policy:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error in DELETE /api/polizas/[id]:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

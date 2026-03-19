@@ -2,7 +2,7 @@
 
 // =====================================================
 // PÁGINA: Editar Cliente
-// /clientes/[id]/editar
+// /clientes/[id]/editar (Usando API Routes)
 // =====================================================
 
 import { useState, useEffect } from 'react';
@@ -11,13 +11,11 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ClientForm } from '@/components/modules/clients/ClientForm';
-import { getClientById, updateClient } from '../../actions';
 import type { Client } from '@/lib/validations/clients';
 import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 
-// Tipo para el formulario
 interface ClientFormData {
   full_name: string;
   doc_type: 'rut' | 'nit' | 'cedula' | 'pasaporte';
@@ -44,12 +42,17 @@ export default function EditClientPage() {
   useEffect(() => {
     async function loadClient() {
       setIsLoading(true);
-      const result = await getClientById(clientId);
-      
-      if (result.success) {
-        setClient(result.data);
-      } else {
-        setError(result.error.message);
+      try {
+        const response = await fetch(`/api/clientes/${clientId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setClient(data);
+        } else {
+          const errData = await response.json();
+          setError(errData.error || 'Error al cargar el cliente');
+        }
+      } catch (err) {
+        setError('Error de conexión');
       }
       setIsLoading(false);
     }
@@ -63,12 +66,22 @@ export default function EditClientPage() {
     setIsSaving(true);
     setError(null);
 
-    const result = await updateClient(clientId, data);
+    try {
+      const response = await fetch(`/api/clientes/${clientId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
 
-    if (result.success) {
-      router.push(`/clientes/${clientId}`);
-    } else {
-      setError(result.error.message);
+      if (response.ok) {
+        router.push(`/clientes/${clientId}`);
+      } else {
+        const errData = await response.json();
+        setError(errData.error || 'Error al actualizar');
+        setIsSaving(false);
+      }
+    } catch (err) {
+      setError('Error de conexión');
       setIsSaving(false);
     }
   };
@@ -94,50 +107,45 @@ export default function EditClientPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <Link href={`/clientes/${clientId}`}>
                 <Button variant="ghost" size="icon">
-                  <ArrowLeft className="w-5 h-5" />
+                  <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="font-semibold text-foreground">{tenantName || 'CRM Seguros'}</h1>
-                <p className="text-xs text-muted-foreground">Editar Cliente</p>
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                <span className="font-semibold">Editar Cliente</span>
               </div>
             </div>
+            <span className="text-sm text-muted-foreground">{tenantName}</span>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && client && (
+          <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-2 text-destructive">
+            <AlertCircle className="h-5 w-5" />
+            <span>{error}</span>
+          </div>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>Editar Cliente</CardTitle>
-            <CardDescription>
-              Modifica los datos del cliente
-            </CardDescription>
+            <CardDescription>Actualiza la información del cliente</CardDescription>
           </CardHeader>
           <CardContent>
-            {error && (
-              <div className="flex items-center gap-2 p-3 mb-6 bg-red-50 text-red-700 rounded-lg">
-                <AlertCircle className="w-5 h-5" />
-                <span>{error}</span>
-              </div>
-            )}
             {client && (
               <ClientForm
-                client={client}
                 onSubmit={handleSubmit}
-                onCancel={() => router.push(`/clientes/${clientId}`)}
                 isLoading={isSaving}
+                initialData={client}
+                mode="edit"
               />
             )}
           </CardContent>

@@ -17,8 +17,6 @@ import {
   LogOut
 } from 'lucide-react';
 import Link from 'next/link';
-import { getClientStats } from '../clientes/actions';
-import { getPolicyStats } from '../polizas/actions';
 
 export default function DashboardPage() {
   const { 
@@ -31,15 +29,35 @@ export default function DashboardPage() {
 
   const [clientStats, setClientStats] = useState<{ total: number; thisMonth: number } | null>(null);
   const [policyStats, setPolicyStats] = useState<{ total: number; active: number; totalPremium: number } | null>(null);
+  const [pipelineStats, setPipelineStats] = useState<{ total_active: number; weighted_premium: number } | null>(null);
 
   useEffect(() => {
     async function loadStats() {
-      const [clientResult, policyResult] = await Promise.all([
-        getClientStats(),
-        getPolicyStats()
-      ]);
-      if (clientResult.success) setClientStats(clientResult.data);
-      if (policyResult.success) setPolicyStats(policyResult.data);
+      try {
+        const [clientRes, policyRes, pipelineRes] = await Promise.all([
+          fetch('/api/clientes/stats'),
+          fetch('/api/polizas/stats'),
+          fetch('/api/pipeline/stats')
+        ]);
+
+        if (clientRes.ok) {
+          const data = await clientRes.json();
+          setClientStats({ total: data.total, thisMonth: data.thisMonth });
+        }
+        if (policyRes.ok) {
+          const data = await policyRes.json();
+          setPolicyStats({ total: data.total, active: data.active, totalPremium: data.totalPremium });
+        }
+        if (pipelineRes.ok) {
+          const data = await pipelineRes.json();
+          setPipelineStats({ 
+            total_active: data.stats?.total_active || 0, 
+            weighted_premium: data.stats?.weighted_premium || 0 
+          });
+        }
+      } catch (error) {
+        console.error('Error loading stats:', error);
+      }
     }
     if (!isLoading) {
       loadStats();
@@ -50,11 +68,20 @@ export default function DashboardPage() {
     return <LoadingScreen message="Cargando dashboard..." />;
   }
 
+  const formatPremium = (value: number) => {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(value);
+  };
+
   const stats = [
     {
       title: 'Clientes Activos',
       value: clientStats?.total?.toString() || '0',
-      change: clientStats?.thisMonth ? `+${clientStats.thisMonth} este mes` : '+0%',
+      change: clientStats?.thisMonth ? `+${clientStats.thisMonth} este mes` : '+0 este mes',
       icon: Users,
       href: '/clientes'
     },
@@ -67,8 +94,8 @@ export default function DashboardPage() {
     },
     {
       title: 'Pipeline de Ventas',
-      value: '$0',
-      change: 'Próximamente',
+      value: pipelineStats?.total_active?.toString() || '0',
+      change: formatPremium(pipelineStats?.weighted_premium || 0),
       icon: TrendingUp,
       href: '/pipeline'
     },
@@ -78,175 +105,135 @@ export default function DashboardPage() {
       change: 'Próximamente',
       icon: AlertTriangle,
       href: '/siniestros'
-    }
+    },
   ];
 
   const quickActions = [
-    { label: 'Nuevo Cliente', icon: Users, href: '/clientes/nuevo' },
-    { label: 'Nueva Póliza', icon: FileText, href: '/polizas/nueva' },
-    { label: 'Nueva Oportunidad', icon: TrendingUp, href: '/pipeline/nuevo' }
+    { title: 'Nuevo Cliente', icon: Users, href: '/clientes/nuevo' },
+    { title: 'Nueva Póliza', icon: FileText, href: '/polizas/nuevo' },
+    { title: 'Nueva Oportunidad', icon: TrendingUp, href: '/pipeline' },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="container mx-auto p-6 space-y-8">
       {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="font-semibold text-foreground">{tenantName || 'CRM Seguros'}</h1>
-                <p className="text-xs text-muted-foreground">Sistema de gestión</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-sm font-medium">{userFullName || 'Usuario'}</p>
-                <p className="text-xs text-muted-foreground capitalize">{role}</p>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                onClick={signOut}
-                data-testid="logout-button"
-              >
-                <LogOut className="w-4 h-4" />
-              </Button>
-            </div>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Building2 className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">{tenantName}</h1>
+            <p className="text-muted-foreground">
+              Bienvenido, {userFullName} ({role})
+            </p>
           </div>
         </div>
-      </header>
+        <Button variant="outline" onClick={signOut}>
+          <LogOut className="mr-2 h-4 w-4" />
+          Cerrar Sesión
+        </Button>
+      </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-foreground">
-            ¡Hola, {userFullName?.split(' ')[0] || 'Usuario'}!
-          </h2>
-          <p className="text-muted-foreground mt-1">
-            Aquí tienes un resumen de tu agencia
-          </p>
-        </div>
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat, index) => (
+          <Link key={index} href={stat.href}>
+            <Card className="hover:shadow-md transition-shadow cursor-pointer" data-testid={`stat-card-${index}`}>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {stat.title}
+                </CardTitle>
+                <stat.icon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stat.value}</div>
+                <p className="text-xs text-muted-foreground mt-1">{stat.change}</p>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {stats.map((stat) => (
-            <Link key={stat.title} href={stat.href}>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">{stat.title}</p>
-                      <p className="text-2xl font-bold mt-1">{stat.value}</p>
-                      <p className="text-xs text-green-600 mt-1">{stat.change} vs mes anterior</p>
-                    </div>
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <stat.icon className="w-6 h-6 text-primary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Acciones Rápidas</CardTitle>
+          <CardDescription>Operaciones frecuentes</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4">
+            {quickActions.map((action, index) => (
+              <Link key={index} href={action.href}>
+                <Button variant="outline" className="gap-2">
+                  <action.icon className="h-4 w-4" />
+                  {action.title}
+                </Button>
+              </Link>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Quick Actions & Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Quick Actions */}
-          <Card>
+      {/* Navigation Cards */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Link href="/clientes">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
             <CardHeader>
-              <CardTitle className="text-lg">Acciones Rápidas</CardTitle>
-              <CardDescription>Crea registros nuevos</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {quickActions.map((action) => (
-                <Link key={action.label} href={action.href}>
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-start gap-2"
-                    data-testid={`quick-action-${action.label.toLowerCase().replace(' ', '-')}`}
-                  >
-                    <Plus className="w-4 h-4" />
-                    {action.label}
-                    <ArrowRight className="w-4 h-4 ml-auto" />
-                  </Button>
-                </Link>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Recent Activity */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-lg">Actividad Reciente</CardTitle>
-              <CardDescription>Últimas acciones en el sistema</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-blue-500" />
+                Clientes
+              </CardTitle>
+              <CardDescription>
+                Gestiona tu cartera de clientes
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <Building2 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No hay actividad reciente</p>
-                <p className="text-sm">Las acciones aparecerán aquí</p>
-              </div>
+              <Button variant="ghost" className="p-0">
+                Ver clientes <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
             </CardContent>
           </Card>
-        </div>
+        </Link>
 
-        {/* Setup Progress (para nuevos tenants) */}
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="text-lg">Configuración Inicial</CardTitle>
-            <CardDescription>Completa estos pasos para comenzar</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
-                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-medium text-sm">
-                  ✓
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">Crear cuenta</p>
-                  <p className="text-sm text-muted-foreground">Tu agencia está registrada</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium text-sm">
-                  2
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">Agregar primer cliente</p>
-                  <p className="text-sm text-muted-foreground">Comienza a gestionar tus clientes</p>
-                </div>
-                <Link href="/clientes/nuevo">
-                  <Button size="sm" data-testid="add-first-client-button">
-                    Agregar
-                  </Button>
-                </Link>
-              </div>
-              
-              <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-medium text-sm">
-                  3
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">Invitar equipo</p>
-                  <p className="text-sm text-muted-foreground">Agrega agentes a tu equipo</p>
-                </div>
-                <Link href="/configuracion/equipo">
-                  <Button size="sm" variant="outline" data-testid="invite-team-button">
-                    Invitar
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </main>
+        <Link href="/polizas">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-green-500" />
+                Pólizas
+              </CardTitle>
+              <CardDescription>
+                Administra las pólizas de seguros
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="ghost" className="p-0">
+                Ver pólizas <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/pipeline">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-purple-500" />
+                Pipeline
+              </CardTitle>
+              <CardDescription>
+                Oportunidades de venta y forecast
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="ghost" className="p-0">
+                Ver pipeline <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
     </div>
   );
 }

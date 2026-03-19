@@ -2,7 +2,7 @@
 
 // =====================================================
 // PÁGINA: Detalle de Cliente (Vista 360°)
-// /clientes/[id]
+// /clientes/[id] (Usando API Routes)
 // =====================================================
 
 import { useState, useEffect } from 'react';
@@ -10,7 +10,6 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Client360View } from '@/components/modules/clients/Client360View';
-import { getClientById } from '../actions';
 import type { Client } from '@/lib/validations/clients';
 import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
@@ -28,12 +27,17 @@ export default function ClientDetailPage() {
   useEffect(() => {
     async function loadClient() {
       setIsLoading(true);
-      const result = await getClientById(clientId);
-      
-      if (result.success) {
-        setClient(result.data);
-      } else {
-        setError(result.error.message);
+      try {
+        const response = await fetch(`/api/clientes/${clientId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setClient(data);
+        } else {
+          const errData = await response.json();
+          setError(errData.error || 'Error al cargar el cliente');
+        }
+      } catch (err) {
+        setError('Error de conexión');
       }
       setIsLoading(false);
     }
@@ -78,10 +82,11 @@ export default function ClientDetailPage() {
                 <Shield className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h1 className="font-semibold text-foreground">{tenantName || 'CRM Seguros'}</h1>
-                <p className="text-xs text-muted-foreground">Vista 360°</p>
+                <h1 className="font-semibold">{client.full_name}</h1>
+                <p className="text-sm text-muted-foreground">{client.doc_number}</p>
               </div>
             </div>
+            <span className="text-sm text-muted-foreground">{tenantName}</span>
           </div>
         </div>
       </header>
