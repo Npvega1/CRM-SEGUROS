@@ -17,7 +17,13 @@ const nextConfig = {
       ],
       bodySizeLimit: '10mb'
     }
-  }
+  },
+  allowedDevOrigins: [
+    'crm-pipeline-opp.preview.emergentagent.com',
+    'crm-pipeline-opp.cluster-5.preview.emergentcf.cloud',
+    '*.emergentagent.com',
+    '*.emergentcf.cloud'
+  ]
 };
 
 export default nextConfig;
