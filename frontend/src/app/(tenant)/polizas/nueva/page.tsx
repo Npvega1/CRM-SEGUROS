@@ -37,7 +37,7 @@ function NewPolicyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedClientId = searchParams.get('clientId');
-  const { isLoading: isLoadingTenant, tenantName, tenantId, user } = useTenant();
+  const { isLoading: isLoadingTenant, tenantName, tenantId, userId } = useTenant();
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +82,7 @@ function NewPolicyContent() {
       return;
     }
 
-    if (!tenantId || !user) {
+    if (!tenantId || !userId) {
       setError('No hay sesión activa');
       return;
     }
@@ -98,7 +98,7 @@ function NewPolicyContent() {
         .insert({
           tenant_id: tenantId,
           client_id: selectedClientId,
-          agent_id: user.id,
+          agent_id: userId,
           policy_number: data.policy_number,
           insurer: data.insurer,
           line: data.line,

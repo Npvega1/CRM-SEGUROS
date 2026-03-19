@@ -3,7 +3,7 @@
 // =====================================================
 // COMPONENTE: CSVImporter
 // Importador de clientes desde CSV
-// Refactorizado para usar API Routes
+// Usa Supabase Client directo (evita API Routes)
 // =====================================================
 
 import { useState, useCallback } from 'react';
@@ -34,8 +34,9 @@ import {
   Loader2,
   X
 } from 'lucide-react';
+import { useTenant } from '@/lib/context/TenantContext';
+import { getBrowserClient } from '@/lib/supabase/client';
 
-// Types for CSV import
 interface CSVRowError {
   row: number;
   field: string;
@@ -54,6 +55,7 @@ interface CSVImporterProps {
 }
 
 export function CSVImporter({ onSuccess }: CSVImporterProps) {
+  const { tenantId, userId } = useTenant();
   const [isOpen, setIsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -92,7 +94,7 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
       setFile(droppedFile);
       const text = await droppedFile.text();
       const data = parseCSV(text);
-      setPreviewData(data.slice(0, 5)); // Mostrar preview de 5 filas
+      setPreviewData(data.slice(0, 5));
     } else {
       setError('Por favor, sube un archivo CSV válido');
     }
@@ -112,7 +114,7 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
   };
 
   const handleImport = async () => {
-    if (!file) return;
+    if (!file || !tenantId) return;
 
     setIsImporting(true);
     setError(null);
@@ -121,33 +123,59 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
       const text = await file.text();
       const data = parseCSV(text);
       
-      // Map CSV data to the expected format
-      const mappedData = data.map(row => ({
-        full_name: row.full_name || row.nombre || '',
-        doc_type: row.doc_type || row.tipo_documento || 'cedula',
-        doc_number: row.doc_number || row.documento || '',
-        email: row.email || row.correo || undefined,
-        phone: row.phone || row.telefono || undefined,
-        segment: row.segment || row.segmento || 'individual',
-        tags: row.tags || row.etiquetas || undefined
-      }));
+      const supabase = getBrowserClient();
+      const errors: CSVRowError[] = [];
+      let successCount = 0;
 
-      // Call API Route instead of Server Action
-      const response = await fetch('/api/clientes/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: mappedData }),
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        const clientData = {
+          tenant_id: tenantId,
+          full_name: row.full_name || row.nombre || '',
+          doc_type: row.doc_type || row.tipo_documento || 'cedula',
+          doc_number: row.doc_number || row.documento || '',
+          email: row.email || row.correo || null,
+          phone: row.phone || row.telefono || null,
+          segment: row.segment || row.segmento || 'individual',
+          agent_id: userId,
+          tags: row.tags ? row.tags.split(';').map((t: string) => t.trim()) : [],
+          metadata: {}
+        };
+
+        // Validar campos requeridos
+        if (!clientData.full_name) {
+          errors.push({ row: i + 2, field: 'full_name', message: 'Nombre requerido' });
+          continue;
+        }
+        if (!clientData.doc_number) {
+          errors.push({ row: i + 2, field: 'doc_number', message: 'Documento requerido' });
+          continue;
+        }
+
+        const { error: insertError } = await supabase
+          .from('clients')
+          .insert(clientData);
+
+        if (insertError) {
+          errors.push({ 
+            row: i + 2, 
+            field: 'insert', 
+            message: insertError.code === '23505' ? 'Documento duplicado' : insertError.message,
+            value: clientData.doc_number
+          });
+        } else {
+          successCount++;
+        }
+      }
+
+      setResult({
+        success: successCount,
+        failed: errors.length,
+        errors
       });
 
-      const importResult = await response.json();
-
-      if (response.ok) {
-        setResult(importResult);
-        if (importResult.success > 0) {
-          onSuccess?.();
-        }
-      } else {
-        setError(importResult.error || 'Error al importar clientes');
+      if (successCount > 0) {
+        onSuccess?.();
       }
     } catch {
       setError('Error al procesar el archivo');
@@ -195,13 +223,11 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Descargar plantilla */}
           <Button variant="link" onClick={downloadTemplate} className="p-0">
             <Download className="w-4 h-4 mr-2" />
             Descargar plantilla CSV
           </Button>
 
-          {/* Drop zone */}
           {!result && (
             <div
               className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
@@ -250,7 +276,6 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
             </div>
           )}
 
-          {/* Preview */}
           {previewData.length > 0 && !result && (
             <Card>
               <CardHeader className="py-3">
@@ -291,7 +316,6 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
             </Card>
           )}
 
-          {/* Error */}
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg">
               <AlertCircle className="w-5 h-5" />
@@ -299,7 +323,6 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
             </div>
           )}
 
-          {/* Resultado */}
           {result && (
             <Card>
               <CardContent className="pt-6">
@@ -338,7 +361,6 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
             </Card>
           )}
 
-          {/* Botones */}
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={handleClose}>
               {result ? 'Cerrar' : 'Cancelar'}
@@ -346,7 +368,7 @@ export function CSVImporter({ onSuccess }: CSVImporterProps) {
             {!result && (
               <Button 
                 onClick={handleImport} 
-                disabled={!file || isImporting}
+                disabled={!file || isImporting || !tenantId}
                 data-testid="confirm-import-button"
               >
                 {isImporting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

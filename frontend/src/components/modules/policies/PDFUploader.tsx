@@ -3,7 +3,7 @@
 // =====================================================
 // COMPONENTE: PDFUploader
 // Drag and drop para subir documentos de póliza
-// Refactorizado para usar API Routes
+// Usa Supabase Client directo (evita API Routes)
 // =====================================================
 
 import { useState, useCallback } from 'react';
@@ -18,6 +18,8 @@ import {
   Eye
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { useTenant } from '@/lib/context/TenantContext';
+import { getBrowserClient } from '@/lib/supabase/client';
 
 interface PDFUploaderProps {
   policyId: string;
@@ -30,6 +32,7 @@ export function PDFUploader({
   currentDocumentUrl,
   onUploadComplete 
 }: PDFUploaderProps) {
+  const { tenantId } = useTenant();
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -69,37 +72,58 @@ export function PDFUploader({
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file || !tenantId) return;
 
     setIsUploading(true);
     setError(null);
     setUploadProgress(0);
 
-    // Simular progreso
     const progressInterval = setInterval(() => {
       setUploadProgress(prev => Math.min(prev + 10, 90));
     }, 200);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      const supabase = getBrowserClient();
+      
+      // Generar path único
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const path = `${tenantId}/policies/${policyId}/${timestamp}_${safeName}`;
 
-      const response = await fetch(`/api/polizas/${policyId}/documento`, {
-        method: 'POST',
-        body: formData,
-      });
+      // Subir a storage
+      const { error: uploadError } = await supabase.storage
+        .from('policy-documents')
+        .upload(path, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
 
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      const result = await response.json();
-
-      if (response.ok) {
-        setSuccess(true);
-        onUploadComplete?.(result.url);
-      } else {
-        setError(result.error || 'Error al subir el archivo');
+      if (uploadError) {
+        setError(uploadError.message || 'Error al subir el archivo');
+        return;
       }
+
+      // Obtener URL
+      const { data: urlData } = supabase.storage
+        .from('policy-documents')
+        .getPublicUrl(path);
+
+      // Actualizar póliza con la URL del documento
+      const { error: updateError } = await supabase
+        .from('policies')
+        .update({ document_url: urlData.publicUrl || path })
+        .eq('id', policyId)
+        .eq('tenant_id', tenantId);
+
+      if (updateError) {
+        console.error('Error updating policy:', updateError);
+      }
+
+      setSuccess(true);
+      onUploadComplete?.(urlData.publicUrl || path);
     } catch {
       clearInterval(progressInterval);
       setError('Error al subir el archivo');
@@ -109,15 +133,34 @@ export function PDFUploader({
   };
 
   const handleViewDocument = async () => {
+    if (!tenantId) return;
+    
     setIsLoadingUrl(true);
     try {
-      const response = await fetch(`/api/polizas/${policyId}/documento`);
-      const result = await response.json();
+      const supabase = getBrowserClient();
       
-      if (response.ok) {
-        window.open(result.url, '_blank');
-      } else {
-        setError(result.error || 'Error al obtener el documento');
+      // Obtener la póliza para ver el document_url
+      const { data: policy } = await supabase
+        .from('policies')
+        .select('document_url')
+        .eq('id', policyId)
+        .eq('tenant_id', tenantId)
+        .single();
+      
+      if (policy?.document_url) {
+        // Si es una URL completa, abrir directamente
+        if (policy.document_url.startsWith('http')) {
+          window.open(policy.document_url, '_blank');
+        } else {
+          // Si es un path, obtener signed URL
+          const { data } = await supabase.storage
+            .from('policy-documents')
+            .createSignedUrl(policy.document_url, 3600);
+          
+          if (data?.signedUrl) {
+            window.open(data.signedUrl, '_blank');
+          }
+        }
       }
     } catch {
       setError('Error al obtener el documento');
@@ -133,7 +176,6 @@ export function PDFUploader({
     setUploadProgress(0);
   };
 
-  // Si ya hay documento subido exitosamente o hay uno existente
   if (success || (currentDocumentUrl && !file)) {
     return (
       <div className="border rounded-lg p-4">
@@ -179,7 +221,6 @@ export function PDFUploader({
 
   return (
     <div className="space-y-4">
-      {/* Drop zone */}
       <div
         className={cn(
           'border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer',
@@ -229,7 +270,6 @@ export function PDFUploader({
         )}
       </div>
 
-      {/* Barra de progreso */}
       {isUploading && (
         <div className="space-y-2">
           <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -244,7 +284,6 @@ export function PDFUploader({
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -252,9 +291,8 @@ export function PDFUploader({
         </div>
       )}
 
-      {/* Botón de subir */}
       {file && !isUploading && (
-        <Button onClick={handleUpload} className="w-full">
+        <Button onClick={handleUpload} className="w-full" disabled={!tenantId}>
           <Upload className="w-4 h-4 mr-2" />
           Subir Documento
         </Button>

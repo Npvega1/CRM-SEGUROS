@@ -3,10 +3,10 @@
 // =====================================================
 // COMPONENTE: Client360View
 // Vista 360° del cliente con tabs
-// Refactorizado para usar API Routes
+// Usa Supabase Client directo (evita API Routes)
 // =====================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,31 +43,48 @@ import {
   Calendar,
   Building
 } from 'lucide-react';
+import { useTenant } from '@/lib/context/TenantContext';
+import { getBrowserClient } from '@/lib/supabase/client';
 
 interface Client360ViewProps {
   client: Client;
 }
 
 export function Client360View({ client }: Client360ViewProps) {
+  const { tenantId } = useTenant();
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [isLoadingPolicies, setIsLoadingPolicies] = useState(true);
 
-  useEffect(() => {
-    async function loadPolicies() {
-      setIsLoadingPolicies(true);
-      try {
-        const response = await fetch(`/api/clientes/${client.id}/polizas`);
-        if (response.ok) {
-          const data = await response.json();
-          setPolicies(data);
-        }
-      } catch (error) {
+  const loadPolicies = useCallback(async () => {
+    if (!tenantId || !client.id) return;
+    
+    setIsLoadingPolicies(true);
+    try {
+      const supabase = getBrowserClient();
+      
+      const { data, error } = await supabase
+        .from('policies')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('client_id', client.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
         console.error('Error loading policies:', error);
+      } else {
+        setPolicies((data || []) as Policy[]);
       }
-      setIsLoadingPolicies(false);
+    } catch (error) {
+      console.error('Error loading policies:', error);
     }
-    loadPolicies();
-  }, [client.id]);
+    setIsLoadingPolicies(false);
+  }, [tenantId, client.id]);
+
+  useEffect(() => {
+    if (tenantId && client.id) {
+      loadPolicies();
+    }
+  }, [tenantId, client.id, loadPolicies]);
 
   const activePolicies = policies.filter(p => p.status === 'activa');
   const totalPremium = activePolicies.reduce((sum, p) => sum + Number(p.premium), 0);
@@ -233,7 +250,7 @@ export function Client360View({ client }: Client360ViewProps) {
           </Card>
         </TabsContent>
 
-        {/* Tab: Siniestros (Stub M03) */}
+        {/* Tab: Siniestros (ahora con link a M03) */}
         <TabsContent value="siniestros">
           <Card>
             <CardHeader>
@@ -245,10 +262,12 @@ export function Client360View({ client }: Client360ViewProps) {
             <CardContent>
               <div className="text-center py-8">
                 <AlertTriangle className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground">Módulo de Siniestros (M03)</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Esta funcionalidad estará disponible próximamente
-                </p>
+                <p className="text-muted-foreground">Ver siniestros del cliente</p>
+                <Link href={`/siniestros?clientId=${client.id}`}>
+                  <Button variant="outline" className="mt-4">
+                    Ver Siniestros
+                  </Button>
+                </Link>
               </div>
             </CardContent>
           </Card>

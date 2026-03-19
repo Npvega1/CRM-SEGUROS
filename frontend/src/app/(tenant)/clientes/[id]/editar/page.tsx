@@ -2,10 +2,11 @@
 
 // =====================================================
 // PÁGINA: Editar Cliente
-// /clientes/[id]/editar (Usando API Routes)
+// /clientes/[id]/editar
+// Usa Supabase Client directo (evita API Routes)
 // =====================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +16,7 @@ import type { Client } from '@/lib/validations/clients';
 import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
+import { getBrowserClient } from '@/lib/supabase/client';
 
 interface ClientFormData {
   full_name: string;
@@ -32,55 +34,85 @@ export default function EditClientPage() {
   const params = useParams();
   const router = useRouter();
   const clientId = params.id as string;
-  const { isLoading: isLoadingTenant, tenantName } = useTenant();
+  const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
   
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadClient() {
-      setIsLoading(true);
-      try {
-        const response = await fetch(`/api/clientes/${clientId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setClient(data);
-        } else {
-          const errData = await response.json();
-          setError(errData.error || 'Error al cargar el cliente');
-        }
-      } catch (err) {
-        setError('Error de conexión');
-      }
-      setIsLoading(false);
-    }
+  const loadClient = useCallback(async () => {
+    if (!tenantId || !clientId) return;
     
-    if (clientId) {
+    setIsLoading(true);
+    try {
+      const supabase = getBrowserClient();
+      
+      const { data, error: fetchError } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', clientId)
+        .eq('tenant_id', tenantId)
+        .single();
+      
+      if (fetchError) {
+        console.error('Error fetching client:', fetchError);
+        setError(fetchError.message || 'Error al cargar el cliente');
+      } else {
+        setClient(data as Client);
+      }
+    } catch (err) {
+      console.error('Error:', err);
+      setError('Error de conexión');
+    }
+    setIsLoading(false);
+  }, [clientId, tenantId]);
+
+  useEffect(() => {
+    if (!isLoadingTenant && tenantId && clientId) {
       loadClient();
     }
-  }, [clientId]);
+  }, [isLoadingTenant, tenantId, clientId, loadClient]);
 
   const handleSubmit = async (data: ClientFormData) => {
+    if (!tenantId || !clientId) return;
+    
     setIsSaving(true);
     setError(null);
 
     try {
-      const response = await fetch(`/api/clientes/${clientId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
+      const supabase = getBrowserClient();
+      
+      const { error: updateError } = await supabase
+        .from('clients')
+        .update({
+          full_name: data.full_name,
+          doc_type: data.doc_type,
+          doc_number: data.doc_number,
+          email: data.email || null,
+          phone: data.phone || null,
+          segment: data.segment,
+          agent_id: data.agent_id || null,
+          tags: data.tags || [],
+          metadata: data.metadata || {},
+        })
+        .eq('id', clientId)
+        .eq('tenant_id', tenantId);
 
-      if (response.ok) {
-        router.push(`/clientes/${clientId}`);
-      } else {
-        const errData = await response.json();
-        setError(errData.error || 'Error al actualizar');
+      if (updateError) {
+        console.error('Error updating client:', updateError);
+        if (updateError.code === '23505') {
+          setError('Ya existe un cliente con este número de documento.');
+        } else {
+          setError(updateError.message || 'Error al actualizar');
+        }
         setIsSaving(false);
+        return;
       }
+
+      router.push(`/clientes/${clientId}`);
     } catch (err) {
+      console.error('Error:', err);
       setError('Error de conexión');
       setIsSaving(false);
     }

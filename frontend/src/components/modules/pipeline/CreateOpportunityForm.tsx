@@ -3,9 +3,10 @@
 // =====================================================
 // COMPONENTE: CreateOpportunityForm
 // Formulario para crear nueva oportunidad
+// Usa Supabase Client directo (evita API Routes)
 // =====================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,8 @@ import { Search, Plus } from 'lucide-react';
 import type { PipelineStage, CreateOpportunityInput } from '@/lib/validations/pipeline';
 import type { Client } from '@/lib/validations/clients';
 import { POLICY_LINE_LABELS, PolicyLine } from '@/lib/validations/policies';
+import { useTenant } from '@/lib/context/TenantContext';
+import { getBrowserClient } from '@/lib/supabase/client';
 
 interface CreateOpportunityFormProps {
   open: boolean;
@@ -42,16 +45,15 @@ export function CreateOpportunityForm({
   onClose,
   onSubmit
 }: CreateOpportunityFormProps) {
+  const { tenantId } = useTenant();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Búsqueda de clientes
   const [clientSearch, setClientSearch] = useState('');
   const [clients, setClients] = useState<Client[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
-  // Form data
   const [formData, setFormData] = useState<{
     stage_id: string;
     line: PolicyLine;
@@ -68,7 +70,6 @@ export function CreateOpportunityForm({
     notes: ''
   });
 
-  // Establecer etapa inicial
   useEffect(() => {
     if (stages.length > 0 && !formData.stage_id) {
       const firstStage = stages.find(s => 
@@ -81,31 +82,41 @@ export function CreateOpportunityForm({
     }
   }, [stages, formData.stage_id]);
 
-  // Buscar clientes
+  const searchClients = useCallback(async (query: string) => {
+    if (!tenantId || query.length < 2) {
+      setClients([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const supabase = getBrowserClient();
+      
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .or(`full_name.ilike.%${query}%,doc_number.ilike.%${query}%`)
+        .limit(10);
+      
+      if (error) {
+        console.error('Error searching clients:', error);
+      } else {
+        setClients((data || []) as Client[]);
+      }
+    } catch (e) {
+      console.error('Error searching clients:', e);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [tenantId]);
+
   useEffect(() => {
-    const searchClients = async () => {
-      if (clientSearch.length < 2) {
-        setClients([]);
-        return;
-      }
-
-      setIsSearching(true);
-      try {
-        const response = await fetch(`/api/clientes?search=${encodeURIComponent(clientSearch)}&pageSize=10`);
-        if (response.ok) {
-          const data = await response.json();
-          setClients(data.clients || []);
-        }
-      } catch (e) {
-        console.error('Error searching clients:', e);
-      } finally {
-        setIsSearching(false);
-      }
-    };
-
-    const timeoutId = setTimeout(searchClients, 300);
+    const timeoutId = setTimeout(() => {
+      searchClients(clientSearch);
+    }, 300);
     return () => clearTimeout(timeoutId);
-  }, [clientSearch]);
+  }, [clientSearch, searchClients]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,7 +176,6 @@ export function CreateOpportunityForm({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Búsqueda de cliente */}
           <div className="space-y-2">
             <Label>Cliente *</Label>
             {selectedClient ? (
@@ -225,7 +235,6 @@ export function CreateOpportunityForm({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* Etapa */}
             <div className="space-y-2">
               <Label htmlFor="opp-stage">Etapa *</Label>
               <Select
@@ -251,7 +260,6 @@ export function CreateOpportunityForm({
               </Select>
             </div>
 
-            {/* Ramo */}
             <div className="space-y-2">
               <Label htmlFor="opp-line">Ramo</Label>
               <Select
@@ -271,7 +279,6 @@ export function CreateOpportunityForm({
               </Select>
             </div>
 
-            {/* Prima estimada */}
             <div className="space-y-2">
               <Label htmlFor="opp-premium">Prima Estimada *</Label>
               <Input
@@ -284,7 +291,6 @@ export function CreateOpportunityForm({
               />
             </div>
 
-            {/* Probabilidad */}
             <div className="space-y-2">
               <Label htmlFor="opp-probability">Probabilidad (%)</Label>
               <Input
@@ -297,7 +303,6 @@ export function CreateOpportunityForm({
               />
             </div>
 
-            {/* Fecha esperada */}
             <div className="space-y-2 col-span-2">
               <Label htmlFor="opp-date">Fecha Esperada de Cierre</Label>
               <Input
@@ -309,7 +314,6 @@ export function CreateOpportunityForm({
             </div>
           </div>
 
-          {/* Notas */}
           <div className="space-y-2">
             <Label htmlFor="opp-notes">Notas</Label>
             <Textarea
