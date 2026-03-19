@@ -231,6 +231,7 @@ function NewPolicyContent() {
                 </div>
               ) : (
                 <PolicyForm
+                  clientId={selectedClientId}
                   onSubmit={handleSubmit}
                   isLoading={isLoading}
                 />

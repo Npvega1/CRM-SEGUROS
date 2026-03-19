@@ -5,6 +5,7 @@
 // Formulario para crear/editar pólizas
 // =====================================================
 
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
@@ -89,6 +90,13 @@ export function PolicyForm({
     }
   });
 
+  // Actualizar client_id cuando cambie la prop
+  useEffect(() => {
+    if (clientId && !isEditing) {
+      setValue('client_id', clientId);
+    }
+  }, [clientId, isEditing, setValue]);
+
   const line = watch('line');
   const status = watch('status');
   const startDate = watch('start_date');
@@ -111,13 +119,19 @@ export function PolicyForm({
   };
 
   const handleFormSubmit = async (data: PolicyFormData) => {
+    console.log('Form data submitted:', data);
     await onSubmit(data);
+  };
+
+  // Mostrar errores de validación en consola para debug
+  const onError = (errors: Record<string, unknown>) => {
+    console.error('Form validation errors:', errors);
   };
 
   const loading = isLoading || isSubmitting;
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
       {/* Client ID (oculto si viene predefinido) */}
       <input type="hidden" {...register('client_id')} />
 
