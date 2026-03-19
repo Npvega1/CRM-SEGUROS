@@ -58,7 +58,6 @@ import {
   Calendar
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { format, startOfMonth, subMonths, addMonths } from 'date-fns';
 
 interface CommissionsPanelProps {
   summary: CommissionsSummary | null;
@@ -79,10 +78,13 @@ export function CommissionsPanel({ summary, onUpdate }: CommissionsPanelProps) {
   const [pageSize] = useState(25);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Filtros
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(
-    format(startOfMonth(new Date()), 'yyyy-MM-dd')
-  );
+  // Filtros - Inicializar con el primer día del mes actual
+  const getInitialPeriod = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  };
+  
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(getInitialPeriod());
   const [selectedAgent, setSelectedAgent] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -233,15 +235,30 @@ export function CommissionsPanel({ summary, onUpdate }: CommissionsPanelProps) {
   // Navegación de período
   const handlePrevPeriod = () => {
     const current = new Date(selectedPeriod);
-    setSelectedPeriod(format(startOfMonth(subMonths(current, 1)), 'yyyy-MM-dd'));
+    const prevMonth = new Date(current.getFullYear(), current.getMonth() - 1, 1);
+    const newPeriod = prevMonth.toISOString().split('T')[0];
+    console.log('Prev period:', selectedPeriod, '->', newPeriod);
+    setSelectedPeriod(newPeriod);
   };
 
   const handleNextPeriod = () => {
     const current = new Date(selectedPeriod);
-    const next = addMonths(current, 1);
-    if (next <= new Date()) {
-      setSelectedPeriod(format(startOfMonth(next), 'yyyy-MM-dd'));
+    const nextMonth = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+    const today = new Date();
+    
+    // Solo permitir avanzar si el próximo mes no es futuro
+    if (nextMonth <= today) {
+      const newPeriod = nextMonth.toISOString().split('T')[0];
+      console.log('Next period:', selectedPeriod, '->', newPeriod);
+      setSelectedPeriod(newPeriod);
     }
+  };
+
+  // Verificar si el botón siguiente debe estar deshabilitado
+  const isNextDisabled = () => {
+    const current = new Date(selectedPeriod);
+    const nextMonth = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+    return nextMonth > new Date();
   };
 
   // Marcar como cobrada
@@ -298,7 +315,12 @@ export function CommissionsPanel({ summary, onUpdate }: CommissionsPanelProps) {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(exportData);
     XLSX.utils.book_append_sheet(wb, ws, 'Comisiones');
-    XLSX.writeFile(wb, `Liquidacion_${format(new Date(selectedPeriod), 'yyyy-MM')}.xlsx`);
+    
+    // Formatear fecha para nombre del archivo
+    const periodDate = new Date(selectedPeriod);
+    const year = periodDate.getFullYear();
+    const month = String(periodDate.getMonth() + 1).padStart(2, '0');
+    XLSX.writeFile(wb, `Liquidacion_${year}-${month}.xlsx`);
   };
 
   // Totales del período
@@ -363,7 +385,7 @@ export function CommissionsPanel({ summary, onUpdate }: CommissionsPanelProps) {
                 variant="outline" 
                 size="icon" 
                 onClick={handleNextPeriod}
-                disabled={addMonths(new Date(selectedPeriod), 1) > new Date()}
+                disabled={isNextDisabled()}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
