@@ -3,10 +3,11 @@
 // =====================================================
 // PÁGINA: Pipeline de Ventas
 // Módulo 02: Vista principal del Kanban
+// Usa Supabase Client directo (evita API Routes con problemas de proxy)
 // =====================================================
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { getBrowserClient } from '@/lib/supabase/client';
 import { useTenant } from '@/lib/context/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -56,8 +57,8 @@ interface ForecastData {
 }
 
 export default function PipelinePage() {
-  const { tenantId, isLoading: tenantLoading } = useTenant();
-  const supabase = useMemo(() => createClient(), []);
+  const { tenantId, isLoading: tenantLoading, user } = useTenant();
+  const supabase = useMemo(() => getBrowserClient(), []);
 
   // Estados
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -75,54 +76,112 @@ export default function PipelinePage() {
   // Vista activa
   const [activeView, setActiveView] = useState<'kanban' | 'forecast'>('kanban');
 
-  // Cargar datos
+  // Cargar datos usando Supabase directo
   const loadData = useCallback(async () => {
     if (!tenantId) return;
 
     try {
       setIsLoading(true);
 
-      // Cargar etapas, oportunidades y estadísticas en paralelo
-      const [stagesRes, oppsRes, statsRes, forecastRes] = await Promise.all([
-        fetch('/api/pipeline/stages'),
-        fetch('/api/pipeline/opportunities?status=active'),
-        fetch('/api/pipeline/stats'),
-        fetch('/api/pipeline/forecast?months_ahead=6')
-      ]);
-
-      if (stagesRes.ok) {
-        const data = await stagesRes.json();
-        setStages(data.stages || []);
+      // Cargar etapas
+      const { data: stagesData } = await supabase
+        .from('pipeline_stages')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('order_index', { ascending: true });
+      
+      if (stagesData) {
+        setStages(stagesData as PipelineStage[]);
       }
 
-      if (oppsRes.ok) {
-        const data = await oppsRes.json();
-        setOpportunities(data.opportunities || []);
+      // Cargar oportunidades activas con relaciones
+      const { data: oppsData } = await supabase
+        .from('opportunities')
+        .select(`
+          *,
+          clients!inner(id, full_name, email, phone, segment),
+          pipeline_stages!inner(id, name, color, order_index)
+        `)
+        .eq('tenant_id', tenantId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+      
+      if (oppsData) {
+        const mappedOpps = oppsData.map((opp: Record<string, unknown>) => ({
+          ...opp,
+          client: opp.clients,
+          stage: opp.pipeline_stages
+        })) as OpportunityWithRelations[];
+        setOpportunities(mappedOpps);
       }
 
-      if (statsRes.ok) {
-        const data = await statsRes.json();
-        setStats(data.stats);
+      // Calcular estadísticas
+      const { data: allOpps } = await supabase
+        .from('opportunities')
+        .select('status, estimated_premium, probability, won_at, lost_at')
+        .eq('tenant_id', tenantId);
+      
+      if (allOpps) {
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        
+        const activeOpps = allOpps.filter(o => o.status === 'active');
+        const wonThisMonth = allOpps.filter(o => 
+          o.status === 'won' && o.won_at && new Date(o.won_at) >= startOfMonth
+        );
+        const lostThisMonth = allOpps.filter(o => 
+          o.status === 'lost' && o.lost_at && new Date(o.lost_at) >= startOfMonth
+        );
+        
+        const totalPremium = activeOpps.reduce((sum, o) => sum + (o.estimated_premium || 0), 0);
+        const weightedPremium = activeOpps.reduce((sum, o) => 
+          sum + ((o.estimated_premium || 0) * (o.probability || 0) / 100), 0
+        );
+        const wonPremium = wonThisMonth.reduce((sum, o) => sum + (o.estimated_premium || 0), 0);
+        
+        const totalClosed = wonThisMonth.length + lostThisMonth.length;
+        const conversionRate = totalClosed > 0 ? (wonThisMonth.length / totalClosed) * 100 : 0;
+        
+        setStats({
+          total_active: activeOpps.length,
+          total_premium: totalPremium,
+          weighted_premium: weightedPremium,
+          won_this_month: wonThisMonth.length,
+          lost_this_month: lostThisMonth.length,
+          won_premium_this_month: wonPremium,
+          conversion_rate: conversionRate,
+          month_forecast: weightedPremium
+        });
       }
 
-      if (forecastRes.ok) {
-        const data = await forecastRes.json();
-        setForecast(data.forecast || []);
+      // Forecast simple (próximos 6 meses)
+      const forecastData: ForecastData[] = [];
+      for (let i = 0; i < 6; i++) {
+        const date = new Date();
+        date.setMonth(date.getMonth() + i);
+        forecastData.push({
+          month: date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+          opportunity_count: 0,
+          total_premium: 0,
+          weighted_premium: 0
+        });
       }
+      setForecast(forecastData);
+
     } catch (error) {
       console.error('Error loading pipeline data:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, supabase]);
 
   // Cargar al montar
   useEffect(() => {
-    // Cargar datos cuando tenemos tenantId o cuando termine de cargar el tenant
-    if (!tenantLoading) {
+    if (!tenantLoading && tenantId) {
       loadData();
     }
-  }, [tenantLoading, loadData]);
+  }, [tenantLoading, tenantId, loadData]);
 
   // Suscribirse a Realtime
   useEffect(() => {
@@ -139,7 +198,6 @@ export default function PipelinePage() {
           filter: `tenant_id=eq.${tenantId}`
         },
         () => {
-          // Recargar oportunidades cuando hay cambios
           loadData();
         }
       )
@@ -150,17 +208,28 @@ export default function PipelinePage() {
     };
   }, [tenantId, supabase, loadData]);
 
-  // Handlers
+  // Handlers usando Supabase directo
   const handleMoveOpportunity = async (opportunityId: string, newStageId: string) => {
     try {
-      const response = await fetch(`/api/pipeline/opportunities/${opportunityId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'move', new_stage_id: newStageId })
-      });
+      const { data, error } = await supabase
+        .from('opportunities')
+        .update({ stage_id: newStageId, updated_at: new Date().toISOString() })
+        .eq('id', opportunityId)
+        .eq('tenant_id', tenantId)
+        .select(`
+          *,
+          clients!inner(id, full_name, email, phone, segment),
+          pipeline_stages!inner(id, name, color, order_index)
+        `)
+        .single();
 
-      if (response.ok) {
-        const updatedOpp = await response.json();
+      if (!error && data) {
+        const updatedOpp = {
+          ...data,
+          client: data.clients,
+          stage: data.pipeline_stages
+        } as OpportunityWithRelations;
+        
         setOpportunities(prev => 
           prev.map(opp => opp.id === opportunityId ? updatedOpp : opp)
         );
@@ -174,128 +243,154 @@ export default function PipelinePage() {
     opportunityId: string, 
     data: { policy_number?: string; commission_pct?: number }
   ) => {
-    const response = await fetch(`/api/pipeline/opportunities/${opportunityId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'win', ...data })
+    // Llamar a la función PostgreSQL win_opportunity
+    const { error } = await supabase.rpc('win_opportunity', {
+      p_opportunity_id: opportunityId,
+      p_policy_number: data.policy_number || `POL-${Date.now()}`,
+      p_commission_pct: data.commission_pct || 10
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Error al ganar oportunidad');
+    if (error) {
+      throw new Error(error.message || 'Error al ganar oportunidad');
     }
 
-    // Remover de la lista activa
+    // Remover de la lista activa y recargar
     setOpportunities(prev => prev.filter(opp => opp.id !== opportunityId));
-    
-    // Recargar estadísticas
-    const statsRes = await fetch('/api/pipeline/stats');
-    if (statsRes.ok) {
-      const data = await statsRes.json();
-      setStats(data.stats);
-    }
+    loadData();
   };
 
   const handleLoseOpportunity = async (opportunityId: string, reason: string) => {
-    const response = await fetch(`/api/pipeline/opportunities/${opportunityId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'lose', lost_reason: reason })
+    // Llamar a la función PostgreSQL lose_opportunity
+    const { error } = await supabase.rpc('lose_opportunity', {
+      p_opportunity_id: opportunityId,
+      p_lost_reason: reason
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Error al perder oportunidad');
+    if (error) {
+      throw new Error(error.message || 'Error al perder oportunidad');
     }
 
-    // Remover de la lista activa
+    // Remover de la lista activa y recargar
     setOpportunities(prev => prev.filter(opp => opp.id !== opportunityId));
-    
-    // Recargar estadísticas
-    const statsRes = await fetch('/api/pipeline/stats');
-    if (statsRes.ok) {
-      const data = await statsRes.json();
-      setStats(data.stats);
-    }
+    loadData();
   };
 
   const handleOpportunityClick = async (opportunity: OpportunityWithRelations) => {
     setSelectedOpportunity(opportunity);
     
     // Cargar actividades
-    const response = await fetch(`/api/pipeline/activities?opportunity_id=${opportunity.id}`);
-    if (response.ok) {
-      const data = await response.json();
-      setOpportunityActivities(data.activities || []);
-    }
+    const { data } = await supabase
+      .from('activities')
+      .select('*')
+      .eq('opportunity_id', opportunity.id)
+      .order('created_at', { ascending: false });
+    
+    setOpportunityActivities((data || []) as Activity[]);
   };
 
-  const handleUpdateOpportunity = async (id: string, data: Partial<OpportunityWithRelations>) => {
-    const response = await fetch(`/api/pipeline/opportunities/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+  const handleUpdateOpportunity = async (id: string, updateData: Partial<OpportunityWithRelations>) => {
+    const { data, error } = await supabase
+      .from('opportunities')
+      .update({ ...updateData, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('tenant_id', tenantId)
+      .select(`
+        *,
+        clients!inner(id, full_name, email, phone, segment),
+        pipeline_stages!inner(id, name, color, order_index)
+      `)
+      .single();
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Error al actualizar');
+    if (error) {
+      throw new Error(error.message || 'Error al actualizar');
     }
 
-    const updatedOpp = await response.json();
+    const updatedOpp = {
+      ...data,
+      client: data.clients,
+      stage: data.pipeline_stages
+    } as OpportunityWithRelations;
+
     setOpportunities(prev => 
       prev.map(opp => opp.id === id ? updatedOpp : opp)
     );
     setSelectedOpportunity(updatedOpp);
   };
 
-  const handleCreateActivity = async (data: CreateActivityInput) => {
-    const response = await fetch('/api/pipeline/activities', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+  const handleCreateActivity = async (activityData: CreateActivityInput) => {
+    const { data, error } = await supabase
+      .from('activities')
+      .insert({
+        tenant_id: tenantId,
+        opportunity_id: activityData.opportunity_id,
+        client_id: activityData.client_id,
+        agent_id: user?.id,
+        type: activityData.type,
+        subject: activityData.subject,
+        description: activityData.description,
+        scheduled_at: activityData.scheduled_at
+      })
+      .select()
+      .single();
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Error al crear actividad');
+    if (error) {
+      throw new Error(error.message || 'Error al crear actividad');
     }
 
-    const newActivity = await response.json();
-    setOpportunityActivities(prev => [newActivity, ...prev]);
+    setOpportunityActivities(prev => [data as Activity, ...prev]);
   };
 
   const handleCompleteActivity = async (activityId: string) => {
-    const response = await fetch('/api/pipeline/activities', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        activity_id: activityId, 
-        completed_at: new Date().toISOString() 
-      })
-    });
+    const { data, error } = await supabase
+      .from('activities')
+      .update({ completed_at: new Date().toISOString() })
+      .eq('id', activityId)
+      .select()
+      .single();
 
-    if (response.ok) {
-      const updatedActivity = await response.json();
+    if (!error && data) {
       setOpportunityActivities(prev => 
-        prev.map(act => act.id === activityId ? updatedActivity : act)
+        prev.map(act => act.id === activityId ? (data as Activity) : act)
       );
     }
   };
 
-  const handleCreateOpportunity = async (data: CreateOpportunityInput) => {
-    const response = await fetch('/api/pipeline/opportunities', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+  const handleCreateOpportunity = async (oppData: CreateOpportunityInput) => {
+    // Obtener la primera etapa (default)
+    const defaultStage = stages.find(s => s.is_default) || stages[0];
+    
+    const { data, error } = await supabase
+      .from('opportunities')
+      .insert({
+        tenant_id: tenantId,
+        client_id: oppData.client_id,
+        stage_id: defaultStage?.id,
+        agent_id: user?.id,
+        line: oppData.line,
+        estimated_premium: oppData.estimated_premium,
+        probability: oppData.probability || 50,
+        source: oppData.source,
+        notes: oppData.notes,
+        expected_close_date: oppData.expected_close_date,
+        status: 'active'
+      })
+      .select(`
+        *,
+        clients!inner(id, full_name, email, phone, segment),
+        pipeline_stages!inner(id, name, color, order_index)
+      `)
+      .single();
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Error al crear oportunidad');
+    if (error) {
+      throw new Error(error.message || 'Error al crear oportunidad');
     }
 
-    const newOpp = await response.json();
+    const newOpp = {
+      ...data,
+      client: data.clients,
+      stage: data.pipeline_stages
+    } as OpportunityWithRelations;
+
     setOpportunities(prev => [newOpp, ...prev]);
   };
 

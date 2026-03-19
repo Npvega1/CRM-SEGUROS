@@ -2,7 +2,8 @@
 
 // =====================================================
 // PÁGINA: Lista de Pólizas
-// /polizas (Usando API Routes)
+// /polizas
+// Usa Supabase Client directo (evita API Routes con problemas de proxy)
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -38,6 +39,7 @@ import {
   type PolicyStatus,
   type PolicyLine
 } from '@/lib/validations/policies';
+import { getBrowserClient } from '@/lib/supabase/client';
 import {
   Plus,
   FileText,
@@ -76,7 +78,7 @@ interface PolicyStats {
 }
 
 export default function PoliciesPage() {
-  const { isLoading: isLoadingTenant, tenantName } = useTenant();
+  const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
 
   const [policies, setPolicies] = useState<Array<Policy & { client_name?: string }>>([]);
   const [total, setTotal] = useState(0);
@@ -90,59 +92,154 @@ export default function PoliciesPage() {
   const [expiringPolicies, setExpiringPolicies] = useState<ExpiringPolicy[]>([]);
 
   const loadPolicies = useCallback(async () => {
+    if (!tenantId) return;
+    
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        pageSize: pageSize.toString(),
-      });
-      if (searchQuery) params.append('search', searchQuery);
-      if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
-      if (lineFilter && lineFilter !== 'all') params.append('line', lineFilter);
-
-      const response = await fetch(`/api/polizas?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        setPolicies(data.policies || []);
-        setTotal(data.total || 0);
+      const supabase = getBrowserClient();
+      
+      // Build query
+      let query = supabase
+        .from('policies')
+        .select(`
+          *,
+          clients!inner(full_name)
+        `, { count: 'exact' })
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .range((page - 1) * pageSize, page * pageSize - 1);
+      
+      if (searchQuery) {
+        query = query.or(`policy_number.ilike.%${searchQuery}%,insurer.ilike.%${searchQuery}%`);
+      }
+      if (statusFilter && statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
+      }
+      if (lineFilter && lineFilter !== 'all') {
+        query = query.eq('line', lineFilter);
+      }
+      
+      const { data, count, error } = await query;
+      
+      if (error) {
+        console.error('Error loading policies:', error);
+      } else {
+        // Map client name
+        const mappedPolicies = (data || []).map((p: Record<string, unknown>) => ({
+          ...p,
+          client_name: (p.clients as { full_name: string })?.full_name
+        })) as Array<Policy & { client_name?: string }>;
+        setPolicies(mappedPolicies);
+        setTotal(count || 0);
       }
     } catch (error) {
       console.error('Error loading policies:', error);
     }
     setIsLoading(false);
-  }, [page, pageSize, searchQuery, statusFilter, lineFilter]);
+  }, [tenantId, page, pageSize, searchQuery, statusFilter, lineFilter]);
 
   const loadStats = useCallback(async () => {
+    if (!tenantId) return;
+    
     try {
-      const response = await fetch('/api/polizas/stats');
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
+      const supabase = getBrowserClient();
+      
+      const { data: allPolicies } = await supabase
+        .from('policies')
+        .select('status, line, premium, end_date')
+        .eq('tenant_id', tenantId);
+      
+      if (allPolicies) {
+        const byStatus: Record<string, number> = {};
+        const byLine: Record<string, number> = {};
+        let totalPremium = 0;
+        let active = 0;
+        let expiringThisMonth = 0;
+        
+        const endOfMonth = new Date();
+        endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+        endOfMonth.setDate(0);
+        
+        allPolicies.forEach(p => {
+          byStatus[p.status] = (byStatus[p.status] || 0) + 1;
+          byLine[p.line] = (byLine[p.line] || 0) + 1;
+          totalPremium += p.premium || 0;
+          if (p.status === 'active') active++;
+          if (p.end_date && new Date(p.end_date) <= endOfMonth) expiringThisMonth++;
+        });
+        
+        setStats({
+          total: allPolicies.length,
+          active,
+          byStatus,
+          byLine,
+          totalPremium,
+          expiringThisMonth
+        });
       }
     } catch (error) {
       console.error('Error loading stats:', error);
     }
-  }, []);
+  }, [tenantId]);
 
   const loadExpiringPolicies = useCallback(async () => {
+    if (!tenantId) return;
+    
     try {
-      const response = await fetch('/api/polizas/expiring?days=30&limit=5');
-      if (response.ok) {
-        const data = await response.json();
-        setExpiringPolicies(data.policies || []);
+      const supabase = getBrowserClient();
+      
+      const thirtyDaysFromNow = new Date();
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+      
+      const { data } = await supabase
+        .from('policies')
+        .select(`
+          id, policy_number, insurer, line, premium, end_date,
+          clients!inner(id, full_name, email, phone)
+        `)
+        .eq('tenant_id', tenantId)
+        .eq('status', 'active')
+        .lte('end_date', thirtyDaysFromNow.toISOString())
+        .gte('end_date', new Date().toISOString())
+        .order('end_date', { ascending: true })
+        .limit(5);
+      
+      if (data) {
+        const mapped = data.map((p: Record<string, unknown>) => {
+          const client = p.clients as { id: string; full_name: string; email: string | null; phone: string | null };
+          const endDate = new Date(p.end_date as string);
+          const today = new Date();
+          const diffTime = endDate.getTime() - today.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          return {
+            id: p.id as string,
+            policy_number: p.policy_number as string,
+            insurer: p.insurer as string,
+            line: p.line as string,
+            premium: p.premium as number,
+            end_date: p.end_date as string,
+            days_remaining: diffDays,
+            client_id: client.id,
+            client_name: client.full_name,
+            client_email: client.email,
+            client_phone: client.phone
+          };
+        });
+        setExpiringPolicies(mapped);
       }
     } catch (error) {
       console.error('Error loading expiring policies:', error);
     }
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
-    if (!isLoadingTenant) {
+    if (!isLoadingTenant && tenantId) {
       loadPolicies();
       loadStats();
       loadExpiringPolicies();
     }
-  }, [isLoadingTenant, loadPolicies, loadStats, loadExpiringPolicies]);
+  }, [isLoadingTenant, tenantId, loadPolicies, loadStats, loadExpiringPolicies]);
 
   const totalPages = Math.ceil(total / pageSize);
 

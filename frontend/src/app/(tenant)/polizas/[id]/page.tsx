@@ -2,7 +2,8 @@
 
 // =====================================================
 // PÁGINA: Detalle de Póliza
-// /polizas/[id] (Usando API Routes)
+// /polizas/[id]
+// Usa Supabase Client directo (evita API Routes con problemas de proxy)
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -35,6 +36,7 @@ import {
 } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
+import { getBrowserClient } from '@/lib/supabase/client';
 
 interface PolicyWithClient extends Policy {
   client?: {
@@ -51,7 +53,7 @@ interface PolicyWithClient extends Policy {
 export default function PolicyDetailPage() {
   const params = useParams();
   const policyId = params.id as string;
-  const { isLoading: isLoadingTenant, tenantName } = useTenant();
+  const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
 
   const [policy, setPolicy] = useState<PolicyWithClient | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,43 +61,67 @@ export default function PolicyDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const loadPolicy = useCallback(async () => {
+    if (!tenantId || !policyId) return;
+    
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/polizas/${policyId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setPolicy(data);
+      const supabase = getBrowserClient();
+      
+      const { data, error: fetchError } = await supabase
+        .from('policies')
+        .select(`
+          *,
+          clients!inner(id, full_name, doc_type, doc_number, email, phone, segment)
+        `)
+        .eq('id', policyId)
+        .eq('tenant_id', tenantId)
+        .single();
+      
+      if (fetchError) {
+        setError(fetchError.message || 'Error al cargar la póliza');
       } else {
-        const errData = await response.json();
-        setError(errData.error || 'Error al cargar la póliza');
+        setPolicy({
+          ...data,
+          client: data.clients
+        } as PolicyWithClient);
       }
     } catch (err) {
       setError('Error de conexión');
     }
     setIsLoading(false);
-  }, [policyId]);
+  }, [policyId, tenantId]);
 
   useEffect(() => {
-    if (policyId) {
+    if (policyId && tenantId) {
       loadPolicy();
     }
-  }, [policyId, loadPolicy]);
+  }, [policyId, tenantId, loadPolicy]);
 
   const handleStatusChange = async (newStatus: PolicyStatus) => {
+    if (!tenantId) return;
+    
     setIsUpdatingStatus(true);
     try {
-      const response = await fetch(`/api/polizas/${policyId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      });
+      const supabase = getBrowserClient();
+      
+      const { data, error: updateError } = await supabase
+        .from('policies')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', policyId)
+        .eq('tenant_id', tenantId)
+        .select(`
+          *,
+          clients!inner(id, full_name, doc_type, doc_number, email, phone, segment)
+        `)
+        .single();
 
-      if (response.ok) {
-        const updated = await response.json();
-        setPolicy(updated);
+      if (updateError) {
+        setError(updateError.message || 'Error al actualizar');
       } else {
-        const errData = await response.json();
-        setError(errData.error || 'Error al actualizar');
+        setPolicy({
+          ...data,
+          client: data.clients
+        } as PolicyWithClient);
       }
     } catch (err) {
       setError('Error de conexión');

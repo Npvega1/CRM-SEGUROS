@@ -2,7 +2,8 @@
 
 // =====================================================
 // PÁGINA: Nueva Póliza
-// /polizas/nueva (Usando API Routes)
+// /polizas/nueva
+// Usa Supabase Client directo (evita API Routes con problemas de proxy)
 // =====================================================
 
 import { useState, useEffect, Suspense } from 'react';
@@ -16,6 +17,7 @@ import { ArrowLeft, Shield, AlertCircle, Search } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
+import { getBrowserClient } from '@/lib/supabase/client';
 
 interface PolicyFormData {
   client_id: string;
@@ -35,7 +37,7 @@ function NewPolicyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedClientId = searchParams.get('clientId');
-  const { isLoading: isLoadingTenant, tenantName } = useTenant();
+  const { isLoading: isLoadingTenant, tenantName, tenantId, user } = useTenant();
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,20 +48,28 @@ function NewPolicyContent() {
 
   useEffect(() => {
     async function loadClients() {
+      if (!tenantId) return;
+      
       setIsLoadingClients(true);
       try {
-        const response = await fetch('/api/clientes?pageSize=100');
-        if (response.ok) {
-          const data = await response.json();
-          setClients(data.clients || []);
-        }
+        const supabase = getBrowserClient();
+        const { data } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .order('full_name', { ascending: true })
+          .limit(100);
+        
+        setClients((data || []) as Client[]);
       } catch (err) {
         console.error('Error loading clients:', err);
       }
       setIsLoadingClients(false);
     }
-    loadClients();
-  }, []);
+    if (tenantId) {
+      loadClients();
+    }
+  }, [tenantId]);
 
   const filteredClients = clients.filter(client =>
     client.full_name.toLowerCase().includes(clientSearch.toLowerCase()) ||
@@ -72,26 +82,42 @@ function NewPolicyContent() {
       return;
     }
 
+    if (!tenantId || !user) {
+      setError('No hay sesión activa');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/polizas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          client_id: selectedClientId
+      const supabase = getBrowserClient();
+      
+      const { data: newPolicy, error: insertError } = await supabase
+        .from('policies')
+        .insert({
+          tenant_id: tenantId,
+          client_id: selectedClientId,
+          agent_id: user.id,
+          policy_number: data.policy_number,
+          insurer: data.insurer,
+          line: data.line,
+          status: data.status || 'cotizacion',
+          premium: data.premium,
+          currency: data.currency || 'COP',
+          start_date: data.start_date || null,
+          end_date: data.end_date || null,
+          commission_pct: data.commission_pct || 10,
+          metadata: data.metadata || {}
         })
-      });
+        .select()
+        .single();
 
-      if (response.ok) {
-        const result = await response.json();
-        router.push(`/polizas/${result.id}`);
-      } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Error al crear la póliza');
+      if (insertError) {
+        setError(insertError.message || 'Error al crear la póliza');
         setIsLoading(false);
+      } else {
+        router.push(`/polizas/${newPolicy.id}`);
       }
     } catch (err) {
       setError('Error de conexión');
