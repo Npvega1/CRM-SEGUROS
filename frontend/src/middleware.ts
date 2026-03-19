@@ -50,7 +50,9 @@ function checkPlanLimit(
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const response = NextResponse.next({
+  
+  // Crear response inicial sin modificar headers innecesariamente
+  let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
@@ -77,7 +79,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet: Array<{ name: string; value: string; options: CookieOptions }>) {
-          // OPTIMIZACIÓN: No recrear response, solo actualizar cookies
+          // OPTIMIZACIÓN: Crear nueva response solo si hay cookies que setear
           cookiesToSet.forEach(({ name, value, options }) => {
             request.cookies.set(name, value);
             response.cookies.set(name, value, options);

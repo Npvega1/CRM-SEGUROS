@@ -69,8 +69,6 @@ export function TenantProvider({ children }: TenantProviderProps) {
       setError(null);
 
       // Obtener sesión actual con timeout
-      console.log('TenantContext: Obteniendo sesión...');
-      
       const sessionPromise = supabase.auth.getSession();
       const timeoutPromise = new Promise<never>((_, reject) => 
         setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 15000)
@@ -99,22 +97,18 @@ export function TenantProvider({ children }: TenantProviderProps) {
       }
 
       if (!session?.user) {
-        console.log('TenantContext: No hay sesión activa');
         setContext(null);
         setIsLoading(false);
         return;
       }
 
       const user = session.user;
-      console.log('TenantContext: Usuario encontrado', user.id);
       
       // Obtener claims del JWT (app_metadata)
       const appMetadata = user.app_metadata || {};
       const tenantId = appMetadata.tenant_id as string | undefined;
       const role = (appMetadata.role as Role) || 'readonly';
       const agentId = (appMetadata.agent_id as string) || user.id;
-
-      console.log('TenantContext: Claims JWT', { tenantId, role, agentId });
 
       // Valores por defecto
       let userFullName = user.user_metadata?.full_name || '';
@@ -126,46 +120,38 @@ export function TenantProvider({ children }: TenantProviderProps) {
       // Intentar obtener datos adicionales solo si hay tenantId
       if (tenantId) {
         try {
-          console.log('TenantContext: Consultando tabla users...');
           const { data: userData, error: userError } = await supabase
             .from('users')
             .select('full_name, email, role')
             .eq('id', user.id)
             .maybeSingle();
 
-          if (userError) {
-            console.warn('TenantContext: Error consultando users', userError.message);
-          } else if (userData) {
-            console.log('TenantContext: Datos de usuario obtenidos', userData);
+          if (!userError && userData) {
             // Cast para TypeScript - los tipos de la DB real
             const data = userData as { full_name?: string; email?: string; role?: Role };
             userFullName = data.full_name || userFullName;
             userEmail = data.email || userEmail;
             finalRole = data.role || role;
           }
-        } catch (e) {
-          console.warn('TenantContext: Excepción consultando users', e);
+        } catch {
+          // Silenciar errores - usar valores por defecto
         }
 
         try {
-          console.log('TenantContext: Consultando tabla tenants...');
           const { data: tenantData, error: tenantError } = await supabase
             .from('tenants')
             .select('name, slug')
             .eq('id', tenantId)
             .maybeSingle();
 
-          if (tenantError) {
-            console.warn('TenantContext: Error consultando tenants', tenantError.message);
-          } else if (tenantData) {
-            console.log('TenantContext: Datos de tenant obtenidos', tenantData);
+          if (!tenantError && tenantData) {
             // Cast para TypeScript - los tipos de la DB real
             const data = tenantData as { name?: string; slug?: string };
             tenantName = data.name || '';
             tenantSlug = data.slug || '';
           }
-        } catch (e) {
-          console.warn('TenantContext: Excepción consultando tenants', e);
+        } catch {
+          // Silenciar errores - usar valores por defecto
         }
       }
 
@@ -232,21 +218,25 @@ export function TenantProvider({ children }: TenantProviderProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase.auth]); // Solo depende de supabase.auth, no de loadTenantContext
 
-  const value: TenantContextValue = context
-    ? {
+  // OPTIMIZACIÓN: Memoizar el valor para evitar re-renders innecesarios
+  const value: TenantContextValue = useMemo(() => {
+    if (context) {
+      return {
         ...context,
         isLoading,
         error,
         refresh: loadTenantContext,
         signOut
-      }
-    : {
-        ...defaultContextValue,
-        isLoading,
-        error,
-        refresh: loadTenantContext,
-        signOut
       };
+    }
+    return {
+      ...defaultContextValue,
+      isLoading,
+      error,
+      refresh: loadTenantContext,
+      signOut
+    };
+  }, [context, isLoading, error, loadTenantContext, signOut]);
 
   return (
     <TenantContext.Provider value={value}>
