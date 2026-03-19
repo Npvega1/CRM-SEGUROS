@@ -175,8 +175,8 @@ export function PaymentModal({ invoice, open, onClose, onSuccess }: PaymentModal
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-green-500" />
             Registrar Pago
@@ -186,43 +186,36 @@ export function PaymentModal({ invoice, open, onClose, onSuccess }: PaymentModal
           </DialogDescription>
         </DialogHeader>
 
-        {/* Resumen de la cuota */}
-        <Card className="bg-slate-50">
-          <CardContent className="pt-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">Cliente</p>
-                <p className="font-medium">{invoice.client?.full_name}</p>
+        {/* Contenido scrolleable */}
+        <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+          {/* Resumen de la cuota */}
+          <Card className="bg-slate-50">
+            <CardContent className="pt-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs">Cliente</p>
+                  <p className="font-medium truncate">{invoice.client?.full_name}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Póliza</p>
+                  <p className="font-medium truncate">{invoice.policy?.policy_number}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Ramo</p>
+                  <p className="font-medium">{LINE_LABELS[invoice.policy?.line || ''] || invoice.policy?.line}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Vencimiento</p>
+                  <p className="font-medium">{formatDate(invoice.due_date)}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-muted-foreground">Póliza</p>
-                <p className="font-medium">{invoice.policy?.policy_number}</p>
+              <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                <p className="text-muted-foreground text-sm">Monto a pagar</p>
+                <p className="text-xl font-bold text-green-600">{formatCurrency(invoice.amount)}</p>
               </div>
-              <div>
-                <p className="text-muted-foreground">Ramo</p>
-                <p className="font-medium">{LINE_LABELS[invoice.policy?.line || ''] || invoice.policy?.line}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Aseguradora</p>
-                <p className="font-medium">{invoice.policy?.insurer}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Cuota</p>
-                <p className="font-medium">{invoice.installment_number} de {invoice.total_installments}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Vencimiento</p>
-                <p className="font-medium">{formatDate(invoice.due_date)}</p>
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t">
-              <p className="text-muted-foreground text-sm">Monto a pagar</p>
-              <p className="text-2xl font-bold text-green-600">{formatCurrency(invoice.amount)}</p>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <div className="space-y-4 py-4">
           {/* Fecha de pago */}
           <div className="space-y-2">
             <Label htmlFor="paid_date">Fecha de Pago *</Label>
@@ -269,7 +262,7 @@ export function PaymentModal({ invoice, open, onClose, onSuccess }: PaymentModal
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Formatos: JPG, PNG, WEBP, PDF. Máximo 5MB.
+              JPG, PNG, WEBP, PDF. Máx 5MB.
             </p>
           </div>
 
@@ -289,13 +282,13 @@ export function PaymentModal({ invoice, open, onClose, onSuccess }: PaymentModal
           {/* Error */}
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
-              <AlertCircle className="h-4 w-4" />
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
               {error}
             </div>
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0 pt-4 border-t mt-4">
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancelar
           </Button>
