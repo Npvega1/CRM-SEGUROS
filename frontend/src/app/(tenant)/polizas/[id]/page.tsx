@@ -248,7 +248,10 @@ export default function PolicyDetailPage() {
                 <CardDescription>Sube el PDF de la póliza</CardDescription>
               </CardHeader>
               <CardContent>
-                <PDFUploader policyId={policy.id} />
+                <PDFUploader 
+                  policyId={policy.id} 
+                  currentDocumentUrl={policy.document_url}
+                />
               </CardContent>
             </Card>
           </div>

@@ -32,7 +32,7 @@ export function PDFUploader({
   currentDocumentUrl,
   onUploadComplete 
 }: PDFUploaderProps) {
-  const { tenantId } = useTenant();
+  const { tenantId, isLoading: tenantLoading } = useTenant();
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -40,6 +40,9 @@ export function PDFUploader({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+
+  // Debug: mostrar estado del tenant
+  console.log('PDFUploader - tenantId:', tenantId, 'tenantLoading:', tenantLoading);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -304,9 +307,25 @@ export function PDFUploader({
       )}
 
       {file && !isUploading && (
-        <Button onClick={handleUpload} className="w-full" disabled={!tenantId}>
-          <Upload className="w-4 h-4 mr-2" />
-          Subir Documento
+        <Button 
+          onClick={handleUpload} 
+          className="w-full" 
+          disabled={!tenantId || tenantLoading}
+          data-testid="upload-document-btn"
+        >
+          {tenantLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Cargando...
+            </>
+          ) : !tenantId ? (
+            'Sin sesión'
+          ) : (
+            <>
+              <Upload className="w-4 h-4 mr-2" />
+              Subir Documento
+            </>
+          )}
         </Button>
       )}
     </div>
