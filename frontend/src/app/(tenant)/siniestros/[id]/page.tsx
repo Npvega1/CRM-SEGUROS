@@ -142,7 +142,7 @@ export default function ClaimDetailPage() {
   }, [isLoadingTenant, tenantId, loadExpediente]);
 
   const handleStatusChange = async (newStatus: ClaimStatus, comment: string, isInternal: boolean) => {
-    if (!expediente || !userId) return;
+    if (!expediente || !userId || !tenantId) return;
 
     const currentStatus = expediente.claim.status as ClaimStatus;
     if (!isValidClaimStatusTransition(currentStatus, newStatus)) {
@@ -158,30 +158,32 @@ export default function ClaimDetailPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: updateError } = await (supabase as any)
         .from('claims')
-        .update({ status: newStatus })
-        .eq('id', claimId);
+        .update({ 
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', claimId)
+        .eq('tenant_id', tenantId);
 
       if (updateError) {
         console.error('Error updating status:', updateError);
-        alert('Error al actualizar el estado');
+        alert('Error al actualizar el estado: ' + (updateError.message || 'Error desconocido'));
         setIsUpdating(false);
         return;
       }
 
       // Insertar en historial con comentario
-      if (comment) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from('claims_history')
-          .insert({
-            claim_id: claimId,
-            changed_by: userId,
-            old_status: currentStatus,
-            new_status: newStatus,
-            comment,
-            is_internal: isInternal
-          });
-      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('claims_history')
+        .insert({
+          claim_id: claimId,
+          changed_by: userId,
+          old_status: currentStatus,
+          new_status: newStatus,
+          comment: comment || null,
+          is_internal: isInternal
+        });
 
       // Recargar datos
       await loadExpediente();
@@ -193,7 +195,7 @@ export default function ClaimDetailPage() {
   };
 
   const handleUpdateApprovedAmount = async () => {
-    if (!expediente || !userId) return;
+    if (!expediente || !userId || !tenantId) return;
 
     const amount = parseFloat(approvedAmount) || 0;
     if (amount < 0) {
@@ -208,12 +210,16 @@ export default function ClaimDetailPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('claims')
-        .update({ approved_amount: amount })
-        .eq('id', claimId);
+        .update({ 
+          approved_amount: amount,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', claimId)
+        .eq('tenant_id', tenantId);
 
       if (error) {
         console.error('Error updating approved amount:', error);
-        alert('Error al actualizar el monto');
+        alert('Error al actualizar el monto: ' + (error.message || 'Error desconocido'));
       } else {
         setShowApprovedEdit(false);
         await loadExpediente();
