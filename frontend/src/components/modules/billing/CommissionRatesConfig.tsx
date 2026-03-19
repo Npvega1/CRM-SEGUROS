@@ -39,9 +39,7 @@ import {
 import {
   type CommissionRate,
   type PolicyLine,
-  CommissionRateInputSchema,
-  LINE_LABELS,
-  formatDate
+  LINE_LABELS
 } from '@/lib/validations/billing';
 import {
   Settings,
@@ -68,8 +66,6 @@ export function CommissionRatesConfig() {
   const [formInsurer, setFormInsurer] = useState('');
   const [formLine, setFormLine] = useState<PolicyLine>('auto');
   const [formRatePct, setFormRatePct] = useState('');
-  const [formEffectiveFrom, setFormEffectiveFrom] = useState(new Date().toISOString().split('T')[0]);
-  const [formEffectiveTo, setFormEffectiveTo] = useState('');
 
   const canEdit = role === 'admin' || role === 'senior_agent';
 
@@ -139,8 +135,6 @@ export function CommissionRatesConfig() {
     setFormInsurer('');
     setFormLine('auto');
     setFormRatePct('');
-    setFormEffectiveFrom(new Date().toISOString().split('T')[0]);
-    setFormEffectiveTo('');
     setError(null);
     setShowModal(true);
   };
@@ -150,8 +144,6 @@ export function CommissionRatesConfig() {
     setFormInsurer(rate.insurer);
     setFormLine(rate.line as PolicyLine);
     setFormRatePct(rate.rate_pct.toString());
-    setFormEffectiveFrom(rate.effective_from);
-    setFormEffectiveTo(rate.effective_to || '');
     setError(null);
     setShowModal(true);
   };
@@ -161,24 +153,20 @@ export function CommissionRatesConfig() {
     
     setError(null);
     
-    // Validar datos
-    const validation = CommissionRateInputSchema.safeParse({
-      insurer: formInsurer,
-      line: formLine,
-      rate_pct: parseFloat(formRatePct) || 0,
-      effective_from: formEffectiveFrom,
-      effective_to: formEffectiveTo || null
-    });
-    
-    if (!validation.success) {
-      const zodError = validation.error as { errors?: Array<{ message?: string }> };
-      setError(zodError.errors?.[0]?.message || 'Datos inválidos');
+    // Validar datos básicos
+    if (!formInsurer.trim()) {
+      setError('La aseguradora es requerida');
+      return;
+    }
+    if (!formRatePct || parseFloat(formRatePct) < 0 || parseFloat(formRatePct) > 100) {
+      setError('La tasa debe estar entre 0 y 100');
       return;
     }
     
     setIsSubmitting(true);
     try {
       const supabase = getBrowserClient();
+      const today = new Date().toISOString().split('T')[0];
       
       if (editingRate) {
         // Actualizar
@@ -186,11 +174,9 @@ export function CommissionRatesConfig() {
         const { error: updateError } = await (supabase as any)
           .from('commission_rates')
           .update({
-            insurer: formInsurer,
+            insurer: formInsurer.trim(),
             line: formLine,
             rate_pct: parseFloat(formRatePct),
-            effective_from: formEffectiveFrom,
-            effective_to: formEffectiveTo || null,
             updated_at: new Date().toISOString()
           })
           .eq('id', editingRate.id)
@@ -202,17 +188,17 @@ export function CommissionRatesConfig() {
           return;
         }
       } else {
-        // Crear
+        // Crear con vigencia indefinida
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: insertError } = await (supabase as any)
           .from('commission_rates')
           .insert({
             tenant_id: tenantId,
-            insurer: formInsurer,
+            insurer: formInsurer.trim(),
             line: formLine,
             rate_pct: parseFloat(formRatePct),
-            effective_from: formEffectiveFrom,
-            effective_to: formEffectiveTo || null
+            effective_from: today,
+            effective_to: null
           });
         
         if (insertError) {
@@ -319,9 +305,6 @@ export function CommissionRatesConfig() {
                       <TableRow>
                         <TableHead>Ramo</TableHead>
                         <TableHead className="text-center">Tasa %</TableHead>
-                        <TableHead>Vigencia Desde</TableHead>
-                        <TableHead>Vigencia Hasta</TableHead>
-                        <TableHead>Estado</TableHead>
                         {canEdit && <TableHead className="text-right">Acciones</TableHead>}
                       </TableRow>
                     </TableHeader>
@@ -333,19 +316,8 @@ export function CommissionRatesConfig() {
                               {LINE_LABELS[rate.line] || rate.line}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-center font-bold text-green-700">
+                          <TableCell className="text-center font-bold text-green-700 text-lg">
                             {rate.rate_pct}%
-                          </TableCell>
-                          <TableCell>{formatDate(rate.effective_from)}</TableCell>
-                          <TableCell>
-                            {rate.effective_to ? formatDate(rate.effective_to) : 'Indefinido'}
-                          </TableCell>
-                          <TableCell>
-                            {isRateActive(rate) ? (
-                              <Badge className="bg-green-100 text-green-800">Activa</Badge>
-                            ) : (
-                              <Badge className="bg-gray-100 text-gray-800">Inactiva</Badge>
-                            )}
                           </TableCell>
                           {canEdit && (
                             <TableCell className="text-right">
@@ -383,7 +355,7 @@ export function CommissionRatesConfig() {
 
       {/* Modal de Crear/Editar */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>
               {editingRate ? 'Editar Tasa de Comisión' : 'Nueva Tasa de Comisión'}
@@ -400,7 +372,7 @@ export function CommissionRatesConfig() {
               <div className="flex gap-2">
                 <Select value={formInsurer} onValueChange={setFormInsurer}>
                   <SelectTrigger className="flex-1" data-testid="insurer-select">
-                    <SelectValue placeholder="Seleccionar o escribir..." />
+                    <SelectValue placeholder="Seleccionar..." />
                   </SelectTrigger>
                   <SelectContent>
                     {insurers.map(ins => (
@@ -410,10 +382,10 @@ export function CommissionRatesConfig() {
                 </Select>
                 <Input
                   id="insurer"
-                  placeholder="Nueva..."
+                  placeholder="O escribir nueva..."
                   value={formInsurer}
                   onChange={(e) => setFormInsurer(e.target.value)}
-                  className="w-32"
+                  className="flex-1"
                   data-testid="insurer-input"
                 />
               </div>
@@ -448,33 +420,8 @@ export function CommissionRatesConfig() {
                 onChange={(e) => setFormRatePct(e.target.value)}
                 data-testid="rate-pct-input"
               />
-            </div>
-
-            {/* Vigencia Desde */}
-            <div className="space-y-2">
-              <Label htmlFor="effective_from">Vigencia Desde *</Label>
-              <Input
-                id="effective_from"
-                type="date"
-                value={formEffectiveFrom}
-                onChange={(e) => setFormEffectiveFrom(e.target.value)}
-                data-testid="effective-from-input"
-              />
-            </div>
-
-            {/* Vigencia Hasta */}
-            <div className="space-y-2">
-              <Label htmlFor="effective_to">Vigencia Hasta (opcional)</Label>
-              <Input
-                id="effective_to"
-                type="date"
-                value={formEffectiveTo}
-                onChange={(e) => setFormEffectiveTo(e.target.value)}
-                min={formEffectiveFrom}
-                data-testid="effective-to-input"
-              />
               <p className="text-xs text-muted-foreground">
-                Dejar vacío para vigencia indefinida
+                La tasa aplica indefinidamente hasta que la modifiques
               </p>
             </div>
 
