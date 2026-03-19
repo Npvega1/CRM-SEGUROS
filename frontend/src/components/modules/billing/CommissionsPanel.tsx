@@ -121,31 +121,9 @@ export function CommissionsPanel({ summary, onUpdate }: CommissionsPanelProps) {
     try {
       const supabase = getBrowserClient();
       
-      // Intentar usar RPC primero
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_commissions_by_period', {
-          p_tenant_id: tenantId,
-          p_period_month: selectedPeriod,
-          p_agent_id: selectedAgent !== 'all' ? selectedAgent : null
-        });
-        
-        if (!rpcError && rpcData) {
-          let filtered = rpcData as CommissionWithRelations[];
-          if (statusFilter && statusFilter !== 'all') {
-            filtered = filtered.filter(c => c.status === statusFilter);
-          }
-          setCommissions(filtered);
-          setTotal(filtered.length);
-          setIsLoading(false);
-          return;
-        }
-      } catch {
-        // RPC no disponible, usar fallback
-      }
-      
-      // Fallback: query directa
-      let query = supabase
+      // Query directa a la tabla commissions
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let query = (supabase as any)
         .from('commissions')
         .select(`
           *,
@@ -153,9 +131,16 @@ export function CommissionsPanel({ summary, onUpdate }: CommissionsPanelProps) {
           users(id, full_name)
         `, { count: 'exact' })
         .eq('tenant_id', tenantId)
-        .eq('period_month', selectedPeriod)
         .order('created_at', { ascending: false })
         .range((page - 1) * pageSize, page * pageSize - 1);
+      
+      // Filtrar por período (mes)
+      if (selectedPeriod) {
+        const periodStart = new Date(selectedPeriod);
+        const periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
+        query = query.gte('period_month', selectedPeriod);
+        query = query.lte('period_month', periodEnd.toISOString().split('T')[0]);
+      }
       
       if (selectedAgent !== 'all') {
         query = query.eq('agent_id', selectedAgent);
@@ -169,15 +154,18 @@ export function CommissionsPanel({ summary, onUpdate }: CommissionsPanelProps) {
       
       if (error) {
         console.error('Error loading commissions:', error);
+        setCommissions([]);
+        setTotal(0);
       } else if (data) {
-        // Necesitamos obtener el nombre del cliente
+        // Obtener nombres de clientes
         const policyIds = data.map((c: Record<string, unknown>) => 
           (c.policies as { client_id: string })?.client_id
         ).filter(Boolean);
         
         let clientsMap: Record<string, string> = {};
         if (policyIds.length > 0) {
-          const { data: clients } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: clients } = await (supabase as any)
             .from('clients')
             .select('id, full_name')
             .in('id', policyIds);
@@ -216,6 +204,8 @@ export function CommissionsPanel({ summary, onUpdate }: CommissionsPanelProps) {
       }
     } catch (error) {
       console.error('Error loading commissions:', error);
+      setCommissions([]);
+      setTotal(0);
     }
     setIsLoading(false);
   }, [tenantId, selectedPeriod, selectedAgent, statusFilter, page, pageSize]);
