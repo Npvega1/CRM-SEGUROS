@@ -4,6 +4,7 @@
 // PÁGINA: Login del Portal
 // Módulo 07: Portal del Cliente
 // Magic Link OTP (MOCK por ahora)
+// Modo desarrollo: permite login con contraseña
 // =====================================================
 
 import { useState, useMemo } from 'react';
@@ -11,12 +12,20 @@ import { useParams, useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PortalLoginSchema, type PortalLogin } from '@/lib/validations/portal';
-import { Mail, ArrowRight, CheckCircle2, AlertCircle, Building2 } from 'lucide-react';
+import { Mail, ArrowRight, CheckCircle2, AlertCircle, Building2, KeyRound } from 'lucide-react';
+
+// Schema extendido para modo desarrollo
+const DevLoginSchema = z.object({
+  email: z.string().email('Ingresa un email válido'),
+  password: z.string().min(1, 'Ingresa tu contraseña')
+});
+type DevLogin = z.infer<typeof DevLoginSchema>;
 
 export default function PortalLoginPage() {
   const params = useParams();
@@ -26,6 +35,7 @@ export default function PortalLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isEmailSent, setIsEmailSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [devMode, setDevMode] = useState(false); // Modo desarrollo con contraseña
 
   const supabase = useMemo(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,11 +47,11 @@ export default function PortalLoginPage() {
     handleSubmit,
     formState: { errors },
     getValues
-  } = useForm<PortalLogin>({
-    resolver: zodResolver(PortalLoginSchema)
+  } = useForm<DevLogin>({
+    resolver: zodResolver(devMode ? DevLoginSchema : PortalLoginSchema)
   });
 
-  const onSubmit = async (data: PortalLogin) => {
+  const onSubmit = async (data: DevLogin) => {
     setIsLoading(true);
     setError(null);
 
@@ -60,6 +70,26 @@ export default function PortalLoginPage() {
       if (!clientData || clientData.length === 0) {
         setError('Este email no está registrado como cliente. Contacta a tu agente de seguros.');
         setIsLoading(false);
+        return;
+      }
+
+      // ============================================
+      // MODO DESARROLLO: Login con contraseña
+      // ============================================
+      if (devMode && data.password) {
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password
+        });
+
+        if (authError) {
+          setError('Credenciales inválidas. Verifica tu email y contraseña.');
+          setIsLoading(false);
+          return;
+        }
+
+        // Login exitoso, redirigir al dashboard
+        router.push(`/${tenantSlug}/dashboard`);
         return;
       }
 
@@ -184,6 +214,27 @@ export default function PortalLoginPage() {
               )}
             </div>
 
+            {/* Campo de contraseña (modo desarrollo) */}
+            {devMode && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Contraseña</Label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Tu contraseña"
+                    className="pl-10 h-12"
+                    {...register('password')}
+                    data-testid="portal-login-password"
+                  />
+                </div>
+                {errors.password && (
+                  <p className="text-sm text-red-600">{errors.password.message}</p>
+                )}
+              </div>
+            )}
+
             <Button
               type="submit"
               className="w-full h-12 text-base"
@@ -193,19 +244,33 @@ export default function PortalLoginPage() {
               {isLoading ? (
                 <span className="flex items-center gap-2">
                   <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Enviando...
+                  {devMode ? 'Ingresando...' : 'Enviando...'}
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
-                  Enviar código de acceso
+                  {devMode ? 'Ingresar' : 'Enviar código de acceso'}
                   <ArrowRight className="h-5 w-5" />
                 </span>
               )}
             </Button>
 
             <p className="text-xs text-center text-muted-foreground">
-              Te enviaremos un enlace seguro para iniciar sesión. No necesitas contraseña.
+              {devMode 
+                ? 'Modo desarrollo: ingresa con email y contraseña de Supabase Auth'
+                : 'Te enviaremos un enlace seguro para iniciar sesión. No necesitas contraseña.'
+              }
             </p>
+
+            {/* Toggle modo desarrollo */}
+            <div className="pt-4 border-t">
+              <button
+                type="button"
+                onClick={() => setDevMode(!devMode)}
+                className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {devMode ? '← Volver a Magic Link' : '🔧 Modo desarrollo (login con contraseña)'}
+              </button>
+            </div>
           </form>
         </CardContent>
       </Card>
