@@ -14,7 +14,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { formatPortalDate, formatPortalCurrency, daysUntil } from '@/lib/validations/portal';
 import {
@@ -199,15 +198,14 @@ export default function PortalPoliciesPage() {
   }
 
   return (
-    <TooltipProvider>
-      <div className="max-w-4xl mx-auto space-y-6" data-testid="portal-policies">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Mis Pólizas</h1>
-          <p className="text-muted-foreground">
-            Consulta el detalle y documentos de tus pólizas de seguros
-          </p>
-        </div>
+    <div className="max-w-4xl mx-auto space-y-6" data-testid="portal-policies">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Mis Pólizas</h1>
+        <p className="text-muted-foreground">
+          Consulta el detalle y documentos de tus pólizas de seguros
+        </p>
+      </div>
 
         {/* Sin pólizas */}
         {policies.length === 0 && (
@@ -263,7 +261,6 @@ export default function PortalPoliciesPage() {
           </div>
         )}
       </div>
-    </TooltipProvider>
   );
 }
 
@@ -379,23 +376,17 @@ function PolicyCard({ policy, onDownload, isDownloading }: PolicyCardProps) {
                 Descargar
               </Button>
             ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled
-                    className="opacity-50 cursor-not-allowed"
-                    data-testid={`download-policy-${policy.id}-disabled`}
-                  >
-                    <FileX className="h-4 w-4 mr-1" />
-                    Sin documento
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Esta póliza no tiene documento adjunto</p>
-                </TooltipContent>
-              </Tooltip>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                className="opacity-50 cursor-not-allowed"
+                title="Esta póliza no tiene documento adjunto"
+                data-testid={`download-policy-${policy.id}-disabled`}
+              >
+                <FileX className="h-4 w-4 mr-1" />
+                Sin documento
+              </Button>
             )}
           </div>
         </div>
