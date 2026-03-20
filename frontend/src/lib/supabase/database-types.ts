@@ -135,6 +135,7 @@ export type Database = {
           end_date: string;
           commission_pct: number;
           metadata: Json | null;
+          document_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -152,6 +153,7 @@ export type Database = {
           end_date: string;
           commission_pct?: number;
           metadata?: Json | null;
+          document_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -169,6 +171,7 @@ export type Database = {
           end_date?: string;
           commission_pct?: number;
           metadata?: Json | null;
+          document_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };

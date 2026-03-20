@@ -135,11 +135,25 @@ export function PDFUploader({
       console.log('Upload successful:', uploadData);
       setUploadProgress(100);
 
-      // Actualizar póliza con el path del documento
-      const { error: updateError } = await supabase
-        .from('policies')
-        .update({ document_url: path })
-        .eq('id', policyId);
+      // Actualizar póliza con el path del documento usando REST API directo
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const updateResponse = await fetch(
+        `${supabaseUrl}/rest/v1/policies?id=eq.${policyId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+            'Authorization': `Bearer ${session?.access_token || ''}`,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({ document_url: path })
+        }
+      );
+
+      const updateError = !updateResponse.ok ? { message: 'Failed to update policy' } : null;
 
       if (updateError) {
         console.error('Error updating policy:', updateError);
