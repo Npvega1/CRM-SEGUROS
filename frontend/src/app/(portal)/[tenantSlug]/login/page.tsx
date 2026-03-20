@@ -107,7 +107,7 @@ export default function PortalLoginPage() {
       const { error: authError } = await supabase.auth.signInWithOtp({
         email: email,
         options: {
-          emailRedirectTo: `${window.location.origin}/${tenantSlug}/dashboard`,
+          emailRedirectTo: `${window.location.origin}/${tenantSlug}/auth/callback`,
         }
       });
       

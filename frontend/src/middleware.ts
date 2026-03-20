@@ -40,8 +40,8 @@ const WEBHOOK_ROUTES = [
 ];
 
 // Regex para detectar rutas del portal: /[tenantSlug]/...
-const PORTAL_ROUTE_REGEX = /^\/([a-z0-9-]+)\/(login|dashboard|policies|claims|account|chat)(\/.*)?$/;
-const PORTAL_LOGIN_REGEX = /^\/([a-z0-9-]+)\/login$/;
+const PORTAL_ROUTE_REGEX = /^\/([a-z0-9-]+)\/(login|dashboard|policies|claims|account|chat|auth)(\/.*)?$/;
+const PORTAL_LOGIN_REGEX = /^\/([a-z0-9-]+)\/(login|auth\/callback)$/;
 
 function matchesRoute(pathname: string, routes: string[]): boolean {
   return routes.some(route => {
