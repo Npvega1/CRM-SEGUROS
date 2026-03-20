@@ -1,6 +1,7 @@
 // =====================================================
 // MIDDLEWARE: Optimizado para evitar full reloads
 // Solo modifica cookies cuando es necesario
+// Incluye soporte para Portal del Cliente (M07)
 // =====================================================
 
 import { NextResponse, type NextRequest } from 'next/server';
@@ -38,6 +39,10 @@ const WEBHOOK_ROUTES = [
   '/api/webhooks/'
 ];
 
+// Regex para detectar rutas del portal: /[tenantSlug]/...
+const PORTAL_ROUTE_REGEX = /^\/([a-z0-9-]+)\/(login|dashboard|policies|claims|account|chat)(\/.*)?$/;
+const PORTAL_LOGIN_REGEX = /^\/([a-z0-9-]+)\/login$/;
+
 function matchesRoute(pathname: string, routes: string[]): boolean {
   return routes.some(route => {
     if (route.endsWith('/')) {
@@ -45,6 +50,14 @@ function matchesRoute(pathname: string, routes: string[]): boolean {
     }
     return pathname === route || pathname.startsWith(route + '/');
   });
+}
+
+function isPortalRoute(pathname: string): boolean {
+  return PORTAL_ROUTE_REGEX.test(pathname);
+}
+
+function isPortalLoginRoute(pathname: string): boolean {
+  return PORTAL_LOGIN_REGEX.test(pathname);
 }
 
 // =====================================================
@@ -66,6 +79,50 @@ export async function middleware(request: NextRequest) {
 
   // Rutas públicas: dejar pasar
   if (matchesRoute(pathname, PUBLIC_ROUTES)) {
+    return NextResponse.next();
+  }
+
+  // =====================================================
+  // PORTAL DEL CLIENTE (M07)
+  // Las rutas del portal tienen su propia autenticación
+  // =====================================================
+  if (isPortalRoute(pathname)) {
+    // Login del portal: siempre público
+    if (isPortalLoginRoute(pathname)) {
+      return NextResponse.next();
+    }
+
+    // Otras rutas del portal: verificar sesión de Supabase Auth
+    // La verificación del email vs client se hace en PortalContext
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.next();
+    }
+
+    const supabase = createServerClient(
+      supabaseUrl,
+      supabaseKey,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll() {},
+        },
+      }
+    );
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    // Sin sesión: redirigir al login del portal
+    if (!session) {
+      const tenantSlug = pathname.split('/')[1];
+      return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
+    }
+
+    // Con sesión: permitir acceso (PortalContext verificará el email)
     return NextResponse.next();
   }
 

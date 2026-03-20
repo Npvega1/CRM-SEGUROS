@@ -1,0 +1,214 @@
+'use client';
+
+// =====================================================
+// PÁGINA: Login del Portal
+// Módulo 07: Portal del Cliente
+// Magic Link OTP (MOCK por ahora)
+// =====================================================
+
+import { useState, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { createBrowserClient } from '@supabase/ssr';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PortalLoginSchema, type PortalLogin } from '@/lib/validations/portal';
+import { Mail, ArrowRight, CheckCircle2, AlertCircle, Building2 } from 'lucide-react';
+
+export default function PortalLoginPage() {
+  const params = useParams();
+  const router = useRouter();
+  const tenantSlug = params?.tenantSlug as string;
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isEmailSent, setIsEmailSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const supabase = useMemo(() => createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  ), []);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    getValues
+  } = useForm<PortalLogin>({
+    resolver: zodResolver(PortalLoginSchema)
+  });
+
+  const onSubmit = async (data: PortalLogin) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Verificar que el email pertenece a un cliente del tenant
+      const { data: clientData, error: clientError } = await supabase
+        .rpc('get_portal_client_by_email', {
+          p_tenant_slug: tenantSlug,
+          p_email: data.email
+        });
+
+      if (clientError) {
+        throw new Error('Error verificando tu cuenta');
+      }
+
+      if (!clientData || clientData.length === 0) {
+        setError('Este email no está registrado como cliente. Contacta a tu agente de seguros.');
+        setIsLoading(false);
+        return;
+      }
+
+      // ============================================
+      // MOCK: En producción, esto enviaría el magic link
+      // ============================================
+      // Simular envío de email (MOCK)
+      console.log('[MOCK] Enviando magic link a:', data.email);
+      console.log('[MOCK] Redirect URL:', `${window.location.origin}/${tenantSlug}/dashboard`);
+
+      // En producción, usar:
+      // const { error: authError } = await supabase.auth.signInWithOtp({
+      //   email: data.email,
+      //   options: {
+      //     emailRedirectTo: `${window.location.origin}/${tenantSlug}/dashboard`,
+      //   }
+      // });
+      // if (authError) throw authError;
+
+      // Simular éxito del envío
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setIsEmailSent(true);
+
+      // ============================================
+      // MOCK: Auto-login para desarrollo
+      // En producción, el usuario recibiría el email
+      // ============================================
+      // Para desarrollo, puedes descomentar esto para auto-login:
+      // router.push(`/${tenantSlug}/dashboard`);
+
+    } catch (e) {
+      console.error('Login error:', e);
+      setError(e instanceof Error ? e.message : 'Error al enviar el código');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Pantalla de confirmación después de enviar el email
+  if (isEmailSent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+        <Card className="w-full max-w-md shadow-xl border-0">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            </div>
+            <CardTitle className="text-2xl">¡Revisa tu email!</CardTitle>
+            <CardDescription className="mt-2">
+              Hemos enviado un enlace de acceso a
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="font-medium text-lg text-primary mb-6">
+              {getValues('email')}
+            </p>
+            <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800 mb-6">
+              <p className="mb-2">
+                <strong>Nota:</strong> El enlace expira en 1 hora.
+              </p>
+              <p>
+                Si no ves el email, revisa tu carpeta de spam.
+              </p>
+            </div>
+            
+            {/* MOCK Notice */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800 mb-6">
+              <p className="font-medium mb-1">⚠️ Modo de desarrollo (MOCK)</p>
+              <p>El envío de email está simulado. En producción, recibirás un email real.</p>
+            </div>
+
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setIsEmailSent(false)}
+              data-testid="portal-login-retry"
+            >
+              Usar otro email
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+      <Card className="w-full max-w-md shadow-xl border-0">
+        <CardHeader className="text-center pb-2">
+          <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+            <Building2 className="h-8 w-8 text-primary" />
+          </div>
+          <CardTitle className="text-2xl">Portal del Cliente</CardTitle>
+          <CardDescription className="mt-2">
+            Ingresa tu email para acceder a tu portal de seguros
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="tu@email.com"
+                  className="pl-10 h-12"
+                  {...register('email')}
+                  data-testid="portal-login-email"
+                />
+              </div>
+              {errors.email && (
+                <p className="text-sm text-red-600">{errors.email.message}</p>
+              )}
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full h-12 text-base"
+              disabled={isLoading}
+              data-testid="portal-login-submit"
+            >
+              {isLoading ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Enviando...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  Enviar código de acceso
+                  <ArrowRight className="h-5 w-5" />
+                </span>
+              )}
+            </Button>
+
+            <p className="text-xs text-center text-muted-foreground">
+              Te enviaremos un enlace seguro para iniciar sesión. No necesitas contraseña.
+            </p>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

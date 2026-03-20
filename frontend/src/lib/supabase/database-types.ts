@@ -81,6 +81,7 @@ export type Database = {
           agent_id: string | null;
           tags: string[];
           metadata: Json | null;
+          is_active: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -97,6 +98,7 @@ export type Database = {
           agent_id?: string | null;
           tags?: string[];
           metadata?: Json | null;
+          is_active?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -113,6 +115,7 @@ export type Database = {
           agent_id?: string | null;
           tags?: string[];
           metadata?: Json | null;
+          is_active?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -813,6 +816,174 @@ export type Database = {
           created_at?: string;
         };
       };
+      // Portal M07 Tables
+      tenant_settings: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          logo_url: string | null;
+          favicon_url: string | null;
+          primary_color: string;
+          secondary_color: string;
+          font_family: string;
+          font_size_base: number;
+          portal_enabled: boolean;
+          portal_welcome_message: string | null;
+          support_email: string | null;
+          support_phone: string | null;
+          settings: Record<string, unknown>;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          logo_url?: string | null;
+          favicon_url?: string | null;
+          primary_color?: string;
+          secondary_color?: string;
+          font_family?: string;
+          font_size_base?: number;
+          portal_enabled?: boolean;
+          portal_welcome_message?: string | null;
+          support_email?: string | null;
+          support_phone?: string | null;
+          settings?: Record<string, unknown>;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          logo_url?: string | null;
+          favicon_url?: string | null;
+          primary_color?: string;
+          secondary_color?: string;
+          font_family?: string;
+          font_size_base?: number;
+          portal_enabled?: boolean;
+          portal_welcome_message?: string | null;
+          support_email?: string | null;
+          support_phone?: string | null;
+          settings?: Record<string, unknown>;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      portal_sessions: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          client_id: string;
+          auth_user_id: string | null;
+          last_seen: string;
+          device_info: Record<string, unknown>;
+          ip_address: string | null;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          client_id: string;
+          auth_user_id?: string | null;
+          last_seen?: string;
+          device_info?: Record<string, unknown>;
+          ip_address?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          client_id?: string;
+          auth_user_id?: string | null;
+          last_seen?: string;
+          device_info?: Record<string, unknown>;
+          ip_address?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+      };
+      messages: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          client_id: string;
+          agent_id: string | null;
+          sender_role: 'client' | 'agent';
+          body: string;
+          is_read: boolean;
+          read_at: string | null;
+          sent_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          client_id: string;
+          agent_id?: string | null;
+          sender_role: 'client' | 'agent';
+          body: string;
+          is_read?: boolean;
+          read_at?: string | null;
+          sent_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          client_id?: string;
+          agent_id?: string | null;
+          sender_role?: 'client' | 'agent';
+          body?: string;
+          is_read?: boolean;
+          read_at?: string | null;
+          sent_at?: string;
+        };
+      };
+      client_requests: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          client_id: string;
+          type: 'new_claim' | 'info_request' | 'complaint';
+          status: 'open' | 'closed';
+          description: string;
+          policy_id: string | null;
+          claim_id: string | null;
+          assigned_agent_id: string | null;
+          resolved_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          client_id: string;
+          type: 'new_claim' | 'info_request' | 'complaint';
+          status?: 'open' | 'closed';
+          description: string;
+          policy_id?: string | null;
+          claim_id?: string | null;
+          assigned_agent_id?: string | null;
+          resolved_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          client_id?: string;
+          type?: 'new_claim' | 'info_request' | 'complaint';
+          status?: 'open' | 'closed';
+          description?: string;
+          policy_id?: string | null;
+          claim_id?: string | null;
+          assigned_agent_id?: string | null;
+          resolved_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
@@ -1062,6 +1233,55 @@ export type Database = {
         };
         Returns: number;
       };
+      // Portal M07 Functions
+      get_portal_client_by_email: {
+        Args: {
+          p_tenant_slug: string;
+          p_email: string;
+        };
+        Returns: {
+          client_id: string;
+          client_name: string;
+          tenant_id: string;
+          tenant_name: string;
+          agent_id: string | null;
+        }[];
+      };
+      get_portal_summary: {
+        Args: {
+          p_tenant_id: string;
+          p_client_id: string;
+        };
+        Returns: {
+          active_policies_count: number;
+          next_renewal: string | null;
+          active_claims_count: number;
+          pending_invoices_count: number;
+          unread_messages_count: number;
+        }[];
+      };
+      register_portal_session: {
+        Args: {
+          p_tenant_id: string;
+          p_client_id: string;
+          p_auth_user_id: string;
+          p_device_info?: Record<string, unknown>;
+        };
+        Returns: string;
+      };
+      update_portal_session_activity: {
+        Args: {
+          p_auth_user_id: string;
+        };
+        Returns: void;
+      };
+      is_agent_online: {
+        Args: {
+          p_tenant_id: string;
+          p_agent_id: string;
+        };
+        Returns: boolean;
+      };
     };
     Enums: {
       user_role: 'superadmin' | 'admin' | 'senior_agent' | 'agent' | 'readonly';
@@ -1079,6 +1299,10 @@ export type Database = {
       automation_action_type: 'send_email' | 'create_task' | 'in_app_notification' | 'move_pipeline_stage';
       automation_queue_status: 'pending' | 'processing' | 'done' | 'error';
       automation_log_status: 'success' | 'error';
+      // Portal M07 Enums
+      message_sender_role: 'client' | 'agent';
+      client_request_type: 'new_claim' | 'info_request' | 'complaint';
+      client_request_status: 'open' | 'closed';
     };
   };
 };

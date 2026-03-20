@@ -1,110 +1,110 @@
-# PRD - CRM Multi-tenant para Agencias de Seguros
+# CRM Multi-tenant para Agencias de Seguros - PRD
 
-## Problema Original
-Desarrollo del Módulo 05 (Facturación y Comisiones) para un CRM multi-tenant de agencias de seguros.
-
-## Stack Tecnológico
-- **Frontend:** Next.js 14, TypeScript, Tailwind CSS, Shadcn/UI
-- **Backend:** Supabase (PostgreSQL + RLS)
-- **Validaciones:** Zod
-- **Exports:** XLSX (sheetjs)
+## Información del Proyecto
+- **Stack**: Next.js 14, Supabase, TypeScript, Tailwind CSS, Shadcn/UI
+- **Repositorio**: https://github.com/Npvega1/CRM-SEGUROS
+- **Rama actual**: modulo06 (con M07 implementado)
 
 ## Arquitectura
-- Multi-tenant con RLS basado en `tenant_id` del JWT (`app_metadata`)
-- Supabase Client directo (`getBrowserClient()`) - NO Server Actions ni API Routes
-- Despliegue en Vercel (rama modulo04 → modulo05)
-
-## Personas de Usuario
-1. **Admin:** Gestión completa de facturación y comisiones
-2. **Senior Agent:** Puede registrar pagos y marcar comisiones cobradas
-3. **Agent:** Visualización de cuotas y comisiones propias
-4. **Readonly:** Solo lectura
+- Multi-tenant con RLS en Supabase
+- tenant_id extraído del JWT: `(auth.jwt() -> 'app_metadata' ->> 'tenant_id')::uuid`
+- Sin Server Actions, usa Supabase Client directo (getBrowserClient())
+- Triggers PostgreSQL usan `auth.uid()` NO `auth.user_id()`
 
 ## Módulos Implementados
 
-### ✅ Módulo 00 - Fundación
-- Base del proyecto, autenticación, multi-tenancy
+### [✓] Módulo 00 - Fundación
+- Configuración base del proyecto
+- Autenticación Supabase
+- Layout del tenant
 
-### ✅ Módulo 01 - Clientes y Pólizas
-- CRUD de clientes y pólizas
-- Storage para documentos
+### [✓] Módulo 01 - Clientes y Pólizas
+- CRUD de clientes
+- Gestión de pólizas
+- Documentos de pólizas
 
-### ✅ Módulo 02 - Pipeline de Ventas
-- Oportunidades, etapas, actividades
+### [✓] Módulo 02 - Pipeline de Ventas
+- Etapas de pipeline
+- Gestión de oportunidades
+- Actividades
 
-### ✅ Módulo 03 - Siniestros
-- Gestión de reclamos/siniestros
+### [✓] Módulo 03 - Siniestros
+- Gestión de claims
+- Historial de estados
+- Documentos de siniestros
 
-### ✅ Módulo 04 - Reportes
-- Dashboard con métricas y gráficos
+### [✓] Módulo 04 - Reportes y Analytics
+- Dashboard ejecutivo
+- Reportes con funciones SQL SECURITY DEFINER
 
-### ✅ Módulo 05 - Facturación y Comisiones (NUEVO - 19/03/2026)
-**Migración SQL (`00005_billing.sql`):**
-- Campo `frequency` agregado a `policies`
-- Tabla `invoices` (cuotas por cobrar)
-- Tabla `commission_rates` (tasas de comisión)
-- Tabla `commissions` (comisiones generadas)
-- Tabla `commission_splits` (división de comisiones)
-- Función `generate_installments()` - genera cuotas automáticamente
-- Función `calculate_policy_commission()` - calcula comisión al activar póliza
-- Trigger `on_policy_activated` - ejecuta funciones al activar póliza
-- Función `process_overdue_invoices()` - marca cuotas vencidas (cron manual)
-- RLS en todas las tablas
+### [✓] Módulo 05 - Facturación y Comisiones
+- Invoices y cuotas
+- Comisiones por póliza
+- Tasas por aseguradora
 
-**Componentes UI:**
-- `BillingPage` - Página principal con tabs
-- `InvoicesList` - Lista de cuotas con filtros y paginación
-- `PaymentModal` - Modal para registrar pagos
-- `CommissionsPanel` - Panel de comisiones con exportación XLSX
-- `CommissionRatesConfig` - Configuración de tasas CRUD
+### [✓] Módulo 06 - Automatizaciones y Workflows
+- Sistema de automatizaciones
+- Cola de procesamiento
+- Notificaciones in-app
+- Email MOCK (sin servicio real)
 
-**Validaciones Zod:**
-- Schemas para invoices, commissions, commission_rates
-- Helpers para formateo de moneda, fechas, períodos
+### [✓] Módulo 07 - Portal del Cliente (NUEVO - Implementado Enero 2026)
+**Archivos creados:**
+- `supabase/migrations/00007_portal.sql` - Migración con tablas y funciones
+- `src/lib/validations/portal.ts` - Schemas Zod y tipos
+- `src/lib/context/PortalContext.tsx` - Contexto del portal
+- `src/app/(portal)/[tenantSlug]/layout.tsx` - Layout white-label
+- `src/app/(portal)/[tenantSlug]/login/page.tsx` - Magic Link (MOCK)
+- `src/app/(portal)/[tenantSlug]/dashboard/page.tsx` - Dashboard cliente
+- `src/app/(portal)/[tenantSlug]/policies/page.tsx` - Lista pólizas
+- `src/app/(portal)/[tenantSlug]/claims/page.tsx` - Lista siniestros
+- `src/app/(portal)/[tenantSlug]/claims/new/page.tsx` - Reportar siniestro
+- `src/app/(portal)/[tenantSlug]/account/page.tsx` - Estado de cuenta
+- `src/app/(portal)/[tenantSlug]/chat/page.tsx` - Chat con agente
+- `src/app/(portal)/[tenantSlug]/manifest.webmanifest/route.ts` - PWA básico
 
-## Backlog Pendiente
+**Tablas SQL creadas:**
+- `tenant_settings` - Configuración visual del tenant (placeholder M08)
+- `portal_sessions` - Sesiones de clientes
+- `messages` - Chat cliente-agente
+- `client_requests` - Solicitudes del cliente
 
-### P0 - Crítico
-- [ ] Ejecutar migración SQL en Supabase
-- [ ] Crear bucket `invoice-documents` en Supabase Storage
-- [ ] Configurar políticas de Storage para el bucket
+**Funciones SQL creadas:**
+- `get_portal_client_by_email()` - Verificar cliente por email
+- `get_portal_summary()` - Resumen del portal
+- `register_portal_session()` - Registrar sesión
+- `update_portal_session_activity()` - Actualizar actividad
+- `is_agent_online()` - Verificar agente en línea
 
-### P1 - Módulos Siguientes
-- [ ] Módulo 06 - Automatizaciones
-- [ ] Módulo 07 - Portal del Cliente
+**Notas:**
+- Magic Link OTP está como MOCK (sin envío real de email)
+- PWA solo incluye manifest básico (sin service worker completo)
+- Chat usa Supabase Realtime
+- White-label inyecta CSS variables dinámicamente
+
+## Módulos Pendientes
 - [ ] Módulo 08 - Configuración Visual
+- [ ] Módulo 09 - Comparativos con IA
+- [ ] Módulo 10 - Planes y Pagos
+- [ ] Módulo 11 - Super Admin
 
-### P2 - Mejoras Pendientes
-- [ ] Pólizas: permitir múltiples documentos
-- [ ] Clientes: más opciones de detalle
-- [ ] Exportación PDF (esperar M08)
-- [ ] Notificaciones de vencimiento automáticas
+## Backlog de Mejoras (P2/P3)
+- Facturación: trigger automático de cuotas no funciona
+- Facturación: fecha de vencimiento de cuotas incorrecta
+- Facturación: agregar 25 días de gracia
+- Pólizas: agregar más campos de información
+- Clientes: contador de pólizas muestra 0
+- Integrar servicio de email real (Resend o SendGrid)
+- Portal: Implementar Magic Link OTP real
+- Portal: Service worker completo para PWA
 
-## Instrucciones de Despliegue
-
-### 1. Ejecutar Migración SQL
-```sql
--- En Supabase SQL Editor, ejecutar el contenido de:
--- supabase/migrations/00005_billing.sql
+## Configuración Requerida
+Variables de entorno necesarias en `.env`:
 ```
-
-### 2. Crear Bucket de Storage
-```
-1. Ir a Supabase Dashboard → Storage
-2. Crear bucket "invoice-documents" (privado)
-3. Ejecutar políticas de Storage del SQL
-```
-
-### 3. Desplegar en Vercel
-```bash
-git checkout modulo04
-git checkout -b modulo05
-git add .
-git commit -m "feat(M05): Módulo de Facturación y Comisiones"
-git push origin modulo05
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
 ## Última Actualización
-- **Fecha:** 19 de Marzo de 2026
-- **Módulo:** 05 - Facturación y Comisiones
-- **Estado:** Código completo, pendiente despliegue
+- Fecha: Enero 2026
+- Sesión: Implementación Módulo 07 - Portal del Cliente
