@@ -120,8 +120,9 @@ export default function PortalPoliciesPage() {
 
   // Descargar documento con signed URL
   const handleDownload = useCallback(async (policy: Policy) => {
-    // Verificar que existe documento
-    if (!policy.document_url) {
+    // Guard obligatorio - verificar que existe documento y no está vacío
+    if (!policy.document_url || policy.document_url.trim() === '') {
+      console.log('[handleDownload] Guard: document_url vacío o null');
       toast({
         title: "Sin documento",
         description: "Esta póliza no tiene documento adjunto.",
@@ -129,6 +130,8 @@ export default function PortalPoliciesPage() {
       });
       return;
     }
+    
+    console.log('[handleDownload] Descargando:', policy.document_url);
 
     setDownloadingId(policy.id);
 
@@ -277,7 +280,12 @@ interface PolicyCardProps {
 function PolicyCard({ policy, onDownload, isDownloading }: PolicyCardProps) {
   const daysToExpiry = policy.end_date ? daysUntil(policy.end_date) : null;
   const isExpiringSoon = daysToExpiry !== null && daysToExpiry <= 30 && daysToExpiry > 0;
-  const hasDocument = !!policy.document_url;
+  
+  // Verificar que document_url existe y no está vacío
+  const hasDocument = Boolean(policy.document_url && policy.document_url.trim() !== '');
+  
+  // Debug temporal - remover después
+  console.log(`[PolicyCard] ${policy.policy_number} - document_url:`, policy.document_url, '- hasDocument:', hasDocument);
 
   return (
     <Card 
