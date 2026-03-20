@@ -10,10 +10,12 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { usePortal } from '@/lib/context/PortalContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useToast } from '@/hooks/use-toast';
 import { formatPortalDate, formatPortalCurrency, daysUntil } from '@/lib/validations/portal';
 import {
   FileText,
@@ -23,7 +25,7 @@ import {
   DollarSign,
   Building2,
   AlertCircle,
-  ChevronRight
+  FileX
 } from 'lucide-react';
 
 // Tipos
@@ -81,6 +83,7 @@ export default function PortalPoliciesPage() {
   const params = useParams();
   const tenantSlug = params?.tenantSlug as string;
   const { client } = usePortal();
+  const { toast } = useToast();
 
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,34 +121,65 @@ export default function PortalPoliciesPage() {
 
   // Descargar documento con signed URL
   const handleDownload = useCallback(async (policy: Policy) => {
-    if (!policy.document_url) return;
+    // Verificar que existe documento
+    if (!policy.document_url) {
+      toast({
+        title: "Sin documento",
+        description: "Esta póliza no tiene documento adjunto.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     setDownloadingId(policy.id);
 
     try {
       // Extraer el path del documento desde la URL
-      const urlParts = policy.document_url.split('/');
-      const bucketAndPath = urlParts.slice(urlParts.indexOf('policy-documents')).join('/');
-      const filePath = bucketAndPath.replace('policy-documents/', '');
+      let filePath = policy.document_url;
+      
+      // Si es una URL completa, extraer solo el path
+      if (policy.document_url.includes('policy-documents')) {
+        const urlParts = policy.document_url.split('/');
+        const bucketIndex = urlParts.indexOf('policy-documents');
+        if (bucketIndex !== -1) {
+          filePath = urlParts.slice(bucketIndex + 1).join('/');
+        }
+      }
 
       // Generar signed URL con expiración de 1 hora
       const { data, error } = await supabase.storage
         .from('policy-documents')
-        .createSignedUrl(filePath, 3600); // 1 hora
+        .createSignedUrl(filePath, 3600);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Storage error:', error);
+        toast({
+          title: "Error al descargar",
+          description: "No se pudo descargar el documento. Contacta a tu asesor.",
+          variant: "destructive"
+        });
+        return;
+      }
 
       // Abrir en nueva pestaña
       if (data?.signedUrl) {
         window.open(data.signedUrl, '_blank');
+        toast({
+          title: "Descarga iniciada",
+          description: "El documento se abrirá en una nueva pestaña.",
+        });
       }
     } catch (e) {
       console.error('Error downloading document:', e);
-      alert('Error al descargar el documento. Intenta de nuevo.');
+      toast({
+        title: "Error al descargar",
+        description: "No se pudo descargar el documento. Contacta a tu asesor.",
+        variant: "destructive"
+      });
     } finally {
       setDownloadingId(null);
     }
-  }, [supabase]);
+  }, [supabase, toast]);
 
   // Agrupar pólizas por estado
   const activePolicies = policies.filter(p => p.status === 'activa');
@@ -165,69 +199,71 @@ export default function PortalPoliciesPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6" data-testid="portal-policies">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Mis Pólizas</h1>
-        <p className="text-muted-foreground">
-          Consulta el detalle y documentos de tus pólizas de seguros
-        </p>
-      </div>
+    <TooltipProvider>
+      <div className="max-w-4xl mx-auto space-y-6" data-testid="portal-policies">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Mis Pólizas</h1>
+          <p className="text-muted-foreground">
+            Consulta el detalle y documentos de tus pólizas de seguros
+          </p>
+        </div>
 
-      {/* Sin pólizas */}
-      {policies.length === 0 && (
-        <Card>
-          <CardContent className="pt-12 pb-12 text-center">
-            <div className="mx-auto h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-              <FileText className="h-8 w-8 text-gray-400" />
+        {/* Sin pólizas */}
+        {policies.length === 0 && (
+          <Card>
+            <CardContent className="pt-12 pb-12 text-center">
+              <div className="mx-auto h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <FileText className="h-8 w-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900">No tienes pólizas registradas</h3>
+              <p className="text-muted-foreground mt-1">
+                Contacta a tu agente para contratar tu primer seguro.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Pólizas activas */}
+        {activePolicies.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Shield className="h-5 w-5 text-green-600" />
+              Pólizas Activas ({activePolicies.length})
+            </h2>
+            <div className="grid gap-4">
+              {activePolicies.map(policy => (
+                <PolicyCard 
+                  key={policy.id} 
+                  policy={policy} 
+                  onDownload={handleDownload}
+                  isDownloading={downloadingId === policy.id}
+                />
+              ))}
             </div>
-            <h3 className="text-lg font-medium text-gray-900">No tienes pólizas registradas</h3>
-            <p className="text-muted-foreground mt-1">
-              Contacta a tu agente para contratar tu primer seguro.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Pólizas activas */}
-      {activePolicies.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Shield className="h-5 w-5 text-green-600" />
-            Pólizas Activas ({activePolicies.length})
-          </h2>
-          <div className="grid gap-4">
-            {activePolicies.map(policy => (
-              <PolicyCard 
-                key={policy.id} 
-                policy={policy} 
-                onDownload={handleDownload}
-                isDownloading={downloadingId === policy.id}
-              />
-            ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Otras pólizas */}
-      {otherPolicies.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-500">
-            Otras Pólizas ({otherPolicies.length})
-          </h2>
-          <div className="grid gap-4">
-            {otherPolicies.map(policy => (
-              <PolicyCard 
-                key={policy.id} 
-                policy={policy} 
-                onDownload={handleDownload}
-                isDownloading={downloadingId === policy.id}
-              />
-            ))}
+        {/* Otras pólizas */}
+        {otherPolicies.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-gray-500">
+              Otras Pólizas ({otherPolicies.length})
+            </h2>
+            <div className="grid gap-4">
+              {otherPolicies.map(policy => (
+                <PolicyCard 
+                  key={policy.id} 
+                  policy={policy} 
+                  onDownload={handleDownload}
+                  isDownloading={downloadingId === policy.id}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -244,6 +280,7 @@ interface PolicyCardProps {
 function PolicyCard({ policy, onDownload, isDownloading }: PolicyCardProps) {
   const daysToExpiry = policy.end_date ? daysUntil(policy.end_date) : null;
   const isExpiringSoon = daysToExpiry !== null && daysToExpiry <= 30 && daysToExpiry > 0;
+  const hasDocument = !!policy.document_url;
 
   return (
     <Card 
@@ -326,7 +363,7 @@ function PolicyCard({ policy, onDownload, isDownloading }: PolicyCardProps) {
 
           {/* Acciones */}
           <div className="flex lg:flex-col gap-2 lg:items-end">
-            {policy.document_url && (
+            {hasDocument ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -341,6 +378,24 @@ function PolicyCard({ policy, onDownload, isDownloading }: PolicyCardProps) {
                 )}
                 Descargar
               </Button>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled
+                    className="opacity-50 cursor-not-allowed"
+                    data-testid={`download-policy-${policy.id}-disabled`}
+                  >
+                    <FileX className="h-4 w-4 mr-1" />
+                    Sin documento
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Esta póliza no tiene documento adjunto</p>
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         </div>
