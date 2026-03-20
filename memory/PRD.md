@@ -62,6 +62,8 @@
 - `src/app/(portal)/[tenantSlug]/account/page.tsx` - Estado de cuenta
 - `src/app/(portal)/[tenantSlug]/chat/page.tsx` - Chat con agente
 - `src/app/(portal)/[tenantSlug]/manifest.webmanifest/route.ts` - PWA básico
+- `src/app/(tenant)/mensajes/page.tsx` - Chat de agentes con clientes (CRM Admin)
+- `src/components/ui/UnreadMessagesBadge.tsx` - Badge mensajes no leídos
 
 **Tablas SQL creadas:**
 - `tenant_settings` - Configuración visual del tenant (placeholder M08)
@@ -79,8 +81,13 @@
 **Notas:**
 - Magic Link OTP está como MOCK (sin envío real de email)
 - PWA solo incluye manifest básico (sin service worker completo)
-- Chat usa Supabase Realtime
+- Chat usa polling cada 10 segundos (NO Supabase Realtime)
 - White-label inyecta CSS variables dinámicamente
+- Interfaz de mensajes para agentes con:
+  - Lista de conversaciones
+  - Chat en tiempo real (polling 10s)
+  - Diferenciación visual agente/cliente
+  - Badge de mensajes no leídos en sidebar
 
 ## Módulos Pendientes
 - [ ] Módulo 08 - Configuración Visual
@@ -106,5 +113,5 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
 ## Última Actualización
-- Fecha: Enero 2026
-- Sesión: Implementación Módulo 07 - Portal del Cliente
+- Fecha: Diciembre 2025
+- Sesión: Completado chat de agentes y badge de mensajes no leídos (M07)

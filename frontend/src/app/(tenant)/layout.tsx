@@ -25,9 +25,11 @@ import {
   X,
   Building2,
   ChevronRight,
-  Zap
+  Zap,
+  MessageSquare
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui/NotificationBell';
+import { UnreadMessagesBadge } from '@/components/ui/UnreadMessagesBadge';
 
 interface NavItem {
   title: string;
@@ -42,6 +44,7 @@ const navItems: NavItem[] = [
   { title: 'Pólizas', href: '/polizas', icon: FileText },
   { title: 'Pipeline', href: '/pipeline', icon: TrendingUp },
   { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle },
+  { title: 'Mensajes', href: '/mensajes', icon: MessageSquare },
   { title: 'Facturación', href: '/billing', icon: Receipt },
   { title: 'Automatizaciones', href: '/automations', icon: Zap },
   { title: 'Reportes', href: '/reports', icon: BarChart3 },
@@ -102,12 +105,13 @@ export default function TenantLayout({
               >
                 <item.icon className="h-5 w-5 flex-shrink-0" />
                 <span>{item.title}</span>
+                {item.href === '/mensajes' && <UnreadMessagesBadge className="ml-auto" />}
                 {item.badge && (
                   <span className="ml-auto text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                     {item.badge}
                   </span>
                 )}
-                {isActive && <ChevronRight className="ml-auto h-4 w-4" />}
+                {isActive && !item.badge && item.href !== '/mensajes' && <ChevronRight className="ml-auto h-4 w-4" />}
               </Link>
             );
           })}
@@ -208,6 +212,7 @@ export default function TenantLayout({
               >
                 <item.icon className="h-5 w-5" />
                 <span>{item.title}</span>
+                {item.href === '/mensajes' && <UnreadMessagesBadge className="ml-auto" />}
               </Link>
             );
           })}
