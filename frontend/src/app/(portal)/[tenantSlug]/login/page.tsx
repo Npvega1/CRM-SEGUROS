@@ -102,22 +102,22 @@ export default function PortalLoginPage() {
       }
 
       // ============================================
-      // MOCK: En producción, esto enviaría el magic link
+      // MAGIC LINK REAL
       // ============================================
-      console.log('[MOCK] Enviando magic link a:', email);
-      console.log('[MOCK] Redirect URL:', `${window.location.origin}/${tenantSlug}/dashboard`);
+      const { error: authError } = await supabase.auth.signInWithOtp({
+        email: email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/${tenantSlug}/dashboard`,
+        }
+      });
+      
+      if (authError) {
+        console.error('Auth error:', authError);
+        setError('Error al enviar el código. Intenta de nuevo.');
+        setIsLoading(false);
+        return;
+      }
 
-      // En producción, usar:
-      // const { error: authError } = await supabase.auth.signInWithOtp({
-      //   email: email,
-      //   options: {
-      //     emailRedirectTo: `${window.location.origin}/${tenantSlug}/dashboard`,
-      //   }
-      // });
-      // if (authError) throw authError;
-
-      // Simular éxito del envío
-      await new Promise(resolve => setTimeout(resolve, 1000));
       setIsEmailSent(true);
 
     } catch (e) {
@@ -156,9 +156,9 @@ export default function PortalLoginPage() {
             </div>
             
             {/* MOCK Notice */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800 mb-6">
-              <p className="font-medium mb-1">⚠️ Modo de desarrollo (MOCK)</p>
-              <p>El envío de email está simulado. En producción, recibirás un email real.</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 mb-6">
+              <p className="font-medium mb-1">📧 Email enviado</p>
+              <p>Revisa tu bandeja de entrada y haz clic en el enlace para acceder.</p>
             </div>
 
             <Button
