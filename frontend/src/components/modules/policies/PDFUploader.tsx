@@ -75,8 +75,8 @@ export function PDFUploader({
   };
 
   const handleUpload = async () => {
-    if (!file || !tenantId) {
-      setError('No hay archivo o sesión de tenant');
+    if (!file) {
+      setError('No hay archivo seleccionado');
       return;
     }
 
@@ -91,12 +91,29 @@ export function PDFUploader({
     try {
       const supabase = getBrowserClient();
       
-      // Generar path único
+      // Obtener tenant_id directamente del JWT para asegurar consistencia
+      const { data: { user } } = await supabase.auth.getUser();
+      const jwtTenantId = user?.app_metadata?.tenant_id;
+      
+      console.log('PDFUploader - JWT tenant_id:', jwtTenantId);
+      console.log('PDFUploader - Context tenantId:', tenantId);
+      
+      // Usar el tenant_id del JWT (más confiable)
+      const effectiveTenantId = jwtTenantId || tenantId;
+      
+      if (!effectiveTenantId) {
+        clearInterval(progressInterval);
+        setError('No se pudo obtener el tenant_id. Recarga la página.');
+        setIsUploading(false);
+        return;
+      }
+      
+      // Generar path único usando el tenant_id del JWT
       const timestamp = Date.now();
       const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const path = `${tenantId}/policies/${policyId}/${timestamp}_${safeName}`;
+      const path = `${effectiveTenantId}/policies/${policyId}/${timestamp}_${safeName}`;
 
-      console.log('Uploading to path:', path);
+      console.log('PDFUploader - Uploading to path:', path);
 
       // Subir a storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -118,26 +135,20 @@ export function PDFUploader({
       console.log('Upload successful:', uploadData);
       setUploadProgress(100);
 
-      // Obtener URL
-      const { data: urlData } = supabase.storage
-        .from('policy-documents')
-        .getPublicUrl(path);
-
-      // Actualizar póliza con la URL del documento (guardar el path, no la URL pública)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase as any)
+      // Actualizar póliza con el path del documento
+      const { error: updateError } = await supabase
         .from('policies')
         .update({ document_url: path })
-        .eq('id', policyId)
-        .eq('tenant_id', tenantId);
+        .eq('id', policyId);
 
       if (updateError) {
         console.error('Error updating policy:', updateError);
-        // No es error crítico, el archivo ya se subió
+        setError('Archivo subido pero no se pudo actualizar la póliza');
+      } else {
+        console.log('Policy updated with document_url:', path);
+        setSuccess(true);
+        onUploadComplete?.(path);
       }
-
-      setSuccess(true);
-      onUploadComplete?.(urlData.publicUrl || path);
     } catch (err) {
       clearInterval(progressInterval);
       console.error('Upload exception:', err);
