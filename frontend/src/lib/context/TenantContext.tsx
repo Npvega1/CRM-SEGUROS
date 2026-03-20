@@ -156,26 +156,17 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       // Cargar datos adicionales solo si hay tenantId
       if (tenantId) {
         try {
-          // Cargar datos de usuario y tenant en paralelo
-          const [userResult, tenantResult] = await Promise.all([
-            supabase
-              .from('users')
-              .select('full_name, email, role')
-              .eq('id', user.id)
-              .maybeSingle(),
-            supabase
-              .from('tenants')
-              .select('name, slug')
-              .eq('id', tenantId)
-              .maybeSingle()
-          ]);
+          // Cargar datos del tenant (no consultamos users para evitar problemas de permisos)
+          const tenantResult = await supabase
+            .from('tenants')
+            .select('name, slug')
+            .eq('id', tenantId)
+            .maybeSingle();
 
-          if (userResult.data) {
-            const userData = userResult.data as { full_name?: string; email?: string; role?: Role };
-            userFullName = userData.full_name || userFullName;
-            userEmail = userData.email || userEmail;
-            finalRole = userData.role || role;
-          }
+          // Usar datos del JWT para el usuario
+          userFullName = user.user_metadata?.full_name || userEmail.split('@')[0] || '';
+          userEmail = user.email || '';
+          finalRole = role;
 
           if (tenantResult.data) {
             const tenantData = tenantResult.data as { name?: string; slug?: string };
