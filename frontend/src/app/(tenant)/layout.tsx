@@ -24,8 +24,10 @@ import {
   Menu,
   X,
   Building2,
-  ChevronRight
+  ChevronRight,
+  Zap
 } from 'lucide-react';
+import { NotificationBell } from '@/components/ui/NotificationBell';
 
 interface NavItem {
   title: string;
@@ -41,6 +43,7 @@ const navItems: NavItem[] = [
   { title: 'Pipeline', href: '/pipeline', icon: TrendingUp },
   { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle },
   { title: 'Facturación', href: '/billing', icon: Receipt },
+  { title: 'Automatizaciones', href: '/automations', icon: Zap },
   { title: 'Reportes', href: '/reports', icon: BarChart3 },
 ];
 
@@ -78,6 +81,7 @@ export default function TenantLayout({
             <p className="font-semibold text-sm truncate">{tenantName || 'CRM Seguros'}</p>
             <p className="text-xs text-muted-foreground truncate">{role}</p>
           </div>
+          <NotificationBell />
         </div>
 
         {/* Navigation */}
@@ -152,6 +156,7 @@ export default function TenantLayout({
               <span className="font-semibold text-sm">{tenantName || 'CRM'}</span>
             </div>
           </div>
+          <NotificationBell />
         </div>
       </div>
 

@@ -606,6 +606,213 @@ export type Database = {
           created_at?: string;
         };
       };
+      automations: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          description: string | null;
+          is_active: boolean;
+          trigger_event: 'policy.expiring' | 'policy.activated' | 'invoice.overdue' | 'claim.created' | 'claim.status_changed' | 'opportunity.stage_changed' | 'client.created';
+          conditions: Record<string, unknown>[];
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          name: string;
+          description?: string | null;
+          is_active?: boolean;
+          trigger_event: 'policy.expiring' | 'policy.activated' | 'invoice.overdue' | 'claim.created' | 'claim.status_changed' | 'opportunity.stage_changed' | 'client.created';
+          conditions?: Record<string, unknown>[];
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          name?: string;
+          description?: string | null;
+          is_active?: boolean;
+          trigger_event?: 'policy.expiring' | 'policy.activated' | 'invoice.overdue' | 'claim.created' | 'claim.status_changed' | 'opportunity.stage_changed' | 'client.created';
+          conditions?: Record<string, unknown>[];
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      automation_actions: {
+        Row: {
+          id: string;
+          automation_id: string;
+          action_type: 'send_email' | 'create_task' | 'in_app_notification' | 'move_pipeline_stage';
+          action_config: Record<string, unknown>;
+          order_index: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          automation_id: string;
+          action_type: 'send_email' | 'create_task' | 'in_app_notification' | 'move_pipeline_stage';
+          action_config?: Record<string, unknown>;
+          order_index?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          automation_id?: string;
+          action_type?: 'send_email' | 'create_task' | 'in_app_notification' | 'move_pipeline_stage';
+          action_config?: Record<string, unknown>;
+          order_index?: number;
+          created_at?: string;
+        };
+      };
+      automation_queue_v2: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          automation_id: string | null;
+          trigger_event: 'policy.expiring' | 'policy.activated' | 'invoice.overdue' | 'claim.created' | 'claim.status_changed' | 'opportunity.stage_changed' | 'client.created';
+          entity_id: string;
+          payload: Record<string, unknown>;
+          status: 'pending' | 'processing' | 'done' | 'error';
+          error_msg: string | null;
+          created_at: string;
+          processed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          automation_id?: string | null;
+          trigger_event: 'policy.expiring' | 'policy.activated' | 'invoice.overdue' | 'claim.created' | 'claim.status_changed' | 'opportunity.stage_changed' | 'client.created';
+          entity_id: string;
+          payload?: Record<string, unknown>;
+          status?: 'pending' | 'processing' | 'done' | 'error';
+          error_msg?: string | null;
+          created_at?: string;
+          processed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          automation_id?: string | null;
+          trigger_event?: 'policy.expiring' | 'policy.activated' | 'invoice.overdue' | 'claim.created' | 'claim.status_changed' | 'opportunity.stage_changed' | 'client.created';
+          entity_id?: string;
+          payload?: Record<string, unknown>;
+          status?: 'pending' | 'processing' | 'done' | 'error';
+          error_msg?: string | null;
+          created_at?: string;
+          processed_at?: string | null;
+        };
+      };
+      automation_logs_v2: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          automation_id: string | null;
+          queue_id: string | null;
+          action_id: string | null;
+          status: 'success' | 'error';
+          response: Record<string, unknown> | null;
+          error_msg: string | null;
+          executed_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          automation_id?: string | null;
+          queue_id?: string | null;
+          action_id?: string | null;
+          status: 'success' | 'error';
+          response?: Record<string, unknown> | null;
+          error_msg?: string | null;
+          executed_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          automation_id?: string | null;
+          queue_id?: string | null;
+          action_id?: string | null;
+          status?: 'success' | 'error';
+          response?: Record<string, unknown> | null;
+          error_msg?: string | null;
+          executed_at?: string;
+        };
+      };
+      email_templates: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          subject: string;
+          html_body: string;
+          is_active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          name: string;
+          subject: string;
+          html_body: string;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          name?: string;
+          subject?: string;
+          html_body?: string;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      notifications: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          user_id: string;
+          title: string;
+          body: string | null;
+          is_read: boolean;
+          entity_type: string | null;
+          entity_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          user_id: string;
+          title: string;
+          body?: string | null;
+          is_read?: boolean;
+          entity_type?: string | null;
+          entity_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          user_id?: string;
+          title?: string;
+          body?: string | null;
+          is_read?: boolean;
+          entity_type?: string | null;
+          entity_id?: string | null;
+          created_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
@@ -822,6 +1029,39 @@ export type Database = {
           count_void: number;
         }[];
       };
+      get_automations_with_stats: {
+        Args: {
+          p_tenant_id: string;
+        };
+        Returns: {
+          id: string;
+          name: string;
+          description: string | null;
+          is_active: boolean;
+          trigger_event: string;
+          conditions: Record<string, unknown>[];
+          created_at: string;
+          updated_at: string;
+          actions_count: number;
+          last_execution_at: string | null;
+          last_execution_status: string | null;
+          total_executions: number;
+          successful_executions: number;
+          failed_executions: number;
+        }[];
+      };
+      get_unread_notifications_count: {
+        Args: {
+          p_user_id: string;
+        };
+        Returns: number;
+      };
+      mark_all_notifications_read: {
+        Args: {
+          p_user_id: string;
+        };
+        Returns: number;
+      };
     };
     Enums: {
       user_role: 'superadmin' | 'admin' | 'senior_agent' | 'agent' | 'readonly';
@@ -835,6 +1075,10 @@ export type Database = {
       invoice_status: 'pending' | 'paid' | 'overdue' | 'waived';
       payment_frequency: 'monthly' | 'quarterly' | 'semiannual' | 'annual';
       commission_status: 'pending' | 'collected' | 'void';
+      automation_trigger_event: 'policy.expiring' | 'policy.activated' | 'invoice.overdue' | 'claim.created' | 'claim.status_changed' | 'opportunity.stage_changed' | 'client.created';
+      automation_action_type: 'send_email' | 'create_task' | 'in_app_notification' | 'move_pipeline_stage';
+      automation_queue_status: 'pending' | 'processing' | 'done' | 'error';
+      automation_log_status: 'success' | 'error';
     };
   };
 };
