@@ -10,22 +10,11 @@
 import { useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PortalLoginSchema, type PortalLogin } from '@/lib/validations/portal';
 import { Mail, ArrowRight, CheckCircle2, AlertCircle, Building2, KeyRound } from 'lucide-react';
-
-// Schema extendido para modo desarrollo
-const DevLoginSchema = z.object({
-  email: z.string().email('Ingresa un email válido'),
-  password: z.string().min(1, 'Ingresa tu contraseña')
-});
-type DevLogin = z.infer<typeof DevLoginSchema>;
 
 export default function PortalLoginPage() {
   const params = useParams();
@@ -35,23 +24,42 @@ export default function PortalLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isEmailSent, setIsEmailSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [devMode, setDevMode] = useState(false); // Modo desarrollo con contraseña
+  const [devMode, setDevMode] = useState(false);
+  
+  // Form state
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const supabase = useMemo(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   ), []);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    getValues
-  } = useForm<DevLogin>({
-    resolver: zodResolver(devMode ? DevLoginSchema : PortalLoginSchema)
-  });
+  const validateForm = (): boolean => {
+    let isValid = true;
+    setEmailError(null);
+    setPasswordError(null);
 
-  const onSubmit = async (data: DevLogin) => {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailError('Ingresa un email válido');
+      isValid = false;
+    }
+
+    if (devMode && !password) {
+      setPasswordError('Ingresa tu contraseña');
+      isValid = false;
+    }
+
+    return isValid;
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) return;
+
     setIsLoading(true);
     setError(null);
 
@@ -60,7 +68,7 @@ export default function PortalLoginPage() {
       const { data: clientData, error: clientError } = await supabase
         .rpc('get_portal_client_by_email', {
           p_tenant_slug: tenantSlug,
-          p_email: data.email
+          p_email: email
         });
 
       if (clientError) {
@@ -76,10 +84,10 @@ export default function PortalLoginPage() {
       // ============================================
       // MODO DESARROLLO: Login con contraseña
       // ============================================
-      if (devMode && data.password) {
+      if (devMode && password) {
         const { error: authError } = await supabase.auth.signInWithPassword({
-          email: data.email,
-          password: data.password
+          email: email,
+          password: password
         });
 
         if (authError) {
@@ -96,13 +104,12 @@ export default function PortalLoginPage() {
       // ============================================
       // MOCK: En producción, esto enviaría el magic link
       // ============================================
-      // Simular envío de email (MOCK)
-      console.log('[MOCK] Enviando magic link a:', data.email);
+      console.log('[MOCK] Enviando magic link a:', email);
       console.log('[MOCK] Redirect URL:', `${window.location.origin}/${tenantSlug}/dashboard`);
 
       // En producción, usar:
       // const { error: authError } = await supabase.auth.signInWithOtp({
-      //   email: data.email,
+      //   email: email,
       //   options: {
       //     emailRedirectTo: `${window.location.origin}/${tenantSlug}/dashboard`,
       //   }
@@ -112,13 +119,6 @@ export default function PortalLoginPage() {
       // Simular éxito del envío
       await new Promise(resolve => setTimeout(resolve, 1000));
       setIsEmailSent(true);
-
-      // ============================================
-      // MOCK: Auto-login para desarrollo
-      // En producción, el usuario recibiría el email
-      // ============================================
-      // Para desarrollo, puedes descomentar esto para auto-login:
-      // router.push(`/${tenantSlug}/dashboard`);
 
     } catch (e) {
       console.error('Login error:', e);
@@ -144,7 +144,7 @@ export default function PortalLoginPage() {
           </CardHeader>
           <CardContent className="text-center">
             <p className="font-medium text-lg text-primary mb-6">
-              {getValues('email')}
+              {email}
             </p>
             <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800 mb-6">
               <p className="mb-2">
@@ -188,7 +188,7 @@ export default function PortalLoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={onSubmit} className="space-y-6">
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
                 <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -205,12 +205,13 @@ export default function PortalLoginPage() {
                   type="email"
                   placeholder="tu@email.com"
                   className="pl-10 h-12"
-                  {...register('email')}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   data-testid="portal-login-email"
                 />
               </div>
-              {errors.email && (
-                <p className="text-sm text-red-600">{errors.email.message}</p>
+              {emailError && (
+                <p className="text-sm text-red-600">{emailError}</p>
               )}
             </div>
 
@@ -225,12 +226,13 @@ export default function PortalLoginPage() {
                     type="password"
                     placeholder="Tu contraseña"
                     className="pl-10 h-12"
-                    {...register('password')}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     data-testid="portal-login-password"
                   />
                 </div>
-                {errors.password && (
-                  <p className="text-sm text-red-600">{errors.password.message}</p>
+                {passwordError && (
+                  <p className="text-sm text-red-600">{passwordError}</p>
                 )}
               </div>
             )}
