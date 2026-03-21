@@ -86,3 +86,7 @@ crm-seguros/frontend/.next/cache/webpack/server-production/0.pack
 *.env
 *.env.*
 crm-seguros/frontend/node_modules/@next/swc-linux-arm64-musl/next-swc.linux-arm64-musl.node
+-e 
+# Environment files
+*.env
+*.env.*
