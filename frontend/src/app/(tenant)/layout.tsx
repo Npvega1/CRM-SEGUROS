@@ -22,6 +22,7 @@ import {
   Receipt,
   LogOut,
   Menu,
+  Settings,
   X,
   Building2,
   ChevronRight,
@@ -48,6 +49,7 @@ const navItems: NavItem[] = [
   { title: 'Facturación', href: '/billing', icon: Receipt },
   { title: 'Automatizaciones', href: '/automations', icon: Zap },
   { title: 'Reportes', href: '/reports', icon: BarChart3 },
+  { title: 'Configuración', href: '/settings', icon: Settings },
 ];
 
 export default function TenantLayout({
