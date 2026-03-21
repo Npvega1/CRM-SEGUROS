@@ -81,3 +81,8 @@ android-sdk/ crm-seguros/frontend/node_modules/@next/swc-linux-arm64-musl/next-s
 crm-seguros/frontend/node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
 crm-seguros/frontend/.next/cache/webpack/client-production/0.pack
 crm-seguros/frontend/.next/cache/webpack/server-production/0.pack
+-e 
+# Environment files
+*.env
+*.env.*
+crm-seguros/frontend/node_modules/@next/swc-linux-arm64-musl/next-swc.linux-arm64-musl.node
