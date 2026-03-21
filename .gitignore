@@ -118,3 +118,7 @@ crm-seguros/frontend/node_modules/@next/swc-linux-arm64-musl/next-swc.linux-arm6
 # Environment files
 *.env
 *.env.*
+-e 
+# Environment files
+*.env
+*.env.*
