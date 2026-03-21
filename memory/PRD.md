@@ -1,13 +1,7 @@
 # CRM Multi-tenant para Agencias de Seguros - PRD
 
 ## Problema Original
-Desarrollar un CRM completo multi-tenant para agencias de seguros que permita:
-- Gestión de clientes, pólizas, siniestros
-- Pipeline de ventas con Kanban
-- Facturación y comisiones
-- Automatizaciones y notificaciones
-- Portal de clientes (self-service)
-- Configuración visual y gestión de agentes
+Desarrollar un CRM completo multi-tenant para agencias de seguros.
 
 ## Stack Tecnológico
 - **Framework:** Next.js 14 (App Router)
@@ -16,133 +10,71 @@ Desarrollar un CRM completo multi-tenant para agencias de seguros que permita:
 - **Validación:** Zod
 - **Despliegue:** Vercel
 
+## Estado Actual del Proyecto
+
+### Ramas en GitHub:
+- `modulo07` - Respaldo funcional (Módulos 01-07 completos)
+- `modulo08-settings` - **PRODUCCIÓN ACTUAL** - Con página de Configuración básica
+
+### URL de Producción:
+- crm-seguros-lovat.vercel.app
+
 ## Módulos Implementados
 
-### Módulo 01 - Fundación ✅
-- Estructura multi-tenant con RLS
-- Autenticación con Supabase Auth
-- Context de tenant
+### Módulo 01-07 ✅ COMPLETOS
+- Fundación multi-tenant
+- Clientes y Pólizas
+- Pipeline de Ventas (Kanban)
+- Siniestros
+- Reportes
+- Facturación
+- Automatizaciones
+- Portal de Clientes
 
-### Módulo 02 - Clientes y Pólizas ✅
-- CRUD de clientes
-- Gestión de pólizas
-- Vista 360° del cliente
-- Importación CSV
+### Módulo 08 - Configuración Visual ⚠️ PARCIAL (21 Marzo 2025)
 
-### Módulo 03 - Pipeline de Ventas ✅
-- Tablero Kanban
-- Oportunidades drag & drop
-- Timeline de actividades
-- Conversión a póliza
+**Implementado:**
+- ✅ Página SettingsPage con 3 pestañas (Cuenta, Visual, Equipo)
+- ✅ Enlace "Configuración" en menú lateral
+- ✅ Pestaña Cuenta muestra info del tenant
 
-### Módulo 04 - Siniestros ✅
-- Gestión de reclamaciones
-- Stepper de estado
-- Timeline con comentarios
-- Documentos adjuntos
-
-### Módulo 05 - Reportes ✅
-- Dashboard ejecutivo
-- Performance de agentes
-- Distribución de cartera
-- Análisis de siniestros
-- Informe de renovaciones
-- Reporte de comisiones
-
-### Módulo 06 - Facturación ✅
-- Generación de cuotas
-- Control de pagos
-- Tasas de comisión
-- Estado de cuenta
-
-### Módulo 07 - Automatizaciones ✅
-- Builder de reglas
-- Plantillas de email
-- Notificaciones in-app
-- Logs de ejecución
-
-### Módulo 07 - Portal de Clientes ✅
-- Login con Magic Link (MOCK)
-- Dashboard del cliente
-- Consulta de pólizas
-- Seguimiento de siniestros
-- Chat con agente
-- Solicitudes
-
-### Módulo 08 - Configuración Visual ✅ (Implementado: Diciembre 2024)
-**Componentes:**
-- `SettingsPage` - Página principal con 4 pestañas
-- `BrandingPanel` - Personalización visual (colores, fuentes, logo, favicon)
-- `AgentsPanel` - Gestión de agentes del tenant
-- `AgentInviteModal` - Modal para invitar nuevos agentes
-- `EmailConfigPanel` - Configuración de proveedor de email (MOCK)
-
-**Hook:**
-- `useTenantBranding` - Inyecta CSS dinámico según configuración
-
-**Validaciones Zod:**
-- `BrandingInputSchema` - Colores hex, fuentes permitidas
-- `InviteAgentInputSchema` - Email y rol
-- `EmailConfigInputSchema` - Proveedor y credenciales
-
-**Navegación:**
-- Enlace "Configuración" añadido al sidebar principal
-
-**Migración SQL:**
-- `00008_tenant_settings.sql` - Tabla tenant_settings + invitations + RLS
+**Pendiente:**
+- ❌ BrandingPanel completo (colores, fuentes, logo/favicon con preview)
+- ❌ AgentsPanel completo (tabla de agentes, cambio de roles, activar/desactivar)
+- ❌ AgentInviteModal (modal para invitar agentes por email)
+- ❌ EmailConfigPanel (configuración de proveedor de email MOCK)
+- ❌ Hook useTenantBranding (inyectar CSS dinámico)
+- ❌ Validaciones con Zod
+- ❌ Migración SQL para tenant_settings con RLS
 
 ## Módulos Pendientes
 
 ### Módulo 09 - Comparativos con IA (P1)
-- Integración con LLM
-- Comparación de pólizas
-- Recomendaciones
-
 ### Módulo 10 - Planes y Pagos (P1)
-- Modelo de suscripción
-- Integración Stripe
-- Límites por plan
-
 ### Módulo 11 - Super Admin (P1)
-- Panel de administración global
-- Gestión de tenants
-- Métricas de uso
-
-## Estructura de Archivos del Módulo 08
-
-```
-frontend/
-├── src/
-│   ├── app/(tenant)/
-│   │   ├── layout.tsx          # ✅ Actualizado con link "Configuración"
-│   │   └── settings/
-│   │       └── page.tsx        # ✅ Página principal
-│   ├── components/modules/settings/
-│   │   ├── index.ts            # ✅ Exports
-│   │   ├── BrandingPanel.tsx   # ✅ Panel de branding
-│   │   ├── AgentsPanel.tsx     # ✅ Panel de agentes
-│   │   ├── AgentInviteModal.tsx # ✅ Modal de invitación
-│   │   └── EmailConfigPanel.tsx # ✅ Config de email
-│   ├── lib/
-│   │   ├── hooks/
-│   │   │   └── useTenantBranding.ts # ✅ Hook de branding
-│   │   └── validations/
-│   │       └── settings.ts     # ✅ Schemas Zod
-└── supabase/migrations/
-    └── 00008_tenant_settings.sql # ✅ Migración SQL
-```
-
-## Funcionalidades MOCK
-
-1. **Envío de Emails:** Los emails se simulan y registran en consola
-2. **Magic Link OTP:** El portal de clientes usa autenticación simulada
-3. **Integración Email:** La configuración de Resend/SendGrid es MOCK
 
 ## Backlog (P2)
 
-- Corregir triggers de facturación automática
-- Corregir cálculo de fechas de vencimiento de cuotas
-- Añadir contador de pólizas a la lista de clientes
 - Integrar servicio de email real (Resend/SendGrid)
 - Implementar Magic Link OTP real en el portal
-- Limpiar console.log del Módulo 07
+- Corregir triggers de facturación automática
+- Añadir contador de pólizas a la lista de clientes
+- Limpiar console.log del código
+
+## Notas Técnicas Importantes
+
+### Problema de "Save to Github" de Emergent
+Durante la sesión del 21 de Marzo, se detectó que "Save to Github" no sincroniza correctamente los archivos del frontend. La solución fue editar archivos directamente en GitHub.
+
+### Límite de Vercel
+Plan gratuito tiene límite de 100 deploys por día. Se alcanzó el 21 de Marzo.
+
+### Estructura de archivos del Módulo 08:
+```
+frontend/src/app/(tenant)/settings/page.tsx - ✅ Creado
+frontend/src/app/(tenant)/layout.tsx - ✅ Actualizado con enlace Configuración
+```
+
+## Funcionalidades MOCK
+1. Envío de Emails - simulado en consola
+2. Magic Link OTP - autenticación simulada en portal
