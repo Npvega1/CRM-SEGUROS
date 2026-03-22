@@ -7,9 +7,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Settings, Palette, Users, Building2, Save, Loader2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Settings, Palette, Users, Building2, Save, Loader2, UserPlus, Mail } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+
+interface Agent {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
 
 export default function SettingsPage() {
   const { tenantId, tenantName, tenantSlug } = useTenant();
@@ -17,11 +27,19 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const supabase = createClient();
 
-  const [primaryColor, setPrimaryColor] = useState('#1E3A5F');
-  const [secondaryColor, setSecondaryColor] = useState('#2E86AB');
+  // Estado para branding
+  const [primaryColor, setPrimaryColor] = useState('#3b82f6');
+  const [secondaryColor, setSecondaryColor] = useState('#1e40af');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Estado para equipo
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(true);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviting, setInviting] = useState(false);
+
+  // Cargar configuración de branding
   useEffect(() => {
     async function loadSettings() {
       if (!tenantId) return;
@@ -33,8 +51,8 @@ export default function SettingsPage() {
           .single();
         
         if (data) {
-          setPrimaryColor(data.primary_color || '#1E3A5F');
-          setSecondaryColor(data.secondary_color || '#2E86AB');
+          setPrimaryColor(data.primary_color || '#3b82f6');
+          setSecondaryColor(data.secondary_color || '#1e40af');
         }
       } catch (error) {
         console.log('No settings found, using defaults');
@@ -45,7 +63,31 @@ export default function SettingsPage() {
     loadSettings();
   }, [tenantId, supabase]);
 
-  const handleSave = async () => {
+  // Cargar agentes
+  useEffect(() => {
+    async function loadAgents() {
+      if (!tenantId) return;
+      try {
+        const { data } = await (supabase
+          .from('users') as any)
+          .select('id, email, full_name, role, is_active, created_at')
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: true });
+        
+        if (data) {
+          setAgents(data);
+        }
+      } catch (error) {
+        console.log('Error loading agents:', error);
+      } finally {
+        setLoadingAgents(false);
+      }
+    }
+    loadAgents();
+  }, [tenantId, supabase]);
+
+  // Guardar branding
+  const handleSaveBranding = async () => {
     if (!tenantId) return;
     setSaving(true);
     try {
@@ -76,6 +118,44 @@ export default function SettingsPage() {
     }
   };
 
+  // Invitar agente (MOCK)
+  const handleInviteAgent = async () => {
+    if (!inviteEmail || !tenantId) return;
+    setInviting(true);
+    
+    // Simulación de invitación
+    setTimeout(() => {
+      toast({
+        title: 'Invitación enviada',
+        description: `Se ha enviado una invitación a ${inviteEmail} (MOCK)`,
+      });
+      setInviteEmail('');
+      setInviting(false);
+    }, 1000);
+  };
+
+  const getRoleBadge = (role: string) => {
+    const colors: Record<string, string> = {
+      admin: 'bg-red-100 text-red-800',
+      superadmin: 'bg-purple-100 text-purple-800',
+      senior_agent: 'bg-blue-100 text-blue-800',
+      agent: 'bg-green-100 text-green-800',
+      readonly: 'bg-gray-100 text-gray-800',
+    };
+    return colors[role] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getRoleLabel = (role: string) => {
+    const labels: Record<string, string> = {
+      admin: 'Administrador',
+      superadmin: 'Super Admin',
+      senior_agent: 'Agente Senior',
+      agent: 'Agente',
+      readonly: 'Solo Lectura',
+    };
+    return labels[role] || role;
+  };
+
   return (
     <div className="space-y-6" data-testid="settings-page">
       <div className="flex items-center gap-3">
@@ -102,6 +182,7 @@ export default function SettingsPage() {
           </TabsTrigger>
         </TabsList>
 
+        {/* Pestaña Cuenta */}
         <TabsContent value="account" className="mt-6">
           <Card>
             <CardHeader>
@@ -130,6 +211,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
+        {/* Pestaña Branding */}
         <TabsContent value="branding" className="mt-6">
           <Card>
             <CardHeader>
@@ -162,7 +244,6 @@ export default function SettingsPage() {
                           value={primaryColor}
                           onChange={(e) => setPrimaryColor(e.target.value)}
                           className="font-mono"
-                          placeholder="#1E3A5F"
                         />
                       </div>
                     </div>
@@ -181,7 +262,6 @@ export default function SettingsPage() {
                           value={secondaryColor}
                           onChange={(e) => setSecondaryColor(e.target.value)}
                           className="font-mono"
-                          placeholder="#2E86AB"
                         />
                       </div>
                     </div>
@@ -189,7 +269,7 @@ export default function SettingsPage() {
 
                   <div className="space-y-2">
                     <Label>Vista Previa</Label>
-                    <div className="border rounded-lg p-4 space-y-3">
+                    <div className="border rounded-lg p-4">
                       <div className="flex gap-2">
                         <div
                           className="w-24 h-10 rounded flex items-center justify-center text-white text-sm font-medium"
@@ -207,18 +287,13 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <Button onClick={handleSave} disabled={saving}>
+                  <Button onClick={handleSaveBranding} disabled={saving}>
                     {saving ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Guardando...
-                      </>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
-                      <>
-                        <Save className="mr-2 h-4 w-4" />
-                        Guardar Cambios
-                      </>
+                      <Save className="mr-2 h-4 w-4" />
                     )}
+                    {saving ? 'Guardando...' : 'Guardar Cambios'}
                   </Button>
                 </>
               )}
@@ -226,17 +301,90 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="team" className="mt-6">
+        {/* Pestaña Equipo */}
+        <TabsContent value="team" className="mt-6 space-y-6">
+          {/* Invitar agente */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5" />
+                Invitar Agente
+              </CardTitle>
+              <CardDescription>Envía una invitación por email para unirse a tu equipo</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Input
+                    type="email"
+                    placeholder="correo@ejemplo.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                  />
+                </div>
+                <Button onClick={handleInviteAgent} disabled={inviting || !inviteEmail}>
+                  {inviting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="mr-2 h-4 w-4" />
+                  )}
+                  {inviting ? 'Enviando...' : 'Invitar'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                El agente recibirá un email con instrucciones para unirse (MOCK).
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Lista de agentes */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Gestión de Equipo
+                Miembros del Equipo ({agents.length})
               </CardTitle>
-              <CardDescription>Administra los agentes de tu organización</CardDescription>
+              <CardDescription>Gestiona los agentes de tu organización</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">Próximamente: Invitar y gestionar agentes.</p>
+              {loadingAgents ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : agents.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No hay agentes registrados</p>
+              ) : (
+                <div className="space-y-4">
+                  {agents.map((agent) => (
+                    <div
+                      key={agent.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-sm font-medium">
+                            {agent.full_name?.charAt(0) || agent.email.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{agent.full_name || 'Sin nombre'}</p>
+                          <p className="text-sm text-muted-foreground">{agent.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={getRoleBadge(agent.role)}>
+                          {getRoleLabel(agent.role)}
+                        </Badge>
+                        {!agent.is_active && (
+                          <Badge variant="outline" className="text-red-600">
+                            Inactivo
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
