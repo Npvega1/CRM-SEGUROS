@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Palette, Users, Building2, Save, Loader2, UserPlus, Mail } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Settings, Palette, Users, Building2, Save, Loader2, UserPlus, Mail, Clock, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -21,41 +22,47 @@ interface Agent {
   created_at: string;
 }
 
+interface Invitation {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+  expires_at: string;
+}
+
 export default function SettingsPage() {
-  const { tenantId, tenantName, tenantSlug } = useTenant();
+  const { tenantId, tenantName, tenantSlug, userId } = useTenant();
   const [activeTab, setActiveTab] = useState('account');
   const { toast } = useToast();
   const supabase = createClient();
 
-  // Estado para branding
+  // Branding
   const [primaryColor, setPrimaryColor] = useState('#3b82f6');
   const [secondaryColor, setSecondaryColor] = useState('#1e40af');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Estado para equipo
+  // Equipo
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('agent');
   const [inviting, setInviting] = useState(false);
 
-  // Cargar configuración de branding
+  // Cargar branding
   useEffect(() => {
     async function loadSettings() {
       if (!tenantId) return;
       try {
-        const { data } = await (supabase
-          .from('tenant_settings') as any)
-          .select('*')
-          .eq('tenant_id', tenantId)
-          .single();
-        
+        const { data } = await (supabase.from('tenant_settings') as any)
+          .select('*').eq('tenant_id', tenantId).single();
         if (data) {
           setPrimaryColor(data.primary_color || '#3b82f6');
           setSecondaryColor(data.secondary_color || '#1e40af');
         }
       } catch (error) {
-        console.log('No settings found, using defaults');
+        console.log('No settings found');
       } finally {
         setLoading(false);
       }
@@ -63,95 +70,113 @@ export default function SettingsPage() {
     loadSettings();
   }, [tenantId, supabase]);
 
-  // Cargar agentes
+  // Cargar agentes e invitaciones
   useEffect(() => {
-    async function loadAgents() {
+    async function loadTeam() {
       if (!tenantId) return;
       try {
-        const { data } = await (supabase
-          .from('users') as any)
+        const { data: agentsData } = await (supabase.from('users') as any)
           .select('id, email, full_name, role, is_active, created_at')
-          .eq('tenant_id', tenantId)
-          .order('created_at', { ascending: true });
-        
-        if (data) {
-          setAgents(data);
-        }
+          .eq('tenant_id', tenantId).order('created_at', { ascending: true });
+        if (agentsData) setAgents(agentsData);
+
+        const { data: invData } = await (supabase.from('invitations') as any)
+          .select('id, email, role, created_at, expires_at')
+          .eq('tenant_id', tenantId).is('accepted_at', null)
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false });
+        if (invData) setInvitations(invData);
       } catch (error) {
-        console.log('Error loading agents:', error);
+        console.log('Error loading team:', error);
       } finally {
         setLoadingAgents(false);
       }
     }
-    loadAgents();
+    loadTeam();
   }, [tenantId, supabase]);
 
-  // Guardar branding
   const handleSaveBranding = async () => {
     if (!tenantId) return;
     setSaving(true);
     try {
-      const { error } = await (supabase
-        .from('tenant_settings') as any)
-        .upsert({
-          tenant_id: tenantId,
-          primary_color: primaryColor,
-          secondary_color: secondaryColor,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'tenant_id' });
-
+      const { error } = await (supabase.from('tenant_settings') as any)
+        .upsert({ tenant_id: tenantId, primary_color: primaryColor, secondary_color: secondaryColor, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' });
       if (error) throw error;
-
-      toast({
-        title: 'Configuración guardada',
-        description: 'Los colores se han actualizado correctamente',
-      });
+      toast({ title: 'Configuración guardada', description: 'Los colores se han actualizado' });
     } catch (error) {
-      console.error('Error saving:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo guardar la configuración',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'No se pudo guardar', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
   };
 
-  // Invitar agente (MOCK)
   const handleInviteAgent = async () => {
-    if (!inviteEmail || !tenantId) return;
+    if (!inviteEmail || !tenantId || !userId) return;
     setInviting(true);
-    
-    // Simulación de invitación
-    setTimeout(() => {
-      toast({
-        title: 'Invitación enviada',
-        description: `Se ha enviado una invitación a ${inviteEmail} (MOCK)`,
-      });
+    try {
+      // Verificar si ya existe
+      const { data: existing } = await (supabase.from('users') as any)
+        .select('id').eq('tenant_id', tenantId).eq('email', inviteEmail.toLowerCase()).single();
+      if (existing) {
+        toast({ title: 'Error', description: 'Este email ya está registrado', variant: 'destructive' });
+        setInviting(false);
+        return;
+      }
+
+      // Verificar invitación pendiente
+      const { data: pendingInv } = await (supabase.from('invitations') as any)
+        .select('id').eq('tenant_id', tenantId).eq('email', inviteEmail.toLowerCase())
+        .is('accepted_at', null).gt('expires_at', new Date().toISOString()).single();
+      if (pendingInv) {
+        toast({ title: 'Error', description: 'Ya existe una invitación pendiente para este email', variant: 'destructive' });
+        setInviting(false);
+        return;
+      }
+
+      // Crear invitación
+      const { data: newInv, error } = await (supabase.from('invitations') as any)
+        .insert({
+          tenant_id: tenantId,
+          email: inviteEmail.toLowerCase(),
+          role: inviteRole,
+          invited_by: userId,
+        }).select().single();
+
+      if (error) throw error;
+
+      setInvitations([newInv, ...invitations]);
+      toast({ title: 'Invitación creada', description: `Se ha creado la invitación para ${inviteEmail} (Email MOCK - no se envía realmente)` });
       setInviteEmail('');
+      setInviteRole('agent');
+    } catch (error) {
+      console.error('Error:', error);
+      toast({ title: 'Error', description: 'No se pudo crear la invitación', variant: 'destructive' });
+    } finally {
       setInviting(false);
-    }, 1000);
+    }
+  };
+
+  const handleCancelInvitation = async (invId: string) => {
+    try {
+      await (supabase.from('invitations') as any).delete().eq('id', invId);
+      setInvitations(invitations.filter(i => i.id !== invId));
+      toast({ title: 'Invitación cancelada' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'No se pudo cancelar', variant: 'destructive' });
+    }
   };
 
   const getRoleBadge = (role: string) => {
     const colors: Record<string, string> = {
-      admin: 'bg-red-100 text-red-800',
-      superadmin: 'bg-purple-100 text-purple-800',
-      senior_agent: 'bg-blue-100 text-blue-800',
-      agent: 'bg-green-100 text-green-800',
-      readonly: 'bg-gray-100 text-gray-800',
+      admin: 'bg-red-100 text-red-800', superadmin: 'bg-purple-100 text-purple-800',
+      senior_agent: 'bg-blue-100 text-blue-800', agent: 'bg-green-100 text-green-800', readonly: 'bg-gray-100 text-gray-800',
     };
     return colors[role] || 'bg-gray-100 text-gray-800';
   };
 
   const getRoleLabel = (role: string) => {
     const labels: Record<string, string> = {
-      admin: 'Administrador',
-      superadmin: 'Super Admin',
-      senior_agent: 'Agente Senior',
-      agent: 'Agente',
-      readonly: 'Solo Lectura',
+      admin: 'Administrador', superadmin: 'Super Admin', senior_agent: 'Agente Senior', agent: 'Agente', readonly: 'Solo Lectura',
     };
     return labels[role] || role;
   };
@@ -169,130 +194,68 @@ export default function SettingsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-3 h-auto gap-2 bg-transparent p-0">
           <TabsTrigger value="account" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3">
-            <Building2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Cuenta</span>
+            <Building2 className="h-4 w-4" /><span className="hidden sm:inline">Cuenta</span>
           </TabsTrigger>
           <TabsTrigger value="branding" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3">
-            <Palette className="h-4 w-4" />
-            <span className="hidden sm:inline">Visual</span>
+            <Palette className="h-4 w-4" /><span className="hidden sm:inline">Visual</span>
           </TabsTrigger>
           <TabsTrigger value="team" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Equipo</span>
+            <Users className="h-4 w-4" /><span className="hidden sm:inline">Equipo</span>
           </TabsTrigger>
         </TabsList>
 
-        {/* Pestaña Cuenta */}
         <TabsContent value="account" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Información de la Cuenta
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />Información de la Cuenta</CardTitle>
               <CardDescription>Datos de tu organización</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-muted-foreground">Nombre</label>
-                  <p className="font-medium">{tenantName}</p>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-muted-foreground">Slug</label>
-                  <p className="font-mono text-sm">{tenantSlug}</p>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-muted-foreground">ID</label>
-                  <p className="font-mono text-xs text-muted-foreground">{tenantId}</p>
-                </div>
+                <div className="space-y-1"><label className="text-sm font-medium text-muted-foreground">Nombre</label><p className="font-medium">{tenantName}</p></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-muted-foreground">Slug</label><p className="font-mono text-sm">{tenantSlug}</p></div>
+                <div className="space-y-1"><label className="text-sm font-medium text-muted-foreground">ID</label><p className="font-mono text-xs text-muted-foreground">{tenantId}</p></div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Pestaña Branding */}
         <TabsContent value="branding" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Palette className="h-5 w-5" />
-                Personalización Visual
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5" />Personalización Visual</CardTitle>
               <CardDescription>Personaliza los colores de tu CRM</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
               ) : (
                 <>
                   <div className="grid gap-6 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="primaryColor">Color Primario</Label>
+                      <Label>Color Primario</Label>
                       <div className="flex gap-2">
-                        <Input
-                          id="primaryColor"
-                          type="color"
-                          value={primaryColor}
-                          onChange={(e) => setPrimaryColor(e.target.value)}
-                          className="w-16 h-10 p-1 cursor-pointer"
-                        />
-                        <Input
-                          type="text"
-                          value={primaryColor}
-                          onChange={(e) => setPrimaryColor(e.target.value)}
-                          className="font-mono"
-                        />
+                        <Input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-16 h-10 p-1 cursor-pointer" />
+                        <Input type="text" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="font-mono" />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="secondaryColor">Color Secundario</Label>
+                      <Label>Color Secundario</Label>
                       <div className="flex gap-2">
-                        <Input
-                          id="secondaryColor"
-                          type="color"
-                          value={secondaryColor}
-                          onChange={(e) => setSecondaryColor(e.target.value)}
-                          className="w-16 h-10 p-1 cursor-pointer"
-                        />
-                        <Input
-                          type="text"
-                          value={secondaryColor}
-                          onChange={(e) => setSecondaryColor(e.target.value)}
-                          className="font-mono"
-                        />
+                        <Input type="color" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} className="w-16 h-10 p-1 cursor-pointer" />
+                        <Input type="text" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} className="font-mono" />
                       </div>
                     </div>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Vista Previa</Label>
-                    <div className="border rounded-lg p-4">
-                      <div className="flex gap-2">
-                        <div
-                          className="w-24 h-10 rounded flex items-center justify-center text-white text-sm font-medium"
-                          style={{ backgroundColor: primaryColor }}
-                        >
-                          Primario
-                        </div>
-                        <div
-                          className="w-24 h-10 rounded flex items-center justify-center text-white text-sm font-medium"
-                          style={{ backgroundColor: secondaryColor }}
-                        >
-                          Secundario
-                        </div>
-                      </div>
+                    <div className="border rounded-lg p-4 flex gap-2">
+                      <div className="w-24 h-10 rounded flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: primaryColor }}>Primario</div>
+                      <div className="w-24 h-10 rounded flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: secondaryColor }}>Secundario</div>
                     </div>
                   </div>
-
                   <Button onClick={handleSaveBranding} disabled={saving}>
-                    {saving ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="mr-2 h-4 w-4" />
-                    )}
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     {saving ? 'Guardando...' : 'Guardar Cambios'}
                   </Button>
                 </>
@@ -301,70 +264,74 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Pestaña Equipo */}
         <TabsContent value="team" className="mt-6 space-y-6">
-          {/* Invitar agente */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <UserPlus className="h-5 w-5" />
-                Invitar Agente
-              </CardTitle>
-              <CardDescription>Envía una invitación por email para unirse a tu equipo</CardDescription>
+              <CardTitle className="flex items-center gap-2"><UserPlus className="h-5 w-5" />Invitar Agente</CardTitle>
+              <CardDescription>Envía una invitación para unirse a tu equipo</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Input
-                    type="email"
-                    placeholder="correo@ejemplo.com"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                  />
-                </div>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input type="email" placeholder="correo@ejemplo.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
+                <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="agent">Agente</SelectItem>
+                    <SelectItem value="senior_agent">Agente Senior</SelectItem>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                    <SelectItem value="readonly">Solo Lectura</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button onClick={handleInviteAgent} disabled={inviting || !inviteEmail}>
-                  {inviting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Mail className="mr-2 h-4 w-4" />
-                  )}
-                  {inviting ? 'Enviando...' : 'Invitar'}
+                  {inviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                  Invitar
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                El agente recibirá un email con instrucciones para unirse (MOCK).
-              </p>
+              <p className="text-xs text-muted-foreground">La invitación se guardará en la base de datos. El email es MOCK (no se envía realmente).</p>
             </CardContent>
           </Card>
 
-          {/* Lista de agentes */}
+          {invitations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" />Invitaciones Pendientes ({invitations.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {invitations.map((inv) => (
+                    <div key={inv.id} className="flex items-center justify-between p-3 border rounded-lg bg-yellow-50">
+                      <div>
+                        <p className="font-medium">{inv.email}</p>
+                        <p className="text-xs text-muted-foreground">Expira: {new Date(inv.expires_at).toLocaleDateString()}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={getRoleBadge(inv.role)}>{getRoleLabel(inv.role)}</Badge>
+                        <Button variant="ghost" size="sm" onClick={() => handleCancelInvitation(inv.id)}><X className="h-4 w-4" /></Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Miembros del Equipo ({agents.length})
-              </CardTitle>
-              <CardDescription>Gestiona los agentes de tu organización</CardDescription>
+              <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" />Miembros del Equipo ({agents.length})</CardTitle>
+              <CardDescription>Agentes activos en tu organización</CardDescription>
             </CardHeader>
             <CardContent>
               {loadingAgents ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
               ) : agents.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">No hay agentes registrados</p>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {agents.map((agent) => (
-                    <div
-                      key={agent.id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
-                    >
+                    <div key={agent.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-medium">
-                            {agent.full_name?.charAt(0) || agent.email.charAt(0).toUpperCase()}
-                          </span>
+                          <span className="text-sm font-medium">{agent.full_name?.charAt(0) || agent.email.charAt(0).toUpperCase()}</span>
                         </div>
                         <div>
                           <p className="font-medium">{agent.full_name || 'Sin nombre'}</p>
@@ -372,14 +339,8 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge className={getRoleBadge(agent.role)}>
-                          {getRoleLabel(agent.role)}
-                        </Badge>
-                        {!agent.is_active && (
-                          <Badge variant="outline" className="text-red-600">
-                            Inactivo
-                          </Badge>
-                        )}
+                        <Badge className={getRoleBadge(agent.role)}>{getRoleLabel(agent.role)}</Badge>
+                        {!agent.is_active && <Badge variant="outline" className="text-red-600">Inactivo</Badge>}
                       </div>
                     </div>
                   ))}
