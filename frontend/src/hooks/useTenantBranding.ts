@@ -50,7 +50,6 @@ export function useTenantBranding() {
     loadBranding();
   }, [tenantId, supabase]);
 
-  // Aplicar colores como variables CSS
   useEffect(() => {
     if (typeof window !== 'undefined') {
       document.documentElement.style.setProperty('--primary', branding.primaryColor);
