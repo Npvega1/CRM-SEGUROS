@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ interface Invitation {
   tenants?: { name: string; slug: string };
 }
 
-export default function AcceptInvitationPage() {
+function AcceptInvitationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get('token');
@@ -91,19 +91,14 @@ export default function AcceptInvitationPage() {
     setAccepting(true);
 
     try {
-      // 1. Crear usuario en Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: invitation.email,
         password: password,
       });
 
       if (authError) throw authError;
+      if (!authData.user) throw new Error('No se pudo crear el usuario');
 
-      if (!authData.user) {
-        throw new Error('No se pudo crear el usuario');
-      }
-
-      // 2. Crear registro en tabla users
       const { error: userError } = await (supabase.from('users') as any).insert({
         id: authData.user.id,
         tenant_id: invitation.tenant_id,
@@ -115,7 +110,6 @@ export default function AcceptInvitationPage() {
 
       if (userError) throw userError;
 
-      // 3. Marcar invitación como aceptada
       await (supabase.from('invitations') as any)
         .update({ accepted_at: new Date().toISOString() })
         .eq('id', invitation.id);
@@ -123,18 +117,10 @@ export default function AcceptInvitationPage() {
       setAccepted(true);
       toast({ title: '¡Bienvenido!', description: 'Tu cuenta ha sido creada exitosamente' });
 
-      // Redirigir después de 3 segundos
-      setTimeout(() => {
-        router.push('/login');
-      }, 3000);
+      setTimeout(() => { router.push('/login'); }, 3000);
 
     } catch (err: any) {
-      console.error('Error:', err);
-      toast({ 
-        title: 'Error', 
-        description: err.message || 'No se pudo aceptar la invitación', 
-        variant: 'destructive' 
-      });
+      toast({ title: 'Error', description: err.message || 'No se pudo aceptar la invitación', variant: 'destructive' });
     } finally {
       setAccepting(false);
     }
@@ -164,9 +150,7 @@ export default function AcceptInvitationPage() {
             <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold mb-2">Invitación no válida</h2>
             <p className="text-muted-foreground">{error}</p>
-            <Button className="mt-4" onClick={() => router.push('/login')}>
-              Ir al inicio
-            </Button>
+            <Button className="mt-4" onClick={() => router.push('/login')}>Ir al inicio</Button>
           </CardContent>
         </Card>
       </div>
@@ -205,59 +189,37 @@ export default function AcceptInvitationPage() {
               <Mail className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">{invitation?.email}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{getRoleLabel(invitation?.role || '')}</Badge>
-            </div>
+            <Badge variant="secondary">{getRoleLabel(invitation?.role || '')}</Badge>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="fullName">Nombre completo</Label>
-            <Input
-              id="fullName"
-              placeholder="Tu nombre"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-            />
+            <Input id="fullName" placeholder="Tu nombre" value={fullName} onChange={(e) => setFullName(e.target.value)} />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="password">Contraseña</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Mínimo 6 caracteres"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <Input id="password" type="password" placeholder="Mínimo 6 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirmar contraseña</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              placeholder="Repite la contraseña"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
+            <Input id="confirmPassword" type="password" placeholder="Repite la contraseña" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
           </div>
 
-          <Button 
-            className="w-full" 
-            onClick={handleAccept} 
-            disabled={accepting || !fullName || !password || !confirmPassword}
-          >
-            {accepting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creando cuenta...
-              </>
-            ) : (
-              'Aceptar invitación'
-            )}
+          <Button className="w-full" onClick={handleAccept} disabled={accepting || !fullName || !password || !confirmPassword}>
+            {accepting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creando cuenta...</> : 'Aceptar invitación'}
           </Button>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function AcceptInvitationPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+      <AcceptInvitationContent />
+    </Suspense>
   );
 }
