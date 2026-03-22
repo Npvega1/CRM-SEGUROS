@@ -59,3 +59,4 @@ export function useTenantBranding() {
   }, [branding]);
 
   return { branding, loading };
+    }
