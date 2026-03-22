@@ -28,7 +28,8 @@ const PUBLIC_ROUTES = [
   '/registro-api',
   '/forgot-password',
   '/reset-password',
-  '/sin-organizacion'
+  '/sin-organizacion',
+  '/invitacion'
 ];
 
 const API_ROUTES = [
