@@ -17,27 +17,24 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const supabase = createClient();
 
-  // Estado para branding
   const [primaryColor, setPrimaryColor] = useState('#1E3A5F');
   const [secondaryColor, setSecondaryColor] = useState('#2E86AB');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Cargar configuración actual
   useEffect(() => {
     async function loadSettings() {
       if (!tenantId) return;
       try {
-        const { data } = await supabase
-          .from('tenant_settings')
+        const { data } = await (supabase
+          .from('tenant_settings') as any)
           .select('*')
           .eq('tenant_id', tenantId)
           .single();
         
         if (data) {
-          const settings = data as { primary_color?: string; secondary_color?: string };
-          setPrimaryColor(settings.primary_color || '#1E3A5F');
-          setSecondaryColor(settings.secondary_color || '#2E86AB');
+          setPrimaryColor(data.primary_color || '#1E3A5F');
+          setSecondaryColor(data.secondary_color || '#2E86AB');
         }
       } catch (error) {
         console.log('No settings found, using defaults');
@@ -48,13 +45,12 @@ export default function SettingsPage() {
     loadSettings();
   }, [tenantId, supabase]);
 
-  // Guardar configuración
   const handleSave = async () => {
     if (!tenantId) return;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('tenant_settings')
+      const { error } = await (supabase
+        .from('tenant_settings') as any)
         .upsert({
           tenant_id: tenantId,
           primary_color: primaryColor,
@@ -106,7 +102,6 @@ export default function SettingsPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Pestaña Cuenta */}
         <TabsContent value="account" className="mt-6">
           <Card>
             <CardHeader>
@@ -135,7 +130,6 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Pestaña Branding/Visual */}
         <TabsContent value="branding" className="mt-6">
           <Card>
             <CardHeader>
@@ -193,7 +187,6 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* Vista previa */}
                   <div className="space-y-2">
                     <Label>Vista Previa</Label>
                     <div className="border rounded-lg p-4 space-y-3">
@@ -211,9 +204,6 @@ export default function SettingsPage() {
                           Secundario
                         </div>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        Así se verán los botones y elementos principales de tu CRM.
-                      </p>
                     </div>
                   </div>
 
@@ -236,7 +226,6 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Pestaña Equipo */}
         <TabsContent value="team" className="mt-6">
           <Card>
             <CardHeader>
@@ -247,7 +236,7 @@ export default function SettingsPage() {
               <CardDescription>Administra los agentes de tu organización</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">Próximamente: Invitar y gestionar agentes de tu equipo.</p>
+              <p className="text-muted-foreground">Próximamente: Invitar y gestionar agentes.</p>
             </CardContent>
           </Card>
         </TabsContent>
