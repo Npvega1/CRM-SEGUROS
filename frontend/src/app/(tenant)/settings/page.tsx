@@ -1,14 +1,83 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Settings, Palette, Users, Building2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Settings, Palette, Users, Building2, Save, Loader2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 export default function SettingsPage() {
   const { tenantId, tenantName, tenantSlug } = useTenant();
   const [activeTab, setActiveTab] = useState('account');
+  const { toast } = useToast();
+  const supabase = createClient();
+
+  // Estado para branding
+  const [primaryColor, setPrimaryColor] = useState('#1E3A5F');
+  const [secondaryColor, setSecondaryColor] = useState('#2E86AB');
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Cargar configuración actual
+  useEffect(() => {
+    async function loadSettings() {
+      if (!tenantId) return;
+      try {
+        const { data } = await supabase
+          .from('tenant_settings')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .single();
+        
+        if (data) {
+          setPrimaryColor(data.primary_color || '#1E3A5F');
+          setSecondaryColor(data.secondary_color || '#2E86AB');
+        }
+      } catch (error) {
+        console.log('No settings found, using defaults');
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSettings();
+  }, [tenantId, supabase]);
+
+  // Guardar configuración
+  const handleSave = async () => {
+    if (!tenantId) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('tenant_settings')
+        .upsert({
+          tenant_id: tenantId,
+          primary_color: primaryColor,
+          secondary_color: secondaryColor,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'tenant_id' });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Configuración guardada',
+        description: 'Los colores se han actualizado correctamente',
+      });
+    } catch (error) {
+      console.error('Error saving:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar la configuración',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6" data-testid="settings-page">
@@ -36,6 +105,7 @@ export default function SettingsPage() {
           </TabsTrigger>
         </TabsList>
 
+        {/* Pestaña Cuenta */}
         <TabsContent value="account" className="mt-6">
           <Card>
             <CardHeader>
@@ -64,26 +134,119 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
+        {/* Pestaña Branding/Visual */}
         <TabsContent value="branding" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Personalización Visual</CardTitle>
-              <CardDescription>Próximamente: colores, logo y fuentes</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="h-5 w-5" />
+                Personalización Visual
+              </CardTitle>
+              <CardDescription>Personaliza los colores de tu CRM</CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Esta funcionalidad estará disponible pronto.</p>
+            <CardContent className="space-y-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="primaryColor">Color Primario</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="primaryColor"
+                          type="color"
+                          value={primaryColor}
+                          onChange={(e) => setPrimaryColor(e.target.value)}
+                          className="w-16 h-10 p-1 cursor-pointer"
+                        />
+                        <Input
+                          type="text"
+                          value={primaryColor}
+                          onChange={(e) => setPrimaryColor(e.target.value)}
+                          className="font-mono"
+                          placeholder="#1E3A5F"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="secondaryColor">Color Secundario</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="secondaryColor"
+                          type="color"
+                          value={secondaryColor}
+                          onChange={(e) => setSecondaryColor(e.target.value)}
+                          className="w-16 h-10 p-1 cursor-pointer"
+                        />
+                        <Input
+                          type="text"
+                          value={secondaryColor}
+                          onChange={(e) => setSecondaryColor(e.target.value)}
+                          className="font-mono"
+                          placeholder="#2E86AB"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vista previa */}
+                  <div className="space-y-2">
+                    <Label>Vista Previa</Label>
+                    <div className="border rounded-lg p-4 space-y-3">
+                      <div className="flex gap-2">
+                        <div
+                          className="w-24 h-10 rounded flex items-center justify-center text-white text-sm font-medium"
+                          style={{ backgroundColor: primaryColor }}
+                        >
+                          Primario
+                        </div>
+                        <div
+                          className="w-24 h-10 rounded flex items-center justify-center text-white text-sm font-medium"
+                          style={{ backgroundColor: secondaryColor }}
+                        >
+                          Secundario
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Así se verán los botones y elementos principales de tu CRM.
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button onClick={handleSave} disabled={saving}>
+                    {saving ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Guardando...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Guardar Cambios
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Pestaña Equipo */}
         <TabsContent value="team" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Gestión de Equipo</CardTitle>
-              <CardDescription>Próximamente: invitar y gestionar agentes</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Gestión de Equipo
+              </CardTitle>
+              <CardDescription>Administra los agentes de tu organización</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">Esta funcionalidad estará disponible pronto.</p>
+              <p className="text-muted-foreground">Próximamente: Invitar y gestionar agentes de tu equipo.</p>
             </CardContent>
           </Card>
         </TabsContent>
