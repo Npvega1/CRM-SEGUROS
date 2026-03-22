@@ -90,11 +90,17 @@ function AcceptInvitationContent() {
 
     setAccepting(true);
 
-    try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: invitation.email,
-        password: password,
-      });
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+  email: invitation.email,
+  password: password,
+  options: {
+    data: {
+      tenant_id: invitation.tenant_id,
+      full_name: fullName,
+      role: invitation.role,
+    }
+  }
+});
 
       if (authError) throw authError;
       if (!authData.user) throw new Error('No se pudo crear el usuario');
