@@ -140,14 +140,17 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Obtener datos del JWT
+      // Obtener datos del JWT (buscar en app_metadata Y user_metadata)
       const appMetadata = user.app_metadata || {};
-      const tenantId = appMetadata.tenant_id as string | undefined;
-      const role = (appMetadata.role as Role) || 'readonly';
-      const agentId = (appMetadata.agent_id as string) || user.id;
+      const userMetadata = user.user_metadata || {};
+      
+      // Buscar tenant_id en ambos lugares
+      const tenantId = (appMetadata.tenant_id || userMetadata.tenant_id) as string | undefined;
+      const role = (appMetadata.role || userMetadata.role) as Role || 'readonly';
+      const agentId = (appMetadata.agent_id || userMetadata.agent_id) as string || user.id;
 
       // Valores por defecto
-      let userFullName = user.user_metadata?.full_name || '';
+      let userFullName = userMetadata.full_name || '';
       let userEmail = user.email || '';
       let tenantName = '';
       let tenantSlug = '';
@@ -156,7 +159,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       // Cargar datos adicionales solo si hay tenantId
       if (tenantId) {
         try {
-          // Cargar datos del tenant (no consultamos users para evitar problemas de permisos)
+          // Cargar datos del tenant
           const tenantResult = await supabase
             .from('tenants')
             .select('name, slug')
@@ -164,7 +167,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
             .maybeSingle();
 
           // Usar datos del JWT para el usuario
-          userFullName = user.user_metadata?.full_name || userEmail.split('@')[0] || '';
+          userFullName = userMetadata.full_name || userEmail.split('@')[0] || '';
           userEmail = user.email || '';
           finalRole = role;
 
