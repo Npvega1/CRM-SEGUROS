@@ -51,12 +51,11 @@ export function useTenantBranding() {
   }, [tenantId, supabase]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      document.documentElement.style.setProperty('--primary', branding.primaryColor);
-      document.documentElement.style.setProperty('--primary-color', branding.primaryColor);
-      document.documentElement.style.setProperty('--secondary-color', branding.secondaryColor);
+    if (typeof window !== 'undefined' && branding.primaryColor) {
+      document.documentElement.style.setProperty('--brand-primary', branding.primaryColor);
+      document.documentElement.style.setProperty('--brand-secondary', branding.secondaryColor);
     }
   }, [branding]);
 
   return { branding, loading };
-    }
+}
