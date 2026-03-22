@@ -229,8 +229,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Verificar tenant_id en el JWT
-  const tenantId = session.user?.app_metadata?.tenant_id;
+  // Verificar tenant_id en el JWT (buscar en app_metadata o user_metadata)
+  const tenantId = session.user?.app_metadata?.tenant_id || session.user?.user_metadata?.tenant_id;
   
   if (!tenantId && pathname !== '/sin-organizacion') {
     return NextResponse.redirect(new URL('/sin-organizacion', request.url));
