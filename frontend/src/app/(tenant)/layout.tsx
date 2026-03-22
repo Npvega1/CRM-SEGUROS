@@ -12,6 +12,7 @@ import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { useTenantBranding } from '@/hooks/useTenantBranding';
 import {
   LayoutDashboard,
   Users,
@@ -60,6 +61,7 @@ export default function TenantLayout({
   const pathname = usePathname();
   const { tenantName, userFullName, role, isLoading, signOut } = useTenant();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  useTenantBranding();
 
   // Mostrar loading solo en la carga inicial
   if (isLoading) {
