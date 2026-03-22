@@ -35,8 +35,9 @@ export default function SettingsPage() {
           .single();
         
         if (data) {
-          setPrimaryColor(data.primary_color || '#1E3A5F');
-          setSecondaryColor(data.secondary_color || '#2E86AB');
+          const settings = data as { primary_color?: string; secondary_color?: string };
+          setPrimaryColor(settings.primary_color || '#1E3A5F');
+          setSecondaryColor(settings.secondary_color || '#2E86AB');
         }
       } catch (error) {
         console.log('No settings found, using defaults');
