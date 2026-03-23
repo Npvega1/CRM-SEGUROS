@@ -135,11 +135,11 @@ export default function AIComparePage() {
       }));
       console.log('📁 Files to send:', filesForAI.map(f => f.name));
 
-      // Usar la URL del backend
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || window.location.origin;
-      console.log('🌐 Backend URL:', backendUrl);
+      // Usar URL relativa - funciona tanto en Emergent como en Vercel
+      const apiUrl = '/api/ai/compare';
+      console.log('🌐 API URL:', apiUrl);
 
-      const aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
+      const aiResponse = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
