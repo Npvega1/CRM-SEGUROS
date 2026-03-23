@@ -211,7 +211,9 @@ export default function SettingsPage() {
       const { error } = await (supabase.from('tenant_settings') as any)
         .upsert({ tenant_id: tenantId, primary_color: primaryColor, secondary_color: secondaryColor, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' });
       if (error) throw error;
-      toast({ title: 'Configuración guardada', description: 'Los colores se han actualizado' });
+      toast({ title: 'Configuración guardada', description: 'Los colores se han actualizado. Recargando...' });
+      // Recargar la página después de 1 segundo para aplicar los nuevos colores
+      setTimeout(() => { window.location.reload(); }, 1000);
     } catch (error) {
       toast({ title: 'Error', description: 'No se pudo guardar', variant: 'destructive' });
     } finally {
