@@ -1,14 +1,15 @@
 'use client';
 
 // =====================================================
-// LAYOUT: Tenant Layout con Sidebar Persistente
-// Envuelve todas las páginas del tenant
+// LAYOUT: Tenant Layout con Sidebar y Permisos
+// Oculta secciones según los permisos del usuario
 // =====================================================
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTenant } from '@/lib/context/TenantContext';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
@@ -38,19 +39,22 @@ interface NavItem {
   href: string;
   icon: React.ElementType;
   badge?: string;
+  permissionKey?: 'clientes' | 'polizas' | 'pipeline' | 'siniestros' | 'facturacion' | 'reportes' | 'mensajes' | 'automatizaciones';
+  adminOnly?: boolean;
+  alwaysShow?: boolean;
 }
 
 const navItems: NavItem[] = [
-  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: 'Clientes', href: '/clientes', icon: Users },
-  { title: 'Pólizas', href: '/polizas', icon: FileText },
-  { title: 'Pipeline', href: '/pipeline', icon: TrendingUp },
-  { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle },
-  { title: 'Mensajes', href: '/mensajes', icon: MessageSquare },
-  { title: 'Facturación', href: '/billing', icon: Receipt },
-  { title: 'Automatizaciones', href: '/automations', icon: Zap },
-  { title: 'Reportes', href: '/reports', icon: BarChart3 },
-  { title: 'Configuración', href: '/settings', icon: Settings },
+  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, alwaysShow: true },
+  { title: 'Clientes', href: '/clientes', icon: Users, permissionKey: 'clientes' },
+  { title: 'Pólizas', href: '/polizas', icon: FileText, permissionKey: 'polizas' },
+  { title: 'Pipeline', href: '/pipeline', icon: TrendingUp, permissionKey: 'pipeline' },
+  { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle, permissionKey: 'siniestros' },
+  { title: 'Mensajes', href: '/mensajes', icon: MessageSquare, permissionKey: 'mensajes' },
+  { title: 'Facturación', href: '/billing', icon: Receipt, permissionKey: 'facturacion' },
+  { title: 'Automatizaciones', href: '/automations', icon: Zap, permissionKey: 'automatizaciones' },
+  { title: 'Reportes', href: '/reports', icon: BarChart3, permissionKey: 'reportes' },
+  { title: 'Configuración', href: '/settings', icon: Settings, adminOnly: true },
 ];
 
 export default function TenantLayout({
@@ -60,11 +64,12 @@ export default function TenantLayout({
 }) {
   const pathname = usePathname();
   const { tenantName, userFullName, role, isLoading, signOut } = useTenant();
+  const { canView, isAdmin, loading: loadingPermissions } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   useTenantBranding();
 
   // Mostrar loading solo en la carga inicial
-  if (isLoading) {
+  if (isLoading || loadingPermissions) {
     return <LoadingScreen message="Cargando..." />;
   }
 
@@ -74,6 +79,22 @@ export default function TenantLayout({
     }
     return pathname.startsWith(href);
   };
+
+  // Filtrar items de navegación según permisos
+  const filteredNavItems = navItems.filter((item) => {
+    // Si siempre se muestra (Dashboard)
+    if (item.alwaysShow) return true;
+    
+    // Si es solo para admin
+    if (item.adminOnly) return isAdmin;
+    
+    // Si tiene clave de permiso, verificar si puede ver
+    if (item.permissionKey) {
+      return isAdmin || canView(item.permissionKey);
+    }
+    
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -86,14 +107,14 @@ export default function TenantLayout({
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-sm truncate">{tenantName || 'CRM Seguros'}</p>
-            <p className="text-xs text-muted-foreground truncate">{role}</p>
+            <p className="text-xs text-muted-foreground truncate">{role === 'admin' ? 'Administrador' : 'Agente'}</p>
           </div>
           <NotificationBell />
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const isActive = isActiveRoute(item.href);
             return (
               <Link
@@ -131,7 +152,7 @@ export default function TenantLayout({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{userFullName || 'Usuario'}</p>
-              <p className="text-xs text-muted-foreground truncate">{role}</p>
+              <p className="text-xs text-muted-foreground truncate">{role === 'admin' ? 'Administrador' : 'Agente'}</p>
             </div>
           </div>
           <Button
@@ -200,7 +221,7 @@ export default function TenantLayout({
 
         {/* Mobile Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const isActive = isActiveRoute(item.href);
             return (
               <Link
@@ -232,7 +253,7 @@ export default function TenantLayout({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{userFullName || 'Usuario'}</p>
-              <p className="text-xs text-muted-foreground truncate">{role}</p>
+              <p className="text-xs text-muted-foreground truncate">{role === 'admin' ? 'Administrador' : 'Agente'}</p>
             </div>
           </div>
           <Button
