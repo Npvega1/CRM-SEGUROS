@@ -5,11 +5,31 @@
 -- =====================================================
 
 -- =====================================================
+-- FUNCIÓN: Verificar si el usuario es superadmin
+-- (Crear si no existe)
+-- =====================================================
+CREATE OR REPLACE FUNCTION auth.is_superadmin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT COALESCE(
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin',
+    false
+  )
+$$;
+
+-- =====================================================
 -- TIPOS ENUM
 -- =====================================================
 
--- Estados de prompts de IA
-CREATE TYPE prompt_status AS ENUM ('active', 'draft', 'deprecated');
+-- Estados de prompts de IA (crear solo si no existe)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'prompt_status') THEN
+    CREATE TYPE prompt_status AS ENUM ('active', 'draft', 'deprecated');
+  END IF;
+END$$;
 
 -- =====================================================
 -- TABLA: ai_prompts
