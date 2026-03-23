@@ -24,7 +24,6 @@ import {
   createComparison,
   canCreateComparison,
   updateComparisonCell,
-  updateRecommendation,
   deleteComparison,
   getComparisonCriteria
 } from '@/lib/services/comparison-service';
@@ -53,7 +52,10 @@ export default function AIComparePage() {
   // Ref para el polling
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Cargar datos
+  // Ref para trackear estados previos de comparativos
+  const prevComparisonsRef = useRef<ComparisonWithRelations[]>([]);
+
+  // Cargar datos y detectar cambios de estado
   const loadData = useCallback(async () => {
     if (!tenantId) return;
 
@@ -64,13 +66,39 @@ export default function AIComparePage() {
       ]);
       
       setUsageStats(usage);
+      
+      // Detectar comparativos que cambiaron de "processing" a "ready"
+      const prevComparisons = prevComparisonsRef.current;
+      if (prevComparisons.length > 0) {
+        compList.forEach(newComp => {
+          const prevComp = prevComparisons.find(p => p.id === newComp.id);
+          if (prevComp && prevComp.status === 'processing' && newComp.status === 'ready') {
+            // ¡Un comparativo terminó de procesar!
+            console.log('✅ Comparativo completado:', newComp.id);
+            toast({
+              title: '✨ Comparativo listo',
+              description: `El análisis de cotizaciones está completo y disponible.`
+            });
+          }
+          if (prevComp && prevComp.status === 'processing' && newComp.status === 'error') {
+            toast({
+              title: 'Error en comparativo',
+              description: 'Hubo un problema al procesar el comparativo.',
+              variant: 'destructive'
+            });
+          }
+        });
+      }
+      
+      // Actualizar referencia
+      prevComparisonsRef.current = compList;
       setComparisons(compList);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, toast]);
 
   // Polling para actualizar comparativos en proceso
   useEffect(() => {
@@ -78,8 +106,13 @@ export default function AIComparePage() {
       loadData();
       
       // Iniciar polling cada 5 segundos para actualizar estados
-      pollingRef.current = setInterval(() => {
-        loadData();
+      pollingRef.current = setInterval(async () => {
+        // Usar la ref para verificar si hay comparativos en proceso
+        const hasProcessing = prevComparisonsRef.current.some(c => c.status === 'processing');
+        if (hasProcessing) {
+          console.log('🔄 Polling: hay comparativos en proceso, recargando...');
+          await loadData();
+        }
       }, 5000);
     }
     
@@ -363,22 +396,6 @@ export default function AIComparePage() {
     }
   };
 
-  const handleUpdateRecommendation = async (recommendation: string) => {
-    if (!selectedComparison) return;
-
-    const result = await updateRecommendation(selectedComparison.id, recommendation);
-
-    if (result.success) {
-      setSelectedComparison(prev => prev ? { ...prev, ai_recommendation: recommendation } : null);
-    } else {
-      toast({
-        title: 'Error',
-        description: result.error || 'No se pudo actualizar',
-        variant: 'destructive'
-      });
-    }
-  };
-
   const handleCreatePolicy = (insurerName: string) => {
     if (!selectedComparison) return;
     
@@ -424,7 +441,6 @@ export default function AIComparePage() {
         <ComparisonViewer
           comparison={selectedComparison}
           onUpdateCell={handleUpdateCell}
-          onUpdateRecommendation={handleUpdateRecommendation}
           onCreatePolicy={handleCreatePolicy}
           branding={{
             agencyName: tenantName || 'Agencia de Seguros'

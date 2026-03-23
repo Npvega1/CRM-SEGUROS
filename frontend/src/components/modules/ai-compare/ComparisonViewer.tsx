@@ -8,17 +8,12 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import type { ComparisonWithRelations } from '@/lib/validations/comparisons';
 import { POLICY_LINE_LABELS, type PolicyLine } from '@/lib/validations/policies';
 import { 
   Download, 
-  Edit2, 
-  Check, 
-  X,
-  Sparkles,
   Building2,
   User,
   Calendar,
@@ -51,7 +46,6 @@ interface ComparisonTable {
 interface ComparisonViewerProps {
   comparison: ComparisonWithRelations;
   onUpdateCell: (insurerKey: string, criteriaKey: string, newValue: string) => Promise<void>;
-  onUpdateRecommendation: (recommendation: string) => Promise<void>;
   onCreatePolicy?: (insurerName: string) => void;
   branding?: {
     logoUrl?: string;
@@ -62,12 +56,8 @@ interface ComparisonViewerProps {
 
 export function ComparisonViewer({
   comparison,
-  onUpdateRecommendation,
   branding
 }: ComparisonViewerProps) {
-  const [isEditingRecommendation, setIsEditingRecommendation] = useState(false);
-  const [recommendationValue, setRecommendationValue] = useState(comparison.ai_recommendation || '');
-  const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   const table = comparison.comparison_table as ComparisonTable | null;
@@ -85,17 +75,6 @@ export function ComparisonViewer({
   }
 
   const insurers = table.insurers;
-
-  const handleSaveRecommendation = async () => {
-    setIsSaving(true);
-    try {
-      await onUpdateRecommendation(recommendationValue);
-      setIsEditingRecommendation(false);
-    } catch (error) {
-      console.error('Error saving recommendation:', error);
-    }
-    setIsSaving(false);
-  };
 
   // Función para exportar a Word con diseño profesional
   const exportToWord = async () => {
@@ -338,44 +317,6 @@ export function ComparisonViewer({
       });
 
       children.push(mainTable);
-
-      // ========== RECOMENDACIÓN ==========
-      if (comparison.ai_recommendation) {
-        children.push(
-          new Paragraph({ children: [], spacing: { before: 300 } }),
-          new Paragraph({ 
-            children: [new TextRun({ text: '🏆 Recomendación del Asesor', bold: true, size: 24 })],
-            spacing: { after: 150 } 
-          })
-        );
-        
-        // Caja de recomendación
-        const recoTable = new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({
-                  children: comparison.ai_recommendation.split('\n').map(line => 
-                    new Paragraph({ 
-                      children: [new TextRun({ text: line, size: 20 })],
-                      spacing: { after: 80 }
-                    })
-                  ),
-                  borders: { 
-                    top: { style: BorderStyle.SINGLE, size: 12, color: '2563EB' },
-                    bottom: { style: BorderStyle.SINGLE, size: 12, color: '2563EB' },
-                    left: { style: BorderStyle.SINGLE, size: 12, color: '2563EB' },
-                    right: { style: BorderStyle.SINGLE, size: 12, color: '2563EB' },
-                  },
-                  shading: { fill: 'EFF6FF', type: ShadingType.CLEAR, color: 'EFF6FF' },
-                }),
-              ],
-            }),
-          ],
-        });
-        children.push(recoTable);
-      }
 
       // ========== PIE DE PÁGINA ==========
       children.push(
@@ -710,54 +651,6 @@ export function ComparisonViewer({
         </CardContent>
       </Card>
 
-      {/* RECOMENDACIÓN */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Recomendación del Asesor
-            </CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => setIsEditingRecommendation(!isEditingRecommendation)}>
-              <Edit2 className="h-4 w-4 mr-1" />
-              Editar
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isEditingRecommendation ? (
-            <div className="space-y-3">
-              <Textarea
-                value={recommendationValue}
-                onChange={(e) => setRecommendationValue(e.target.value)}
-                rows={6}
-                className="resize-none"
-              />
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setRecommendationValue(comparison.ai_recommendation || '');
-                    setIsEditingRecommendation(false);
-                  }}
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Cancelar
-                </Button>
-                <Button size="sm" onClick={handleSaveRecommendation} disabled={isSaving}>
-                  {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
-                  Guardar
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 text-sm whitespace-pre-wrap border border-blue-100">
-              {comparison.ai_recommendation || 'No hay recomendación disponible.'}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

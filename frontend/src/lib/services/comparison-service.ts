@@ -134,6 +134,7 @@ async function incrementUsage(tenantId: string): Promise<void> {
 
 /**
  * Obtiene todos los comparativos del tenant
+ * Incluye timestamp para evitar cache del navegador
  */
 export async function getComparisons(tenantId: string): Promise<ComparisonWithRelations[]> {
   const supabase = getBrowserClient();
@@ -154,10 +155,12 @@ export async function getComparisons(tenantId: string): Promise<ComparisonWithRe
     return [];
   }
   
+  // Forzar nueva referencia de array para que React detecte cambios
   return (data || []).map((item: Record<string, unknown>) => ({
     ...item,
     client: item.clients,
-    agent: item.users
+    agent: item.users,
+    _refreshKey: Date.now() // Ayuda a React a detectar cambios
   })) as ComparisonWithRelations[];
 }
 

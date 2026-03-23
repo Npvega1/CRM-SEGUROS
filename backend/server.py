@@ -417,42 +417,11 @@ Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
             "insurers": comparison_data.get("insurers", [])
         }
         
-        # Generar recomendación profesional
-        recommendation_chat = LlmChat(
-            api_key=api_key,
-            session_id=f"recommendation-{request.comparisonId}",
-            system_message="Eres un asesor de seguros experto colombiano. Das recomendaciones profesionales, claras y objetivas."
-        ).with_model("gemini", "gemini-2.5-pro")
-        
-        # Preparar resumen para la recomendación
-        resumen_aseguradoras = []
-        for ins in comparison_table.get("insurers", []):
-            prima_total = ins.get("prima", {}).get("total_anual", "No especificado")
-            num_amparos = len(ins.get("amparos", []))
-            num_beneficios = len(ins.get("beneficios", []))
-            resumen_aseguradoras.append(f"- {ins.get('name', 'Aseguradora')}: Prima {prima_total}, {num_amparos} amparos, {num_beneficios} beneficios")
-        
-        recommendation_prompt = f"""Analiza estas cotizaciones de seguro de {request.line} para un cliente:
-
-{chr(10).join(resumen_aseguradoras)}
-
-Datos completos del comparativo:
-{json.dumps(comparison_table, indent=2, ensure_ascii=False)[:3000]}
-
-Genera una recomendación profesional (3-4 párrafos) que incluya:
-1. ¿Cuál cotización ofrece mejor relación costo-beneficio y por qué?
-2. Puntos fuertes de cada opción
-3. Consideraciones importantes sobre deducibles y coberturas
-4. Tu recomendación final clara
-
-Sé objetivo y profesional. Responde en español. No uses markdown."""
-
-        recommendation = await recommendation_chat.send_message(UserMessage(text=recommendation_prompt))
-        
+        # Retornar solo la tabla comparativa (sin recomendación de IA)
         return CompareResponse(
             success=True,
             comparison_table=comparison_table,
-            ai_recommendation=recommendation
+            ai_recommendation=None
         )
         
     except HTTPException:
