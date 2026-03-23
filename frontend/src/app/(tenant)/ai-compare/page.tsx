@@ -137,49 +137,30 @@ export default function AIComparePage() {
 
       // Usar URL relativa para pasar por el proxy de Next.js
       const apiUrl = '/api/ai/compare';
-      console.log('🌐 Calling AI backend directly...');
+      console.log('🌐 Calling AI backend with async processing...');
 
-      // Llamar directamente al backend de Emergent con reintentos
+      // Obtener credenciales de Supabase para que el backend actualice directamente
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      
       const backendUrl = process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL || 'https://quote-ai-2.preview.emergentagent.com';
       
-      // Función para hacer la llamada con retry
-      const callWithRetry = async (maxRetries = 2): Promise<Response> => {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            console.log(`🔄 Intento ${attempt}/${maxRetries}...`);
-            const response = await fetch(`${backendUrl}/api/ai/compare`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                comparisonId,
-                tenantId,
-                line,
-                files: filesForAI,
-                criteria: criteriaNames
-              })
-            });
-            
-            // Si es 502 o 504, reintentar
-            if ((response.status === 502 || response.status === 504) && attempt < maxRetries) {
-              console.log(`⚠️ Error ${response.status}, reintentando en 3 segundos...`);
-              await new Promise(resolve => setTimeout(resolve, 3000));
-              continue;
-            }
-            
-            return response;
-          } catch (error) {
-            if (attempt < maxRetries) {
-              console.log(`⚠️ Error de red, reintentando en 3 segundos...`);
-              await new Promise(resolve => setTimeout(resolve, 3000));
-              continue;
-            }
-            throw error;
-          }
-        }
-        throw new Error('Se agotaron los reintentos');
-      };
-      
-      const aiResponse = await callWithRetry(2);
+      // Enviar solicitud al backend con credenciales de Supabase
+      // El backend procesará en background y actualizará Supabase directamente
+      const aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comparisonId,
+          tenantId,
+          line,
+          files: filesForAI,
+          criteria: criteriaNames,
+          // Credenciales para que el backend actualice Supabase directamente
+          supabaseUrl,
+          supabaseKey
+        })
+      });
       
       console.log('📡 Response status:', aiResponse.status);
       
@@ -189,8 +170,16 @@ export default function AIComparePage() {
       }
       
       const aiResult = await aiResponse.json();
-      console.log('📦 AI Result:', aiResult.success ? 'SUCCESS' : 'FAILED', aiResult.error || '');
+      console.log('📦 AI Result:', aiResult.success ? 'ACCEPTED' : 'FAILED', aiResult.error || '');
 
+      // Si el backend aceptó la solicitud con credenciales de Supabase,
+      // el procesamiento continúa en background y el polling detectará cuando termine
+      if (aiResult.success && aiResult.comparison_table?.status === 'processing') {
+        console.log('✅ Procesamiento iniciado en background. El polling detectará cuando termine.');
+        return; // El polling se encargará de detectar cuando termine
+      }
+
+      // Si no hay credenciales de Supabase o hubo error, manejar el resultado aquí
       const supabase = getBrowserClient();
 
       if (aiResult.success) {

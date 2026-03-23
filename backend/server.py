@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -16,6 +16,7 @@ import tempfile
 import fitz  # PyMuPDF para extraer texto de PDFs
 from docx import Document  # python-docx para extraer texto de DOCX
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+import httpx  # Para llamar a Supabase
 
 
 ROOT_DIR = Path(__file__).parent
@@ -54,12 +55,20 @@ class CompareRequest(BaseModel):
     line: str
     files: List[Dict]  # [{name, file_url, file_type, base64_content}]
     criteria: List[str]
+    # Supabase credentials para actualizar directamente
+    supabaseUrl: Optional[str] = None
+    supabaseKey: Optional[str] = None
 
 class CompareResponse(BaseModel):
     success: bool
     comparison_table: Optional[Dict] = None
     ai_recommendation: Optional[str] = None
     error: Optional[str] = None
+    
+class AsyncCompareResponse(BaseModel):
+    accepted: bool
+    message: str
+    comparisonId: str
 
 # Add your routes to the router instead of directly to app
 @api_router.get("/")
@@ -125,16 +134,114 @@ def extract_text_from_docx(binary_data: bytes) -> str:
         return ""
 
 @api_router.post("/ai/compare", response_model=CompareResponse)
-async def compare_quotations(request: CompareRequest):
+async def compare_quotations(request: CompareRequest, background_tasks: BackgroundTasks):
     """
     Procesa cotizaciones de seguros y genera tabla comparativa con IA.
-    OPTIMIZADO: Extrae texto de PDFs primero para mayor velocidad.
+    Si se proporcionan credenciales de Supabase, procesa en background y actualiza directamente.
     """
     try:
         api_key = os.environ.get('EMERGENT_LLM_KEY')
         if not api_key:
             raise HTTPException(status_code=500, detail="API key not configured")
         
+        # Si hay credenciales de Supabase, procesar en background
+        if request.supabaseUrl and request.supabaseKey:
+            # Iniciar procesamiento en background
+            background_tasks.add_task(
+                process_comparison_background,
+                request,
+                api_key
+            )
+            # Retornar inmediatamente
+            return CompareResponse(
+                success=True,
+                comparison_table={"status": "processing"},
+                ai_recommendation="Procesando...",
+                error=None
+            )
+        
+        # Si no hay credenciales, procesar síncronamente (comportamiento anterior)
+        return await process_comparison_sync(request, api_key)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in compare_quotations: {e}")
+        return CompareResponse(success=False, error=str(e))
+
+
+async def update_supabase(supabase_url: str, supabase_key: str, comparison_id: str, data: dict):
+    """Actualiza el registro en Supabase directamente"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.patch(
+                f"{supabase_url}/rest/v1/comparisons?id=eq.{comparison_id}",
+                headers={
+                    "apikey": supabase_key,
+                    "Authorization": f"Bearer {supabase_key}",
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                json=data,
+                timeout=30.0
+            )
+            logger.info(f"Supabase update response: {response.status_code}")
+            return response.status_code == 204
+    except Exception as e:
+        logger.error(f"Error updating Supabase: {e}")
+        return False
+
+
+async def process_comparison_background(request: CompareRequest, api_key: str):
+    """Procesa la comparación en background y actualiza Supabase cuando termina"""
+    try:
+        logger.info(f"Starting background processing for {request.comparisonId}")
+        
+        # Procesar
+        result = await process_comparison_sync(request, api_key)
+        
+        # Actualizar Supabase con el resultado
+        if request.supabaseUrl and request.supabaseKey:
+            if result.success:
+                await update_supabase(
+                    request.supabaseUrl,
+                    request.supabaseKey,
+                    request.comparisonId,
+                    {
+                        "comparison_table": result.comparison_table,
+                        "ai_recommendation": result.ai_recommendation,
+                        "status": "completed"
+                    }
+                )
+                logger.info(f"Background processing completed for {request.comparisonId}")
+            else:
+                await update_supabase(
+                    request.supabaseUrl,
+                    request.supabaseKey,
+                    request.comparisonId,
+                    {
+                        "status": "error",
+                        "ai_recommendation": f"Error: {result.error}"
+                    }
+                )
+                logger.error(f"Background processing failed for {request.comparisonId}: {result.error}")
+    except Exception as e:
+        logger.error(f"Background processing error: {e}")
+        if request.supabaseUrl and request.supabaseKey:
+            await update_supabase(
+                request.supabaseUrl,
+                request.supabaseKey,
+                request.comparisonId,
+                {
+                    "status": "error",
+                    "ai_recommendation": f"Error de procesamiento: {str(e)}"
+                }
+            )
+
+
+async def process_comparison_sync(request: CompareRequest, api_key: str) -> CompareResponse:
+    """Procesa la comparación de forma síncrona"""
+    try:
         # Extraer texto de cada archivo
         extracted_texts = []
         
