@@ -92,10 +92,17 @@ export function NewComparisonWizard({
   };
 
   const handleClose = () => {
-    if (!isProcessing && !isSubmitting) {
+    // Permitir cerrar siempre, excepto cuando está procesando activamente
+    if (!isProcessing) {
       resetForm();
       onClose();
     }
+  };
+
+  // Función para forzar cierre (cuando hay error)
+  const forceClose = () => {
+    resetForm();
+    onClose();
   };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -416,13 +423,21 @@ export function NewComparisonWizard({
 
                 {/* Errors */}
                 {errors.length > 0 && (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {errors.map((error, i) => (
                       <p key={i} className="text-sm text-red-500 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {error}
                       </p>
                     ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={forceClose}
+                      className="mt-2"
+                    >
+                      Cerrar
+                    </Button>
                   </div>
                 )}
               </div>
