@@ -100,40 +100,62 @@ export function ComparisonViewer({
     setIsExporting(true);
     
     try {
-      // Import dinámico
-      const docxModule = await import('docx');
-      const fileSaverModule = await import('file-saver');
+      // Import dinámico con manejo de errores mejorado
+      const [docxModule, fileSaverModule] = await Promise.all([
+        import('docx'),
+        import('file-saver')
+      ]);
       
-      const { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType, AlignmentType, HeadingLevel, BorderStyle } = docxModule;
-      const { saveAs } = fileSaverModule;
+      const { 
+        Document, 
+        Packer, 
+        Paragraph, 
+        Table, 
+        TableCell, 
+        TableRow, 
+        TextRun, 
+        WidthType, 
+        AlignmentType, 
+        HeadingLevel,
+        BorderStyle
+      } = docxModule;
+      
+      const saveAs = fileSaverModule.saveAs || fileSaverModule.default?.saveAs;
+      
+      if (!saveAs) {
+        throw new Error('No se pudo cargar la función de guardado');
+      }
 
-      const children: (typeof Paragraph.prototype | typeof Table.prototype)[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const children: any[] = [];
+      
+      // Configuración de bordes
+      const borders = {
+        top: { style: BorderStyle.SINGLE, size: 1, color: '999999' },
+        bottom: { style: BorderStyle.SINGLE, size: 1, color: '999999' },
+        left: { style: BorderStyle.SINGLE, size: 1, color: '999999' },
+        right: { style: BorderStyle.SINGLE, size: 1, color: '999999' },
+      };
       
       // Título
       children.push(
         new Paragraph({
-          children: [new TextRun({ text: branding?.agencyName || 'Agencia de Seguros', bold: true, size: 32 })],
+          children: [new TextRun({ text: branding?.agencyName || 'Agencia de Seguros', bold: true, size: 36 })],
           alignment: AlignmentType.CENTER,
           spacing: { after: 200 },
-        })
-      );
-      
-      children.push(
+        }),
         new Paragraph({
           children: [new TextRun({ text: 'CUADRO COMPARATIVO DE COTIZACIONES', bold: true, size: 28 })],
           alignment: AlignmentType.CENTER,
-          spacing: { after: 400 },
-        })
-      );
-      
-      children.push(
+          spacing: { after: 300 },
+        }),
         new Paragraph({
           children: [
             new TextRun({ text: 'Cliente: ', bold: true }),
-            new TextRun({ text: clientName }),
-            new TextRun({ text: '  |  Ramo: ', bold: true }),
-            new TextRun({ text: POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line }),
-            new TextRun({ text: '  |  Fecha: ', bold: true }),
+            new TextRun({ text: clientName + '     ' }),
+            new TextRun({ text: 'Ramo: ', bold: true }),
+            new TextRun({ text: (POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line) + '     ' }),
+            new TextRun({ text: 'Fecha: ', bold: true }),
             new TextRun({ text: comparison.created_at ? format(new Date(comparison.created_at), 'dd/MM/yyyy') : 'N/A' }),
           ],
           spacing: { after: 400 },
@@ -142,150 +164,178 @@ export function ComparisonViewer({
 
       // RESUMEN DE PRIMAS
       children.push(
-        new Paragraph({ text: 'RESUMEN DE PRIMAS', heading: HeadingLevel.HEADING_1, spacing: { before: 300, after: 200 } })
+        new Paragraph({ 
+          children: [new TextRun({ text: 'RESUMEN DE PRIMAS', bold: true, size: 24 })],
+          spacing: { before: 200, after: 150 } 
+        })
       );
 
-      const borderStyle = { style: BorderStyle.SINGLE, size: 1, color: '000000' };
-      const cellBorders = { top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle };
+      const primaRows = [
+        new TableRow({
+          children: [
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Aseguradora', bold: true })] })], borders }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Prima Anual', bold: true })] })], borders }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Forma de Pago', bold: true })] })], borders }),
+          ],
+        }),
+        ...insurers.map(ins => new TableRow({
+          children: [
+            new TableCell({ children: [new Paragraph(ins.name || '')], borders }),
+            new TableCell({ children: [new Paragraph(ins.prima?.total_anual || 'No especificado')], borders }),
+            new TableCell({ children: [new Paragraph(ins.prima?.forma_pago || 'No especificado')], borders }),
+          ],
+        })),
+      ];
 
-      const primaTable = new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: [
-          new TableRow({
-            children: [
-              new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Aseguradora', bold: true })] })], borders: cellBorders }),
-              new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Prima Anual', bold: true })] })], borders: cellBorders }),
-              new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Forma de Pago', bold: true })] })], borders: cellBorders }),
-            ],
-          }),
-          ...insurers.map(ins => new TableRow({
-            children: [
-              new TableCell({ children: [new Paragraph({ text: ins.name })], borders: cellBorders }),
-              new TableCell({ children: [new Paragraph({ text: ins.prima?.total_anual || 'No especificado' })], borders: cellBorders }),
-              new TableCell({ children: [new Paragraph({ text: ins.prima?.forma_pago || 'No especificado' })], borders: cellBorders }),
-            ],
-          })),
-        ],
-      });
-      children.push(primaTable);
+      children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: primaRows }));
 
       // VALORES ASEGURADOS
-      const allValores = new Set<string>();
-      insurers.forEach(ins => ins.valores_asegurados?.forEach(v => allValores.add(v.concepto)));
-      
       if (allValores.size > 0) {
         children.push(
-          new Paragraph({ text: 'VALORES ASEGURADOS', heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } })
+          new Paragraph({ 
+            children: [new TextRun({ text: 'VALORES ASEGURADOS', bold: true, size: 24 })],
+            spacing: { before: 300, after: 150 } 
+          })
         );
 
-        const valoresTable = new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Concepto', bold: true })] })], borders: cellBorders }),
-                ...insurers.map(ins => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: ins.name, bold: true })] })], borders: cellBorders })),
-              ],
-            }),
-            ...Array.from(allValores).map(concepto => new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph({ text: concepto })], borders: cellBorders }),
-                ...insurers.map(ins => {
-                  const valor = ins.valores_asegurados?.find(v => v.concepto === concepto)?.valor || '-';
-                  return new TableCell({ children: [new Paragraph({ text: valor })], borders: cellBorders });
-                }),
-              ],
-            })),
-          ],
-        });
-        children.push(valoresTable);
+        const valoresRows = [
+          new TableRow({
+            children: [
+              new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Concepto', bold: true })] })], borders }),
+              ...insurers.map(ins => new TableCell({ 
+                children: [new Paragraph({ children: [new TextRun({ text: ins.name || '', bold: true })] })], 
+                borders 
+              })),
+            ],
+          }),
+          ...Array.from(allValores).map(concepto => new TableRow({
+            children: [
+              new TableCell({ children: [new Paragraph(concepto)], borders }),
+              ...insurers.map(ins => {
+                const valor = ins.valores_asegurados?.find(v => v.concepto === concepto)?.valor || '-';
+                return new TableCell({ children: [new Paragraph(valor)], borders });
+              }),
+            ],
+          })),
+        ];
+
+        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: valoresRows }));
       }
 
       // AMPAROS
-      const allAmparos = new Set<string>();
-      insurers.forEach(ins => ins.amparos?.forEach(a => allAmparos.add(a.amparo)));
-      
       if (allAmparos.size > 0) {
         children.push(
-          new Paragraph({ text: 'AMPAROS / COBERTURAS', heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } })
+          new Paragraph({ 
+            children: [new TextRun({ text: 'AMPAROS / COBERTURAS', bold: true, size: 24 })],
+            spacing: { before: 300, after: 150 } 
+          })
         );
 
-        const amparosTable = new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Amparo', bold: true })] })], borders: cellBorders }),
-                ...insurers.map(ins => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: ins.name, bold: true })] })], borders: cellBorders })),
-              ],
-            }),
-            ...Array.from(allAmparos).map(amparo => new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph({ text: amparo })], borders: cellBorders }),
-                ...insurers.map(ins => {
-                  const amp = ins.amparos?.find(a => a.amparo === amparo);
-                  return new TableCell({ children: [new Paragraph({ text: amp?.limite || (amp ? '✓' : '-') })], borders: cellBorders });
-                }),
-              ],
-            })),
-          ],
-        });
-        children.push(amparosTable);
+        const amparosRows = [
+          new TableRow({
+            children: [
+              new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Amparo', bold: true })] })], borders }),
+              ...insurers.map(ins => new TableCell({ 
+                children: [new Paragraph({ children: [new TextRun({ text: ins.name || '', bold: true })] })], 
+                borders 
+              })),
+            ],
+          }),
+          ...Array.from(allAmparos).map(amparo => new TableRow({
+            children: [
+              new TableCell({ children: [new Paragraph(amparo)], borders }),
+              ...insurers.map(ins => {
+                const amp = ins.amparos?.find(a => a.amparo === amparo);
+                const text = amp ? (amp.limite || 'Incluido') : 'No incluido';
+                return new TableCell({ children: [new Paragraph(text)], borders });
+              }),
+            ],
+          })),
+        ];
+
+        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: amparosRows }));
       }
 
       // DEDUCIBLES
-      const allDeducibles = new Set<string>();
-      insurers.forEach(ins => ins.deducibles?.forEach(d => allDeducibles.add(d.concepto)));
-      
       if (allDeducibles.size > 0) {
         children.push(
-          new Paragraph({ text: 'DEDUCIBLES', heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } })
+          new Paragraph({ 
+            children: [new TextRun({ text: 'DEDUCIBLES', bold: true, size: 24 })],
+            spacing: { before: 300, after: 150 } 
+          })
         );
 
-        const deduciblesTable = new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Deducible', bold: true })] })], borders: cellBorders }),
-                ...insurers.map(ins => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: ins.name, bold: true })] })], borders: cellBorders })),
-              ],
-            }),
-            ...Array.from(allDeducibles).map(ded => new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph({ text: ded })], borders: cellBorders }),
-                ...insurers.map(ins => {
-                  const deducible = ins.deducibles?.find(d => d.concepto === ded);
-                  return new TableCell({ children: [new Paragraph({ text: deducible?.valor || '-' })], borders: cellBorders });
-                }),
-              ],
-            })),
-          ],
-        });
-        children.push(deduciblesTable);
+        const deduciblesRows = [
+          new TableRow({
+            children: [
+              new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Deducible', bold: true })] })], borders }),
+              ...insurers.map(ins => new TableCell({ 
+                children: [new Paragraph({ children: [new TextRun({ text: ins.name || '', bold: true })] })], 
+                borders 
+              })),
+            ],
+          }),
+          ...Array.from(allDeducibles).map(ded => new TableRow({
+            children: [
+              new TableCell({ children: [new Paragraph(ded)], borders }),
+              ...insurers.map(ins => {
+                const deducible = ins.deducibles?.find(d => d.concepto === ded);
+                return new TableCell({ children: [new Paragraph(deducible?.valor || '-')], borders });
+              }),
+            ],
+          })),
+        ];
+
+        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: deduciblesRows }));
       }
+
+      // BENEFICIOS
+      children.push(
+        new Paragraph({ 
+          children: [new TextRun({ text: 'BENEFICIOS ADICIONALES', bold: true, size: 24 })],
+          spacing: { before: 300, after: 150 } 
+        })
+      );
+      
+      insurers.forEach(ins => {
+        children.push(
+          new Paragraph({ 
+            children: [new TextRun({ text: ins.name || 'Aseguradora', bold: true })],
+            spacing: { before: 100 } 
+          })
+        );
+        if (ins.beneficios && ins.beneficios.length > 0) {
+          ins.beneficios.forEach(ben => {
+            children.push(new Paragraph({ text: `• ${ben}` }));
+          });
+        } else {
+          children.push(new Paragraph({ text: '• No especificados' }));
+        }
+      });
 
       // RECOMENDACIÓN
       if (comparison.ai_recommendation) {
         children.push(
-          new Paragraph({ text: 'RECOMENDACIÓN', heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } })
-        );
-        children.push(
-          new Paragraph({ text: comparison.ai_recommendation, spacing: { after: 200 } })
+          new Paragraph({ 
+            children: [new TextRun({ text: 'RECOMENDACIÓN DEL ASESOR', bold: true, size: 24 })],
+            spacing: { before: 300, after: 150 } 
+          }),
+          new Paragraph({ text: comparison.ai_recommendation })
         );
       }
 
       // Crear documento
       const doc = new Document({
-        sections: [{ properties: {}, children: children as typeof Paragraph.prototype[] }],
+        sections: [{ properties: {}, children }],
       });
 
       const blob = await Packer.toBlob(doc);
-      saveAs(blob, `Comparativo_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.docx`);
+      const fileName = `Comparativo_${clientName.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s]/g, '').replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.docx`;
+      saveAs(blob, fileName);
       
     } catch (error) {
       console.error('Error exporting to Word:', error);
-      alert('Error al exportar: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+      alert('Error al exportar: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setIsExporting(false);
     }

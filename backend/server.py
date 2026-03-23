@@ -159,7 +159,7 @@ async def compare_quotations(request: CompareRequest):
                 if text.strip():
                     extracted_texts.append({
                         "name": file_name,
-                        "content": text[:5000]  # Limitar a 5000 chars por archivo para mayor velocidad
+                        "content": text[:12000]  # 12000 chars por archivo - Vercel Pro permite más tiempo
                     })
                     logger.info(f"Extracted {len(text)} chars from {file_name}")
                 else:
@@ -172,46 +172,105 @@ async def compare_quotations(request: CompareRequest):
         if not extracted_texts:
             raise HTTPException(status_code=400, detail="No se pudo extraer texto de los archivos. Verifica que los PDFs no sean imágenes escaneadas.")
         
-        # Construir el prompt con el texto extraído - ESTRUCTURA NORMALIZADA
+        # Construir el prompt con el texto extraído - ESTRUCTURA COMPLETA PARA COMPARATIVO
         files_content = ""
         for i, doc in enumerate(extracted_texts, 1):
-            files_content += f"\n=== COTIZACIÓN {i}: {doc['name']} ===\n{doc['content']}\n"
+            files_content += f"\n\n{'='*60}\nCOTIZACIÓN {i}: {doc['name']}\n{'='*60}\n{doc['content']}\n"
         
-        analysis_prompt = f"""Analiza estas {len(extracted_texts)} cotizaciones de seguro "{request.line}" y extrae datos comparables.
+        analysis_prompt = f"""Eres un experto analista de seguros. Analiza las siguientes {len(extracted_texts)} cotizaciones de seguro del ramo "{request.line}" y crea un cuadro comparativo estructurado.
 
 {files_content}
 
-Responde SOLO con JSON válido. Usa EXACTAMENTE los mismos nombres de campo para todas las aseguradoras:
+INSTRUCCIONES DETALLADAS:
 
+1. EXTRAE el nombre EXACTO de cada aseguradora de cada documento.
+
+2. Para VALORES ASEGURADOS, identifica y normaliza usando estos nombres estándar:
+   - "Edificio" (también llamado: inmueble, construcción, casa, apartamento)
+   - "Contenidos" (también: muebles y enseres, bienes muebles, ajuar)
+   - "Equipos Electrónicos" (también: equipo eléctrico, electrodomésticos, cómputo)
+   - "Maquinaria y Equipo" (si aplica para empresas)
+   - "Responsabilidad Civil" (RC extracontractual, RC familiar)
+   - "Hurto/Sustracción" (límite de cobertura)
+   - "TOTAL ASEGURADO" (suma de todos los valores)
+
+3. Para AMPAROS/COBERTURAS, usa estos nombres estándar:
+   - "Incendio y Rayo" 
+   - "Terremoto/Temblor"
+   - "HMACC/AMIT" (huelga, motín, actos malintencionados, terrorismo)
+   - "Daños por Agua" (anegación, inundación)
+   - "Hurto/Sustracción"
+   - "Responsabilidad Civil"
+   - "Daños a Equipos Eléctricos"
+   - "Rotura de Vidrios"
+   - "Remoción de Escombros"
+   (Agrega otros amparos específicos que encuentres)
+
+4. Para DEDUCIBLES, usa estos nombres:
+   - "General/Básico"
+   - "Terremoto"
+   - "HMACC/AMIT"
+   - "Hurto"
+   - "Equipos Eléctricos"
+   - "Responsabilidad Civil"
+   (Incluye el porcentaje y mínimo en SMMLV o pesos)
+
+5. Para BENEFICIOS, lista servicios adicionales como:
+   - Asistencia domiciliaria (plomería, cerrajería, electricidad)
+   - Hospedaje temporal
+   - Asesoría legal
+   - Gastos médicos
+   - Etc.
+
+6. Para PRIMA, extrae:
+   - Prima neta (sin IVA)
+   - IVA
+   - Prima TOTAL a pagar (con IVA) - ESTE ES EL MÁS IMPORTANTE
+   - Forma de pago (anual, semestral, cuotas)
+
+REGLAS CRÍTICAS:
+- TODAS las aseguradoras deben tener los MISMOS campos/conceptos
+- Si una aseguradora NO tiene un valor específico, usa "No incluido" o "No aplica"
+- Usa formato de moneda colombiana: $1,234,567
+- NO inventes datos, solo extrae lo que está en los documentos
+
+Responde ÚNICAMENTE con este JSON (sin markdown, sin explicaciones):
 {{
   "insurers": [
     {{
-      "name": "NOMBRE ASEGURADORA",
+      "name": "NOMBRE EXACTO DE LA ASEGURADORA",
       "valores_asegurados": [
-        {{"concepto": "Edificio", "valor": "$X"}},
-        {{"concepto": "Contenidos", "valor": "$X"}},
-        {{"concepto": "Equipos Electrónicos", "valor": "$X"}}
+        {{"concepto": "Edificio", "valor": "$600,000,000"}},
+        {{"concepto": "Contenidos", "valor": "$50,000,000"}},
+        {{"concepto": "Equipos Electrónicos", "valor": "$20,000,000"}},
+        {{"concepto": "Responsabilidad Civil", "valor": "$100,000,000"}},
+        {{"concepto": "TOTAL ASEGURADO", "valor": "$770,000,000"}}
       ],
       "amparos": [
-        {{"amparo": "Incendio y Rayo", "limite": "100%"}},
-        {{"amparo": "Terremoto", "limite": "100%"}},
-        {{"amparo": "Hurto", "limite": "$X"}}
+        {{"amparo": "Incendio y Rayo", "limite": "100% valor asegurado"}},
+        {{"amparo": "Terremoto/Temblor", "limite": "100% valor asegurado"}},
+        {{"amparo": "HMACC/AMIT", "limite": "100% valor asegurado"}},
+        {{"amparo": "Hurto/Sustracción", "limite": "$50,000,000"}}
       ],
       "deducibles": [
-        {{"concepto": "General", "valor": "10% min X"}},
-        {{"concepto": "Terremoto", "valor": "2%"}}
+        {{"concepto": "General/Básico", "valor": "10% mínimo 1 SMMLV"}},
+        {{"concepto": "Terremoto", "valor": "2% del valor asegurado, mín 3 SMMLV"}},
+        {{"concepto": "Hurto", "valor": "10% mínimo 1 SMMLV"}}
       ],
-      "beneficios": ["beneficio1", "beneficio2"],
-      "prima": {{"total_anual": "$X", "forma_pago": "anual/cuotas"}}
+      "beneficios": [
+        "Asistencia domiciliaria 24/7",
+        "Hospedaje temporal hasta $5,000,000",
+        "Asesoría legal telefónica"
+      ],
+      "prima": {{
+        "prima_neta": "$1,200,000",
+        "iva": "$228,000",
+        "total_anual": "$1,428,000",
+        "forma_pago": "Anual o 4 cuotas sin interés"
+      }}
     }}
   ]
-}}
-
-REGLAS:
-1. USA los mismos nombres de concepto para TODAS las aseguradoras
-2. Si no hay dato, usa "No incluido"
-3. Extrae la prima TOTAL (con IVA si está)
-4. Solo JSON, sin explicaciones"""
+}}"""
 
         # Inicializar chat con Gemini
         chat = LlmChat(
@@ -248,23 +307,35 @@ Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
             "insurers": comparison_data.get("insurers", [])
         }
         
-        # Generar recomendación (versión corta para velocidad)
+        # Generar recomendación profesional
         recommendation_chat = LlmChat(
             api_key=api_key,
             session_id=f"recommendation-{request.comparisonId}",
-            system_message="Eres un asesor de seguros. Sé breve y directo."
+            system_message="Eres un asesor de seguros experto colombiano. Das recomendaciones profesionales, claras y objetivas."
         ).with_model("gemini", "gemini-2.5-flash")
         
-        # Solo enviar las primas para la recomendación (más rápido)
-        primas_resumen = []
+        # Preparar resumen para la recomendación
+        resumen_aseguradoras = []
         for ins in comparison_table.get("insurers", []):
-            prima = ins.get("prima", {}).get("total_anual", "No especificado")
-            primas_resumen.append(f"- {ins.get('name', 'Aseguradora')}: {prima}")
+            prima_total = ins.get("prima", {}).get("total_anual", "No especificado")
+            num_amparos = len(ins.get("amparos", []))
+            num_beneficios = len(ins.get("beneficios", []))
+            resumen_aseguradoras.append(f"- {ins.get('name', 'Aseguradora')}: Prima {prima_total}, {num_amparos} amparos, {num_beneficios} beneficios")
         
-        recommendation_prompt = f"""Compara estas cotizaciones de seguro {request.line}:
-{chr(10).join(primas_resumen)}
+        recommendation_prompt = f"""Analiza estas cotizaciones de seguro de {request.line} para un cliente:
 
-En máximo 2 párrafos: ¿Cuál recomiendas y por qué? Sé directo."""
+{chr(10).join(resumen_aseguradoras)}
+
+Datos completos del comparativo:
+{json.dumps(comparison_table, indent=2, ensure_ascii=False)[:3000]}
+
+Genera una recomendación profesional (3-4 párrafos) que incluya:
+1. ¿Cuál cotización ofrece mejor relación costo-beneficio y por qué?
+2. Puntos fuertes de cada opción
+3. Consideraciones importantes sobre deducibles y coberturas
+4. Tu recomendación final clara
+
+Sé objetivo y profesional. Responde en español. No uses markdown."""
 
         recommendation = await recommendation_chat.send_message(UserMessage(text=recommendation_prompt))
         
