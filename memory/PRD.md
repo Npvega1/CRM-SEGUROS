@@ -1,117 +1,56 @@
 # CRM Multi-tenant para Agencias de Seguros - PRD
 
-## Información del Proyecto
-- **Stack**: Next.js 14, Supabase, TypeScript, Tailwind CSS, Shadcn/UI
-- **Repositorio**: https://github.com/Npvega1/CRM-SEGUROS
-- **Rama actual**: modulo06 (con M07 implementado)
+## Estado del Proyecto
+**Fecha última actualización:** 2026-01-23
 
-## Arquitectura
-- Multi-tenant con RLS en Supabase
-- tenant_id extraído del JWT: `(auth.jwt() -> 'app_metadata' ->> 'tenant_id')::uuid`
-- Sin Server Actions, usa Supabase Client directo (getBrowserClient())
-- Triggers PostgreSQL usan `auth.uid()` NO `auth.user_id()`
+## Stack Tecnológico
+- Next.js 14, Supabase, TypeScript, Tailwind CSS, Shadcn/UI, Zod
 
-## Módulos Implementados
-
-### [✓] Módulo 00 - Fundación
-- Configuración base del proyecto
-- Autenticación Supabase
-- Layout del tenant
-
-### [✓] Módulo 01 - Clientes y Pólizas
-- CRUD de clientes
-- Gestión de pólizas
-- Documentos de pólizas
-
-### [✓] Módulo 02 - Pipeline de Ventas
-- Etapas de pipeline
-- Gestión de oportunidades
-- Actividades
-
-### [✓] Módulo 03 - Siniestros
-- Gestión de claims
-- Historial de estados
-- Documentos de siniestros
-
-### [✓] Módulo 04 - Reportes y Analytics
-- Dashboard ejecutivo
-- Reportes con funciones SQL SECURITY DEFINER
-
-### [✓] Módulo 05 - Facturación y Comisiones
-- Invoices y cuotas
-- Comisiones por póliza
-- Tasas por aseguradora
-
-### [✓] Módulo 06 - Automatizaciones y Workflows
-- Sistema de automatizaciones
-- Cola de procesamiento
-- Notificaciones in-app
-- Email MOCK (sin servicio real)
-
-### [✓] Módulo 07 - Portal del Cliente (NUEVO - Implementado Enero 2026)
-**Archivos creados:**
-- `supabase/migrations/00007_portal.sql` - Migración con tablas y funciones
-- `src/lib/validations/portal.ts` - Schemas Zod y tipos
-- `src/lib/context/PortalContext.tsx` - Contexto del portal
-- `src/app/(portal)/[tenantSlug]/layout.tsx` - Layout white-label
-- `src/app/(portal)/[tenantSlug]/login/page.tsx` - Magic Link (MOCK)
-- `src/app/(portal)/[tenantSlug]/dashboard/page.tsx` - Dashboard cliente
-- `src/app/(portal)/[tenantSlug]/policies/page.tsx` - Lista pólizas
-- `src/app/(portal)/[tenantSlug]/claims/page.tsx` - Lista siniestros
-- `src/app/(portal)/[tenantSlug]/claims/new/page.tsx` - Reportar siniestro
-- `src/app/(portal)/[tenantSlug]/account/page.tsx` - Estado de cuenta
-- `src/app/(portal)/[tenantSlug]/chat/page.tsx` - Chat con agente
-- `src/app/(portal)/[tenantSlug]/manifest.webmanifest/route.ts` - PWA básico
-- `src/app/(tenant)/mensajes/page.tsx` - Chat de agentes con clientes (CRM Admin)
-- `src/components/ui/UnreadMessagesBadge.tsx` - Badge mensajes no leídos
-
-**Tablas SQL creadas:**
-- `tenant_settings` - Configuración visual del tenant (placeholder M08)
-- `portal_sessions` - Sesiones de clientes
-- `messages` - Chat cliente-agente
-- `client_requests` - Solicitudes del cliente
-
-**Funciones SQL creadas:**
-- `get_portal_client_by_email()` - Verificar cliente por email
-- `get_portal_summary()` - Resumen del portal
-- `register_portal_session()` - Registrar sesión
-- `update_portal_session_activity()` - Actualizar actividad
-- `is_agent_online()` - Verificar agente en línea
-
-**Notas:**
-- Magic Link OTP está como MOCK (sin envío real de email)
-- PWA solo incluye manifest básico (sin service worker completo)
-- Chat usa polling cada 10 segundos (NO Supabase Realtime)
-- White-label inyecta CSS variables dinámicamente
-- Interfaz de mensajes para agentes con:
-  - Lista de conversaciones
-  - Chat en tiempo real (polling 10s)
-  - Diferenciación visual agente/cliente
-  - Badge de mensajes no leídos en sidebar
+## Módulos Completados
+- [✓] Módulo 00 - Fundación
+- [✓] Módulo 01 - Clientes y Pólizas
+- [✓] Módulo 02 - Pipeline de Ventas
+- [✓] Módulo 03 - Siniestros
+- [✓] Módulo 04 - Reportes y Analytics
+- [✓] Módulo 05 - Facturación y Comisiones
+- [✓] Módulo 06 - Automatizaciones y Workflows
+- [✓] Módulo 07 - Portal del Cliente
+- [✓] Módulo 08 - Configuración Visual
+- [✓] Módulo 09 - Comparativos con IA (NUEVO - Implementado hoy)
 
 ## Módulos Pendientes
-- [ ] Módulo 08 - Configuración Visual
-- [ ] Módulo 09 - Comparativos con IA
 - [ ] Módulo 10 - Planes y Pagos
 - [ ] Módulo 11 - Super Admin
+- [ ] Módulo 12 - Agentes Aliados
 
-## Backlog de Mejoras (P2/P3)
-- Facturación: trigger automático de cuotas no funciona
-- Facturación: fecha de vencimiento de cuotas incorrecta
-- Facturación: agregar 25 días de gracia
-- Pólizas: agregar más campos de información
-- Clientes: contador de pólizas muestra 0
-- Integrar servicio de email real (Resend o SendGrid)
-- Portal: Implementar Magic Link OTP real
-- Portal: Service worker completo para PWA
+## Implementación del Módulo 09 - Comparativos con IA
 
-## Configuración Requerida
-Variables de entorno necesarias en `.env`:
-```
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-```
+### Lo que se implementó:
+1. **Backend API** (`/api/ai/compare`) usando Gemini 2.5 Flash via Emergent LLM Key
+2. **Página principal** `/ai-compare` con:
+   - Barra de progreso de uso mensual (10 comparativos/mes)
+   - Lista de comparativos anteriores
+   - Wizard de 3 pasos para crear nuevo comparativo
+3. **Componentes UI**:
+   - NewComparisonWizard (selección cliente/ramo, upload archivos, confirmación)
+   - ComparisonViewer (tabla editable, recomendación IA, exportar Excel)
+   - UsageProgress, ClientSearchSelect, ComparisonsList
+4. **Migración SQL** con tablas: comparisons, comparison_files, comparison_criteria, usage_logs
+5. **Validaciones Zod** y tipos TypeScript estrictos
+6. **Integración al sidebar** con badge "Nuevo"
 
-## Última Actualización
-- Fecha: Diciembre 2025
-- Sesión: Completado chat de agentes y badge de mensajes no leídos (M07)
+### Pendiente para funcionar:
+- Ejecutar migración SQL en Supabase
+- Crear bucket `comparison-documents` en Storage
+- Configurar políticas RLS de Storage
+
+## Próximas Tareas (P0)
+1. Módulo 10 - Planes y Pagos (límites de uso, suscripciones)
+2. Módulo 11 - Super Admin (gestión de tenants)
+
+## Backlog (P1/P2)
+- Módulo 12 - Agentes Aliados
+- Exportar comparativo a PDF
+- Compartir comparativo con cliente via portal
+- Integrar servicio de email real (Resend/SendGrid)
+- Implementar Magic Link OTP real
