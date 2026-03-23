@@ -173,22 +173,35 @@ async def compare_quotations(request: CompareRequest, background_tasks: Backgrou
 async def update_supabase(supabase_url: str, supabase_key: str, comparison_id: str, data: dict):
     """Actualiza el registro en Supabase directamente"""
     try:
+        url = f"{supabase_url}/rest/v1/comparisons?id=eq.{comparison_id}"
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        }
+        
+        logger.info(f"Updating Supabase: {url}")
+        logger.info(f"Data keys: {list(data.keys())}")
+        
         async with httpx.AsyncClient() as client:
             response = await client.patch(
-                f"{supabase_url}/rest/v1/comparisons?id=eq.{comparison_id}",
-                headers={
-                    "apikey": supabase_key,
-                    "Authorization": f"Bearer {supabase_key}",
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
-                },
+                url,
+                headers=headers,
                 json=data,
                 timeout=30.0
             )
+            
             logger.info(f"Supabase update response: {response.status_code}")
+            
+            if response.status_code != 204:
+                logger.error(f"Supabase error response: {response.text}")
+                
             return response.status_code == 204
     except Exception as e:
         logger.error(f"Error updating Supabase: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 
