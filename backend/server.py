@@ -172,9 +172,7 @@ async def compare_quotations(request: CompareRequest):
         if not extracted_texts:
             raise HTTPException(status_code=400, detail="No se pudo extraer texto de los archivos. Verifica que los PDFs no sean imágenes escaneadas.")
         
-        # Construir el prompt con el texto extraído
-        criteria_list = "\n".join([f"- {c}" for c in request.criteria])
-        
+        # Construir el prompt con el texto extraído - NUEVA ESTRUCTURA
         files_content = ""
         for i, doc in enumerate(extracted_texts, 1):
             files_content += f"\n\n=== COTIZACIÓN {i}: {doc['name']} ===\n{doc['content']}\n"
@@ -183,33 +181,81 @@ async def compare_quotations(request: CompareRequest):
 
 {files_content}
 
-Para cada cotización, extrae la siguiente información:
-{criteria_list}
+Extrae la información de CADA cotización y organízala en las siguientes secciones:
+
+1. INFORMACIÓN DEL RIESGO:
+   - Cliente/Asegurado (nombre completo)
+   - Dirección del riesgo
+   - Ciudad
+   - Descripción del bien/riesgo
+
+2. VALORES ASEGURADOS:
+   - Lista todos los valores asegurados que encuentres (edificio, contenido, maquinaria, etc.)
+   - Incluye el monto de cada uno
+
+3. AMPAROS/COBERTURAS:
+   - Lista todas las coberturas incluidas
+   - Indica límites si los hay
+
+4. DEDUCIBLES:
+   - Lista todos los deducibles aplicables
+   - Indica porcentaje o monto mínimo
+
+5. BENEFICIOS ADICIONALES:
+   - Lista beneficios especiales de cada aseguradora
+   - Asistencias incluidas
+
+6. PRIMA:
+   - Prima total anual
+   - Forma de pago si se indica
 
 Responde ÚNICAMENTE con un JSON válido con esta estructura exacta:
 {{
   "insurers": [
     {{
       "name": "Nombre de la aseguradora",
-      "fields": {{
-        "NombreCriterio1": {{"value": "valor extraído", "notes": "observaciones opcionales"}},
-        "NombreCriterio2": {{"value": "valor extraído", "notes": "observaciones opcionales"}}
+      "informacion_riesgo": {{
+        "cliente": "valor",
+        "direccion": "valor", 
+        "ciudad": "valor",
+        "descripcion_riesgo": "valor"
+      }},
+      "valores_asegurados": [
+        {{"concepto": "Edificio", "valor": "$100,000,000"}},
+        {{"concepto": "Contenido", "valor": "$50,000,000"}}
+      ],
+      "amparos": [
+        {{"amparo": "Incendio y/o rayo", "limite": "100% valor asegurado"}},
+        {{"amparo": "Terremoto", "limite": "100% valor asegurado"}}
+      ],
+      "deducibles": [
+        {{"concepto": "Deducible general", "valor": "10% del valor del siniestro, mínimo 1 SMMLV"}},
+        {{"concepto": "Terremoto", "valor": "2% del valor asegurado"}}
+      ],
+      "beneficios": [
+        "Asistencia domiciliaria 24/7",
+        "Gastos de arrendamiento temporal"
+      ],
+      "prima": {{
+        "total_anual": "$2,500,000",
+        "forma_pago": "Contado o financiado a 4 cuotas"
       }}
     }}
   ]
 }}
 
-Importante:
-- Extrae el nombre de la aseguradora de cada documento
+IMPORTANTE:
+- Extrae el nombre exacto de la aseguradora de cada documento
 - Si un valor no está disponible, usa "No especificado"
-- Los valores numéricos deben incluir la moneda cuando aplique
-- NO incluyas texto fuera del JSON"""
+- Incluye todos los valores con su moneda
+- NO incluyas texto fuera del JSON
+- Responde SOLO con el JSON, sin explicaciones adicionales"""
 
         # Inicializar chat con Gemini
         chat = LlmChat(
             api_key=api_key,
             session_id=f"comparison-{request.comparisonId}",
-            system_message="""Eres un experto analista de seguros. Tu tarea es analizar cotizaciones de seguros y extraer información estructurada.
+            system_message="""Eres un experto analista de seguros colombiano. Tu tarea es analizar cotizaciones de seguros y extraer información estructurada.
 Debes extraer los datos de cada cotización y organizarlos en un formato JSON estructurado.
 Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
         ).with_model("gemini", "gemini-2.5-flash")
@@ -234,9 +280,9 @@ Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
             logger.error(f"Failed to parse AI response: {response_text[:500]}")
             raise HTTPException(status_code=500, detail=f"Error al parsear respuesta de IA: {str(e)}")
         
-        # Construir tabla comparativa
+        # Construir tabla comparativa con nueva estructura
         comparison_table = {
-            "criteria": request.criteria,
+            "line": request.line,
             "insurers": comparison_data.get("insurers", [])
         }
         
