@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -40,7 +41,9 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
-  Sparkles
+  Sparkles,
+  User,
+  UserPlus
 } from 'lucide-react';
 
 interface FileWithPreview extends File {
@@ -52,7 +55,8 @@ interface NewComparisonWizardProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (data: {
-    clientId: string;
+    clientId?: string;
+    prospectName?: string;
     line: PolicyLine;
     files: Array<{ name: string; type: string; size: number; base64: string }>;
   }) => Promise<void>;
@@ -68,7 +72,9 @@ export function NewComparisonWizard({
   processingProgress = 0
 }: NewComparisonWizardProps) {
   const [step, setStep] = useState(1);
+  const [clientMode, setClientMode] = useState<'existing' | 'prospect'>('existing');
   const [clientId, setClientId] = useState<string>('');
+  const [prospectName, setProspectName] = useState<string>('');
   const [line, setLine] = useState<PolicyLine>('auto');
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
@@ -76,7 +82,9 @@ export function NewComparisonWizard({
 
   const resetForm = () => {
     setStep(1);
+    setClientMode('existing');
     setClientId('');
+    setProspectName('');
     setLine('auto');
     setFiles([]);
     setErrors([]);
@@ -169,7 +177,8 @@ export function NewComparisonWizard({
     try {
       const filesWithBase64 = await convertFilesToBase64();
       await onSubmit({
-        clientId,
+        clientId: clientMode === 'existing' ? clientId : undefined,
+        prospectName: clientMode === 'prospect' ? prospectName : undefined,
         line,
         files: filesWithBase64
       });
@@ -180,7 +189,10 @@ export function NewComparisonWizard({
   };
 
   const canProceed = () => {
-    if (step === 1) return !!clientId && !!line;
+    if (step === 1) {
+      const hasClientOrProspect = clientMode === 'existing' ? !!clientId : !!prospectName.trim();
+      return hasClientOrProspect && !!line;
+    }
     if (step === 2) return files.length >= 2;
     return true;
   };
@@ -258,13 +270,70 @@ export function NewComparisonWizard({
             {/* Step 1: Client & Line */}
             {step === 1 && (
               <div className="space-y-6 py-4">
-                <div className="space-y-2">
-                  <Label>Cliente *</Label>
-                  <ClientSearchSelect
-                    value={clientId}
-                    onValueChange={setClientId}
-                  />
+                {/* Selector: Cliente existente o Prospecto */}
+                <div className="space-y-3">
+                  <Label>¿Para quién es el comparativo?</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setClientMode('existing')}
+                      className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                        clientMode === 'existing'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <User className={`h-5 w-5 ${clientMode === 'existing' ? 'text-primary' : 'text-slate-400'}`} />
+                      <div className="text-left">
+                        <p className={`text-sm font-medium ${clientMode === 'existing' ? 'text-primary' : ''}`}>
+                          Cliente existente
+                        </p>
+                        <p className="text-xs text-muted-foreground">Ya registrado en el sistema</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClientMode('prospect')}
+                      className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                        clientMode === 'prospect'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <UserPlus className={`h-5 w-5 ${clientMode === 'prospect' ? 'text-primary' : 'text-slate-400'}`} />
+                      <div className="text-left">
+                        <p className={`text-sm font-medium ${clientMode === 'prospect' ? 'text-primary' : ''}`}>
+                          Prospecto nuevo
+                        </p>
+                        <p className="text-xs text-muted-foreground">Cotización rápida</p>
+                      </div>
+                    </button>
+                  </div>
                 </div>
+
+                {/* Campo según el modo */}
+                {clientMode === 'existing' ? (
+                  <div className="space-y-2">
+                    <Label>Seleccionar cliente *</Label>
+                    <ClientSearchSelect
+                      value={clientId}
+                      onValueChange={setClientId}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Nombre del prospecto *</Label>
+                    <Input
+                      placeholder="Ej: Juan Pérez - Seguro Auto"
+                      value={prospectName}
+                      onChange={(e) => setProspectName(e.target.value)}
+                      data-testid="prospect-name-input"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Este nombre te ayudará a identificar el comparativo después
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label>Ramo de seguro *</Label>
@@ -366,9 +435,19 @@ export function NewComparisonWizard({
                   <h4 className="font-medium">Resumen del comparativo</h4>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
+                      <span className="text-muted-foreground">
+                        {clientMode === 'existing' ? 'Cliente:' : 'Prospecto:'}
+                      </span>
+                      <p className="font-medium">
+                        {clientMode === 'existing' ? 'Cliente seleccionado' : prospectName}
+                      </p>
+                    </div>
+                    <div>
                       <span className="text-muted-foreground">Ramo:</span>
                       <p className="font-medium">{POLICY_LINE_LABELS[line]}</p>
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-muted-foreground">Archivos:</span>
                       <p className="font-medium">{files.length} cotizaciones</p>

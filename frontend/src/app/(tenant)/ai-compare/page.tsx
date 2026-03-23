@@ -110,7 +110,8 @@ export default function AIComparePage() {
   };
 
   const handleCreateComparison = async (data: {
-    clientId: string;
+    clientId?: string;
+    prospectName?: string;
     line: PolicyLine;
     files: Array<{ name: string; type: string; size: number; base64: string }>;
   }) => {
@@ -124,6 +125,7 @@ export default function AIComparePage() {
       const result = await createComparison({
         tenantId,
         clientId: data.clientId,
+        prospectName: data.prospectName,
         agentId: userId,
         line: data.line,
         files: data.files
@@ -141,47 +143,66 @@ export default function AIComparePage() {
 
       setProcessingProgress(40);
 
-      // Llamar al API de IA para procesar
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-      
+      // Llamar al API de IA para procesar - usar URL relativa para evitar problemas de CORS
       const filesForAI = data.files.map(f => ({
         name: f.name,
         file_type: f.name.split('.').pop()?.toLowerCase() || 'pdf',
         base64_content: f.base64
       }));
 
-      const aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          comparisonId: result.comparisonId,
-          tenantId,
-          line: data.line,
-          files: filesForAI,
-          criteria: criteriaNames
-        })
-      });
+      // Crear AbortController para timeout de 3 minutos
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 180000);
 
-      setProcessingProgress(80);
+      try {
+        const aiResponse = await fetch('/api/ai/compare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            comparisonId: result.comparisonId,
+            tenantId,
+            line: data.line,
+            files: filesForAI,
+            criteria: criteriaNames
+          }),
+          signal: controller.signal
+        });
 
-      const aiResult = await aiResponse.json();
+        clearTimeout(timeoutId);
 
-      if (!aiResult.success) {
-        throw new Error(aiResult.error || 'Error al procesar con IA');
+        setProcessingProgress(80);
+
+        if (!aiResponse.ok) {
+          const errorText = await aiResponse.text();
+          throw new Error(`Error del servidor: ${aiResponse.status} - ${errorText}`);
+        }
+
+        const aiResult = await aiResponse.json();
+
+        if (!aiResult.success) {
+          throw new Error(aiResult.error || 'Error al procesar con IA');
+        }
+
+        // Actualizar el comparativo con los resultados
+        const supabase = getBrowserClient();
+        
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('comparisons')
+          .update({
+            comparison_table: aiResult.comparison_table,
+            ai_recommendation: aiResult.ai_recommendation,
+            status: 'ready'
+          })
+          .eq('id', result.comparisonId);
+
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          throw new Error('La solicitud tardó demasiado. Intenta con archivos más pequeños.');
+        }
+        throw fetchError;
       }
-
-      // Actualizar el comparativo con los resultados
-      const supabase = getBrowserClient();
-      
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from('comparisons')
-        .update({
-          comparison_table: aiResult.comparison_table,
-          ai_recommendation: aiResult.ai_recommendation,
-          status: 'ready'
-        })
-        .eq('id', result.comparisonId);
 
       setProcessingProgress(100);
 

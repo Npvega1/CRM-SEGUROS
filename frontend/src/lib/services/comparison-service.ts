@@ -28,7 +28,8 @@ interface FileUploadData {
 
 interface CreateComparisonParams {
   tenantId: string;
-  clientId: string;
+  clientId?: string;  // Ahora opcional
+  prospectName?: string;  // Nuevo: nombre del prospecto
   agentId: string;
   line: PolicyLine;
   files: FileUploadData[];
@@ -228,8 +229,13 @@ export async function createComparison(params: CreateComparisonParams): Promise<
   comparisonId?: string;
   error?: string;
 }> {
-  const { tenantId, clientId, agentId, line, files } = params;
+  const { tenantId, clientId, prospectName, agentId, line, files } = params;
   const supabase = getBrowserClient();
+  
+  // Validar que tenga cliente o prospecto
+  if (!clientId && !prospectName) {
+    return { success: false, error: 'Debe seleccionar un cliente o ingresar nombre de prospecto' };
+  }
   
   // Verificar límite
   const canCreate = await canCreateComparison(tenantId);
@@ -240,16 +246,24 @@ export async function createComparison(params: CreateComparisonParams): Promise<
   try {
     // Crear comparativo
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const insertData: Record<string, unknown> = {
+      tenant_id: tenantId,
+      agent_id: agentId,
+      line,
+      status: 'processing',
+      source_files: files.map(f => f.name)
+    };
+    
+    // Agregar cliente o prospecto
+    if (clientId) {
+      insertData.client_id = clientId;
+    } else {
+      insertData.prospect_name = prospectName;
+    }
+    
     const { data: comparison, error: compError } = await (supabase as any)
       .from('comparisons')
-      .insert({
-        tenant_id: tenantId,
-        client_id: clientId,
-        agent_id: agentId,
-        line,
-        status: 'processing',
-        source_files: files.map(f => f.name)
-      })
+      .insert(insertData)
       .select()
       .single();
     

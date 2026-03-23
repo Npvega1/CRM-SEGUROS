@@ -68,7 +68,7 @@ export function ComparisonsList({
           <TableHeader>
             <TableRow>
               <TableHead>Fecha</TableHead>
-              <TableHead>Cliente</TableHead>
+              <TableHead>Cliente / Prospecto</TableHead>
               <TableHead>Ramo</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Archivos</TableHead>
@@ -76,13 +76,26 @@ export function ComparisonsList({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {comparisons.map((comparison) => (
+            {comparisons.map((comparison) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const compData = comparison as any;
+              const displayName = comparison.client?.full_name || compData.prospect_name || 'Sin nombre';
+              const isProspect = !comparison.client?.full_name && compData.prospect_name;
+              
+              return (
               <TableRow key={comparison.id} data-testid={`comparison-row-${comparison.id}`}>
                 <TableCell className="font-medium">
                   {format(new Date(comparison.created_at), 'dd MMM yyyy', { locale: es })}
                 </TableCell>
                 <TableCell>
-                  {comparison.client?.full_name || 'Cliente'}
+                  <div className="flex items-center gap-2">
+                    <span>{displayName}</span>
+                    {isProspect && (
+                      <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
+                        Prospecto
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   {POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line}
@@ -127,7 +140,8 @@ export function ComparisonsList({
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </CardContent>
