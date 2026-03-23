@@ -16,7 +16,6 @@ import type { ComparisonWithRelations } from '@/lib/validations/comparisons';
 import { POLICY_LINE_LABELS, type PolicyLine } from '@/lib/validations/policies';
 import { 
   Download, 
-  FileText, 
   Edit2, 
   Check, 
   X,
@@ -29,24 +28,11 @@ import {
   DollarSign,
   Shield,
   AlertTriangle,
-  Gift
+  Gift,
+  FileText
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { 
-  Document, 
-  Packer, 
-  Paragraph, 
-  Table, 
-  TableCell, 
-  TableRow, 
-  TextRun, 
-  WidthType,
-  AlignmentType,
-  HeadingLevel,
-  ShadingType
-} from 'docx';
-import { saveAs } from 'file-saver';
 
 // Tipos para la nueva estructura
 interface InsurerData {
@@ -125,11 +111,15 @@ export function ComparisonViewer({
   // Verificar si usa la nueva estructura
   const isNewStructure = table.insurers[0]?.informacion_riesgo !== undefined;
 
-  // Función para exportar a Word
+  // Función para exportar a Word (con import dinámico para evitar SSR issues)
   const exportToWord = async () => {
     setIsExporting(true);
     
     try {
+      // Import dinámico de docx para evitar problemas de SSR
+      const { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType, AlignmentType, HeadingLevel, ShadingType } = await import('docx');
+      const { saveAs } = await import('file-saver');
+      
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const children: any[] = [];
       
@@ -178,7 +168,9 @@ export function ComparisonViewer({
         new Paragraph({
           children: [
             new TextRun({ text: 'Fecha: ', bold: true }),
-            new TextRun({ text: format(new Date(comparison.created_at), 'dd MMMM yyyy', { locale: es }) }),
+            new TextRun({ text: comparison.created_at 
+              ? format(new Date(comparison.created_at), 'dd MMMM yyyy', { locale: es })
+              : 'No disponible' }),
           ],
           spacing: { after: 300 },
         })
@@ -475,7 +467,9 @@ export function ComparisonViewer({
               <div>
                 <p className="text-muted-foreground">Fecha</p>
                 <p className="font-medium">
-                  {format(new Date(comparison.created_at), 'dd MMM yyyy', { locale: es })}
+                  {comparison.created_at 
+                    ? format(new Date(comparison.created_at), 'dd MMM yyyy', { locale: es })
+                    : 'No disponible'}
                 </p>
               </div>
             </div>
