@@ -97,7 +97,7 @@ export function ComparisonViewer({
     setIsSaving(false);
   };
 
-  // Función para exportar a Word
+  // Función para exportar a Word con diseño profesional
   const exportToWord = async () => {
     setIsExporting(true);
     
@@ -117,9 +117,11 @@ export function ComparisonViewer({
         TableRow, 
         TextRun, 
         WidthType, 
-        AlignmentType, 
-        HeadingLevel,
-        BorderStyle
+        AlignmentType,
+        BorderStyle,
+        ShadingType,
+        VerticalAlign,
+        PageBreak
       } = docxModule;
       
       const saveAs = fileSaverModule.saveAs || fileSaverModule.default?.saveAs;
@@ -131,43 +133,109 @@ export function ComparisonViewer({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const children: any[] = [];
       
-      // Configuración de bordes
-      const borders = {
-        top: { style: BorderStyle.SINGLE, size: 1, color: '999999' },
-        bottom: { style: BorderStyle.SINGLE, size: 1, color: '999999' },
-        left: { style: BorderStyle.SINGLE, size: 1, color: '999999' },
-        right: { style: BorderStyle.SINGLE, size: 1, color: '999999' },
-      };
+      // Colores corporativos
+      const PRIMARY_COLOR = '1E40AF'; // Azul oscuro
+      const SECONDARY_COLOR = '3B82F6'; // Azul medio
+      const ACCENT_COLOR = 'FEF3C7'; // Amarillo suave
+      const LIGHT_GRAY = 'F3F4F6';
+      const WHITE = 'FFFFFF';
       
-      // Título
+      // Configuración de bordes
+      const thinBorder = { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' };
+      const borders = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+      const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+      const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+      
+      // Helper para crear celda de encabezado
+      const headerCell = (text: string, width?: number) => new TableCell({
+        children: [new Paragraph({ 
+          children: [new TextRun({ text, bold: true, color: WHITE, size: 20 })],
+          alignment: AlignmentType.CENTER
+        })],
+        borders,
+        shading: { fill: PRIMARY_COLOR, type: ShadingType.SOLID },
+        verticalAlign: VerticalAlign.CENTER,
+        width: width ? { size: width, type: WidthType.PERCENTAGE } : undefined,
+      });
+      
+      // Helper para crear celda de datos
+      const dataCell = (text: string, isHighlight = false, isBold = false, align = AlignmentType.LEFT) => new TableCell({
+        children: [new Paragraph({ 
+          children: [new TextRun({ text, bold: isBold, size: 18 })],
+          alignment: align
+        })],
+        borders,
+        shading: { fill: isHighlight ? ACCENT_COLOR : WHITE, type: ShadingType.SOLID },
+        verticalAlign: VerticalAlign.CENTER,
+      });
+      
+      // Helper para celda alternada (zebra)
+      const zebraCell = (text: string, isOdd: boolean, isBold = false, align = AlignmentType.LEFT) => new TableCell({
+        children: [new Paragraph({ 
+          children: [new TextRun({ text, bold: isBold, size: 18 })],
+          alignment: align
+        })],
+        borders,
+        shading: { fill: isOdd ? LIGHT_GRAY : WHITE, type: ShadingType.SOLID },
+        verticalAlign: VerticalAlign.CENTER,
+      });
+
+      // ========== ENCABEZADO ==========
       children.push(
         new Paragraph({
-          children: [new TextRun({ text: branding?.agencyName || 'Agencia de Seguros', bold: true, size: 36 })],
+          children: [new TextRun({ text: branding?.agencyName || 'LA PRIMA JUSTA', bold: true, size: 44, color: PRIMARY_COLOR })],
           alignment: AlignmentType.CENTER,
-          spacing: { after: 200 },
+          spacing: { after: 100 },
         }),
         new Paragraph({
-          children: [new TextRun({ text: 'CUADRO COMPARATIVO DE COTIZACIONES', bold: true, size: 28 })],
+          children: [new TextRun({ text: 'CUADRO COMPARATIVO DE COTIZACIONES', bold: true, size: 32, color: SECONDARY_COLOR })],
           alignment: AlignmentType.CENTER,
           spacing: { after: 300 },
-        }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: 'Cliente: ', bold: true }),
-            new TextRun({ text: clientName + '     ' }),
-            new TextRun({ text: 'Ramo: ', bold: true }),
-            new TextRun({ text: (POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line) + '     ' }),
-            new TextRun({ text: 'Fecha: ', bold: true }),
-            new TextRun({ text: comparison.created_at ? format(new Date(comparison.created_at), 'dd/MM/yyyy') : 'N/A' }),
-          ],
-          spacing: { after: 400 },
         })
       );
+      
+      // Información del cliente en tabla elegante
+      const infoTable = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideHorizontal: noBorder, insideVertical: noBorder },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({ children: [
+                  new TextRun({ text: 'Cliente: ', bold: true, size: 20 }),
+                  new TextRun({ text: clientName, size: 20 })
+                ]})],
+                borders: noBorders,
+                width: { size: 40, type: WidthType.PERCENTAGE },
+              }),
+              new TableCell({
+                children: [new Paragraph({ children: [
+                  new TextRun({ text: 'Ramo: ', bold: true, size: 20 }),
+                  new TextRun({ text: POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line, size: 20 })
+                ]})],
+                borders: noBorders,
+                width: { size: 30, type: WidthType.PERCENTAGE },
+              }),
+              new TableCell({
+                children: [new Paragraph({ children: [
+                  new TextRun({ text: 'Fecha: ', bold: true, size: 20 }),
+                  new TextRun({ text: comparison.created_at ? format(new Date(comparison.created_at), 'dd/MM/yyyy') : 'N/A', size: 20 })
+                ]})],
+                borders: noBorders,
+                width: { size: 30, type: WidthType.PERCENTAGE },
+              }),
+            ],
+          }),
+        ],
+      });
+      children.push(infoTable);
+      children.push(new Paragraph({ children: [], spacing: { after: 300 } }));
 
-      // RESUMEN DE PRIMAS (en columnas)
+      // ========== RESUMEN DE PRIMAS ==========
       children.push(
         new Paragraph({ 
-          children: [new TextRun({ text: 'RESUMEN DE PRIMAS', bold: true, size: 24 })],
+          children: [new TextRun({ text: '💰 RESUMEN DE PRIMAS', bold: true, size: 26, color: PRIMARY_COLOR })],
           spacing: { before: 200, after: 150 } 
         })
       );
@@ -175,78 +243,60 @@ export function ComparisonViewer({
       const primaRows = [
         new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Concepto', bold: true })] })], borders }),
-            ...insurers.map(ins => new TableCell({ 
-              children: [new Paragraph({ children: [new TextRun({ text: ins.name || '', bold: true })] })], 
-              borders 
-            })),
+            headerCell('Concepto', 25),
+            ...insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
           ],
         }),
         new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph('Prima Neta')], borders }),
-            ...insurers.map(ins => new TableCell({ 
-              children: [new Paragraph(ins.prima?.prima_neta || ins.prima?.total_anual || 'No especificado')], 
-              borders 
-            })),
+            zebraCell('Prima Neta', true),
+            ...insurers.map(ins => zebraCell(ins.prima?.prima_neta || '-', true, false, AlignmentType.RIGHT)),
           ],
         }),
         new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph('IVA')], borders }),
-            ...insurers.map(ins => new TableCell({ 
-              children: [new Paragraph(ins.prima?.iva || '-')], 
-              borders 
-            })),
+            zebraCell('IVA (19%)', false),
+            ...insurers.map(ins => zebraCell(ins.prima?.iva || '-', false, false, AlignmentType.RIGHT)),
           ],
         }),
         new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'PRIMA TOTAL', bold: true })] })], borders }),
-            ...insurers.map(ins => new TableCell({ 
-              children: [new Paragraph({ children: [new TextRun({ text: ins.prima?.total_anual || 'No especificado', bold: true })] })], 
-              borders 
-            })),
+            dataCell('PRIMA TOTAL A PAGAR', true, true),
+            ...insurers.map(ins => dataCell(ins.prima?.total_anual || 'No especificado', true, true, AlignmentType.RIGHT)),
           ],
         }),
         new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph('Forma de Pago')], borders }),
-            ...insurers.map(ins => new TableCell({ 
-              children: [new Paragraph(ins.prima?.forma_pago || 'No especificado')], 
-              borders 
-            })),
+            zebraCell('Forma de Pago', true),
+            ...insurers.map(ins => zebraCell(ins.prima?.forma_pago || 'No especificado', true)),
           ],
         }),
       ];
 
       children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: primaRows }));
 
-      // VALORES ASEGURADOS
+      // ========== VALORES ASEGURADOS ==========
       if (allValores.size > 0) {
         children.push(
           new Paragraph({ 
-            children: [new TextRun({ text: 'VALORES ASEGURADOS', bold: true, size: 24 })],
-            spacing: { before: 300, after: 150 } 
+            children: [new TextRun({ text: '📊 VALORES ASEGURADOS', bold: true, size: 26, color: PRIMARY_COLOR })],
+            spacing: { before: 400, after: 150 } 
           })
         );
 
         const valoresRows = [
           new TableRow({
             children: [
-              new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Concepto', bold: true })] })], borders }),
-              ...insurers.map(ins => new TableCell({ 
-                children: [new Paragraph({ children: [new TextRun({ text: ins.name || '', bold: true })] })], 
-                borders 
-              })),
+              headerCell('Concepto', 25),
+              ...insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
             ],
           }),
-          ...Array.from(allValores).map(concepto => new TableRow({
+          ...Array.from(allValores).map((concepto, idx) => new TableRow({
             children: [
-              new TableCell({ children: [new Paragraph(concepto)], borders }),
+              zebraCell(concepto, idx % 2 === 0, concepto === 'TOTAL ASEGURADO'),
               ...insurers.map(ins => {
                 const valor = ins.valores_asegurados?.find(v => v.concepto === concepto)?.valor || '-';
-                return new TableCell({ children: [new Paragraph(valor)], borders });
+                return zebraCell(valor, idx % 2 === 0, concepto === 'TOTAL ASEGURADO', AlignmentType.RIGHT);
               }),
             ],
           })),
@@ -255,32 +305,29 @@ export function ComparisonViewer({
         children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: valoresRows }));
       }
 
-      // AMPAROS
+      // ========== AMPAROS / COBERTURAS ==========
       if (allAmparos.size > 0) {
         children.push(
           new Paragraph({ 
-            children: [new TextRun({ text: 'AMPAROS / COBERTURAS', bold: true, size: 24 })],
-            spacing: { before: 300, after: 150 } 
+            children: [new TextRun({ text: '🛡️ AMPAROS / COBERTURAS', bold: true, size: 26, color: PRIMARY_COLOR })],
+            spacing: { before: 400, after: 150 } 
           })
         );
 
         const amparosRows = [
           new TableRow({
             children: [
-              new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Amparo', bold: true })] })], borders }),
-              ...insurers.map(ins => new TableCell({ 
-                children: [new Paragraph({ children: [new TextRun({ text: ins.name || '', bold: true })] })], 
-                borders 
-              })),
+              headerCell('Amparo', 25),
+              ...insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
             ],
           }),
-          ...Array.from(allAmparos).map(amparo => new TableRow({
+          ...Array.from(allAmparos).map((amparo, idx) => new TableRow({
             children: [
-              new TableCell({ children: [new Paragraph(amparo)], borders }),
+              zebraCell(amparo, idx % 2 === 0),
               ...insurers.map(ins => {
                 const amp = ins.amparos?.find(a => a.amparo === amparo);
-                const text = amp ? (amp.limite || 'Incluido') : 'No incluido';
-                return new TableCell({ children: [new Paragraph(text)], borders });
+                const text = amp ? (amp.limite || '✓ Incluido') : '✗ No incluido';
+                return zebraCell(text, idx % 2 === 0);
               }),
             ],
           })),
@@ -289,31 +336,28 @@ export function ComparisonViewer({
         children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: amparosRows }));
       }
 
-      // DEDUCIBLES
+      // ========== DEDUCIBLES ==========
       if (allDeducibles.size > 0) {
         children.push(
           new Paragraph({ 
-            children: [new TextRun({ text: 'DEDUCIBLES', bold: true, size: 24 })],
-            spacing: { before: 300, after: 150 } 
+            children: [new TextRun({ text: '⚠️ DEDUCIBLES', bold: true, size: 26, color: PRIMARY_COLOR })],
+            spacing: { before: 400, after: 150 } 
           })
         );
 
         const deduciblesRows = [
           new TableRow({
             children: [
-              new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Deducible', bold: true })] })], borders }),
-              ...insurers.map(ins => new TableCell({ 
-                children: [new Paragraph({ children: [new TextRun({ text: ins.name || '', bold: true })] })], 
-                borders 
-              })),
+              headerCell('Deducible', 25),
+              ...insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
             ],
           }),
-          ...Array.from(allDeducibles).map(ded => new TableRow({
+          ...Array.from(allDeducibles).map((ded, idx) => new TableRow({
             children: [
-              new TableCell({ children: [new Paragraph(ded)], borders }),
+              zebraCell(ded, idx % 2 === 0),
               ...insurers.map(ins => {
                 const deducible = ins.deducibles?.find(d => d.concepto === ded);
-                return new TableCell({ children: [new Paragraph(deducible?.valor || '-')], borders });
+                return zebraCell(deducible?.valor || '-', idx % 2 === 0);
               }),
             ],
           })),
@@ -322,44 +366,104 @@ export function ComparisonViewer({
         children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: deduciblesRows }));
       }
 
-      // BENEFICIOS
+      // ========== BENEFICIOS ADICIONALES ==========
       children.push(
         new Paragraph({ 
-          children: [new TextRun({ text: 'BENEFICIOS ADICIONALES', bold: true, size: 24 })],
-          spacing: { before: 300, after: 150 } 
+          children: [new TextRun({ text: '🎁 BENEFICIOS ADICIONALES / ASISTENCIAS', bold: true, size: 26, color: PRIMARY_COLOR })],
+          spacing: { before: 400, after: 150 } 
         })
       );
       
-      insurers.forEach(ins => {
-        children.push(
-          new Paragraph({ 
-            children: [new TextRun({ text: ins.name || 'Aseguradora', bold: true })],
-            spacing: { before: 100 } 
-          })
-        );
-        if (ins.beneficios && ins.beneficios.length > 0) {
-          ins.beneficios.forEach(ben => {
-            children.push(new Paragraph({ text: `• ${ben}` }));
-          });
-        } else {
-          children.push(new Paragraph({ text: '• No especificados' }));
-        }
-      });
+      const beneficiosRows = [
+        new TableRow({
+          children: insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
+        }),
+        new TableRow({
+          children: insurers.map(ins => new TableCell({
+            children: ins.beneficios && ins.beneficios.length > 0 
+              ? ins.beneficios.map(ben => new Paragraph({ 
+                  children: [new TextRun({ text: `• ${ben}`, size: 18 })],
+                  spacing: { after: 50 }
+                }))
+              : [new Paragraph({ children: [new TextRun({ text: 'No especificados', size: 18, italics: true })] })],
+            borders,
+            shading: { fill: WHITE, type: ShadingType.SOLID },
+            verticalAlign: VerticalAlign.TOP,
+          })),
+        }),
+      ];
 
-      // RECOMENDACIÓN
+      children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: beneficiosRows }));
+
+      // ========== RECOMENDACIÓN ==========
       if (comparison.ai_recommendation) {
         children.push(
           new Paragraph({ 
-            children: [new TextRun({ text: 'RECOMENDACIÓN DEL ASESOR', bold: true, size: 24 })],
-            spacing: { before: 300, after: 150 } 
-          }),
-          new Paragraph({ text: comparison.ai_recommendation })
+            children: [new TextRun({ text: '🏆 RECOMENDACIÓN DEL ASESOR', bold: true, size: 26, color: PRIMARY_COLOR })],
+            spacing: { before: 400, after: 150 } 
+          })
         );
+        
+        // Caja de recomendación con fondo
+        const recoTable = new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: [new Paragraph({ 
+                    children: [new TextRun({ text: comparison.ai_recommendation, size: 20 })],
+                    spacing: { after: 100 }
+                  })],
+                  borders: { 
+                    top: { style: BorderStyle.SINGLE, size: 8, color: SECONDARY_COLOR },
+                    bottom: { style: BorderStyle.SINGLE, size: 8, color: SECONDARY_COLOR },
+                    left: { style: BorderStyle.SINGLE, size: 8, color: SECONDARY_COLOR },
+                    right: { style: BorderStyle.SINGLE, size: 8, color: SECONDARY_COLOR },
+                  },
+                  shading: { fill: 'EFF6FF', type: ShadingType.SOLID },
+                }),
+              ],
+            }),
+          ],
+        });
+        children.push(recoTable);
       }
+
+      // ========== PIE DE PÁGINA ==========
+      children.push(
+        new Paragraph({ children: [], spacing: { before: 400 } }),
+        new Paragraph({
+          children: [new TextRun({ 
+            text: `Documento generado el ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })} por ${branding?.agencyName || 'La Prima Justa'}`,
+            size: 16, 
+            italics: true,
+            color: '6B7280'
+          })],
+          alignment: AlignmentType.CENTER,
+        }),
+        new Paragraph({
+          children: [new TextRun({ 
+            text: 'Este cuadro comparativo es de carácter informativo. Las condiciones definitivas están sujetas a las pólizas emitidas por cada aseguradora.',
+            size: 14, 
+            italics: true,
+            color: '9CA3AF'
+          })],
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 100 }
+        })
+      );
 
       // Crear documento
       const doc = new Document({
-        sections: [{ properties: {}, children }],
+        sections: [{ 
+          properties: {
+            page: {
+              margin: { top: 720, bottom: 720, left: 720, right: 720 }, // 0.5 inch margins
+            }
+          }, 
+          children 
+        }],
       });
 
       const blob = await Packer.toBlob(doc);
