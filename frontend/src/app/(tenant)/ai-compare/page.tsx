@@ -119,10 +119,13 @@ export default function AIComparePage() {
     line: PolicyLine,
     files: Array<{ name: string; type: string; size: number; base64: string }>
   ) => {
+    console.log('🚀 Starting background processing for:', comparisonId);
+    
     try {
       // Obtener criterios
       const criteria = await getComparisonCriteria(tenantId, line);
       const criteriaNames = criteria.map(c => c.criteria_name);
+      console.log('📋 Criteria:', criteriaNames);
 
       // Preparar archivos para la IA
       const filesForAI = files.map(f => ({
@@ -130,9 +133,11 @@ export default function AIComparePage() {
         file_type: f.name.split('.').pop()?.toLowerCase() || 'pdf',
         base64_content: f.base64
       }));
+      console.log('📁 Files to send:', filesForAI.map(f => f.name));
 
       // Usar la URL del backend
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || window.location.origin;
+      console.log('🌐 Backend URL:', backendUrl);
 
       const aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
         method: 'POST',
@@ -146,7 +151,9 @@ export default function AIComparePage() {
         })
       });
 
+      console.log('📡 Response status:', aiResponse.status);
       const aiResult = await aiResponse.json();
+      console.log('📦 AI Result:', aiResult.success ? 'SUCCESS' : 'FAILED', aiResult.error || '');
 
       const supabase = getBrowserClient();
 
@@ -188,7 +195,7 @@ export default function AIComparePage() {
       loadData();
 
     } catch (error) {
-      console.error('Background processing error:', error);
+      console.error('❌ Background processing error:', error);
       
       // Marcar como error en la base de datos
       const supabase = getBrowserClient();
@@ -247,6 +254,7 @@ export default function AIComparePage() {
       await loadData();
 
       // 5. Procesar en segundo plano (no bloquea la UI)
+      console.log('🎯 Calling processComparisonInBackground...');
       processComparisonInBackground(
         result.comparisonId,
         tenantId,
