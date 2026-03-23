@@ -32,6 +32,11 @@ const PUBLIC_ROUTES = [
   '/invitacion'
 ];
 
+// Rutas de Super Admin - requieren role='superadmin'
+const SUPERADMIN_ROUTES = [
+  '/admin'
+];
+
 const API_ROUTES = [
   '/api/'
 ];
@@ -80,6 +85,49 @@ export async function middleware(request: NextRequest) {
 
   // Rutas públicas: dejar pasar
   if (matchesRoute(pathname, PUBLIC_ROUTES)) {
+    return NextResponse.next();
+  }
+
+  // =====================================================
+  // RUTAS DE SUPER ADMIN
+  // Requieren autenticación Y role='superadmin'
+  // =====================================================
+  if (matchesRoute(pathname, SUPERADMIN_ROUTES)) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    const supabase = createServerClient(
+      supabaseUrl,
+      supabaseKey,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll() {},
+        },
+      }
+    );
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    // Sin sesión: redirigir al login
+    if (!session) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // Verificar rol superadmin en app_metadata
+    const role = session.user?.app_metadata?.role;
+    if (role !== 'superadmin') {
+      // No es superadmin: redirigir al dashboard normal
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+    // Es superadmin: permitir acceso
     return NextResponse.next();
   }
 

@@ -190,6 +190,120 @@ export type Database = {
           created_at?: string;
         };
       };
+      ai_prompts: {
+        Row: {
+          id: string;
+          name: string;
+          line: string | null;
+          prompt_system: string;
+          prompt_recommendation: string;
+          model_id: string;
+          status: 'active' | 'draft' | 'deprecated';
+          version: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          line?: string | null;
+          prompt_system: string;
+          prompt_recommendation: string;
+          model_id?: string;
+          status?: 'active' | 'draft' | 'deprecated';
+          version?: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          line?: string | null;
+          prompt_system?: string;
+          prompt_recommendation?: string;
+          model_id?: string;
+          status?: 'active' | 'draft' | 'deprecated';
+          version?: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      ai_prompt_versions: {
+        Row: {
+          id: string;
+          prompt_id: string;
+          prompt_system: string;
+          prompt_recommendation: string;
+          model_id: string;
+          version: number;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          prompt_id: string;
+          prompt_system: string;
+          prompt_recommendation: string;
+          model_id: string;
+          version: number;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          prompt_id?: string;
+          prompt_system?: string;
+          prompt_recommendation?: string;
+          model_id?: string;
+          version?: number;
+          created_by?: string | null;
+          created_at?: string;
+        };
+      };
+      platform_analytics: {
+        Row: {
+          id: string;
+          date: string;
+          total_tenants: number;
+          active_tenants: number;
+          trial_tenants: number;
+          mrr_total: number;
+          new_tenants_month: number;
+          total_api_calls: number;
+          total_tokens_consumed: number;
+          estimated_ai_cost: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          date: string;
+          total_tenants?: number;
+          active_tenants?: number;
+          trial_tenants?: number;
+          mrr_total?: number;
+          new_tenants_month?: number;
+          total_api_calls?: number;
+          total_tokens_consumed?: number;
+          estimated_ai_cost?: number;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          date?: string;
+          total_tenants?: number;
+          active_tenants?: number;
+          trial_tenants?: number;
+          mrr_total?: number;
+          new_tenants_month?: number;
+          total_api_calls?: number;
+          total_tokens_consumed?: number;
+          estimated_ai_cost?: number;
+          updated_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
@@ -199,6 +313,7 @@ export type Database = {
     };
     Enums: {
       user_role: 'superadmin' | 'admin' | 'senior_agent' | 'agent' | 'readonly';
+      prompt_status: 'active' | 'draft' | 'deprecated';
     };
   };
 };

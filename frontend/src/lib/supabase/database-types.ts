@@ -987,6 +987,200 @@ export type Database = {
           updated_at?: string;
         };
       };
+      // Super Admin M11 Tables
+      ai_prompts: {
+        Row: {
+          id: string;
+          name: string;
+          line: string | null;
+          prompt_system: string;
+          prompt_recommendation: string;
+          model_id: string;
+          status: 'active' | 'draft' | 'deprecated';
+          version: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          line?: string | null;
+          prompt_system: string;
+          prompt_recommendation: string;
+          model_id?: string;
+          status?: 'active' | 'draft' | 'deprecated';
+          version?: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          line?: string | null;
+          prompt_system?: string;
+          prompt_recommendation?: string;
+          model_id?: string;
+          status?: 'active' | 'draft' | 'deprecated';
+          version?: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      ai_prompt_versions: {
+        Row: {
+          id: string;
+          prompt_id: string;
+          prompt_system: string;
+          prompt_recommendation: string;
+          model_id: string;
+          version: number;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          prompt_id: string;
+          prompt_system: string;
+          prompt_recommendation: string;
+          model_id: string;
+          version: number;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          prompt_id?: string;
+          prompt_system?: string;
+          prompt_recommendation?: string;
+          model_id?: string;
+          version?: number;
+          created_by?: string | null;
+          created_at?: string;
+        };
+      };
+      audit_logs: {
+        Row: {
+          id: string;
+          tenant_id: string | null;
+          user_id: string | null;
+          action: string;
+          entity_type: string | null;
+          entity_id: string | null;
+          old_values: Json | null;
+          new_values: Json | null;
+          ip_address: string | null;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id?: string | null;
+          user_id?: string | null;
+          action: string;
+          entity_type?: string | null;
+          entity_id?: string | null;
+          old_values?: Json | null;
+          new_values?: Json | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string | null;
+          user_id?: string | null;
+          action?: string;
+          entity_type?: string | null;
+          entity_id?: string | null;
+          old_values?: Json | null;
+          new_values?: Json | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          created_at?: string;
+        };
+      };
+      platform_analytics: {
+        Row: {
+          id: string;
+          date: string;
+          total_tenants: number;
+          active_tenants: number;
+          trial_tenants: number;
+          mrr_total: number;
+          new_tenants_month: number;
+          total_api_calls: number;
+          total_tokens_consumed: number;
+          estimated_ai_cost: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          date: string;
+          total_tenants?: number;
+          active_tenants?: number;
+          trial_tenants?: number;
+          mrr_total?: number;
+          new_tenants_month?: number;
+          total_api_calls?: number;
+          total_tokens_consumed?: number;
+          estimated_ai_cost?: number;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          date?: string;
+          total_tenants?: number;
+          active_tenants?: number;
+          trial_tenants?: number;
+          mrr_total?: number;
+          new_tenants_month?: number;
+          total_api_calls?: number;
+          total_tokens_consumed?: number;
+          estimated_ai_cost?: number;
+          updated_at?: string;
+        };
+      };
+      comparisons: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          client_id: string | null;
+          created_by: string | null;
+          line: string;
+          status: string;
+          quotations: Json | null;
+          recommendation: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          client_id?: string | null;
+          created_by?: string | null;
+          line: string;
+          status?: string;
+          quotations?: Json | null;
+          recommendation?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          client_id?: string | null;
+          created_by?: string | null;
+          line?: string;
+          status?: string;
+          quotations?: Json | null;
+          recommendation?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
@@ -1306,6 +1500,8 @@ export type Database = {
       message_sender_role: 'client' | 'agent';
       client_request_type: 'new_claim' | 'info_request' | 'complaint';
       client_request_status: 'open' | 'closed';
+      // Super Admin M11 Enums
+      prompt_status: 'active' | 'draft' | 'deprecated';
     };
   };
 };
