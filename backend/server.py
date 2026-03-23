@@ -232,7 +232,7 @@ async def process_comparison_background(request: CompareRequest, api_key: str):
                     {
                         "comparison_table": result.comparison_table,
                         "ai_recommendation": result.ai_recommendation,
-                        "status": "completed"
+                        "status": "ready"  # Valor correcto según el constraint
                     }
                 )
                 logger.info(f"Background processing completed for {request.comparisonId}")
