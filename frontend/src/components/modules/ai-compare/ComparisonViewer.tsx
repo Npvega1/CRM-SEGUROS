@@ -36,6 +36,8 @@ interface InsurerData {
   deducibles?: Array<{ concepto: string; valor: string }>;
   beneficios?: string[];
   prima?: {
+    prima_neta?: string;
+    iva?: string;
     total_anual?: string;
     forma_pago?: string;
   };
@@ -162,7 +164,7 @@ export function ComparisonViewer({
         })
       );
 
-      // RESUMEN DE PRIMAS
+      // RESUMEN DE PRIMAS (en columnas)
       children.push(
         new Paragraph({ 
           children: [new TextRun({ text: 'RESUMEN DE PRIMAS', bold: true, size: 24 })],
@@ -173,18 +175,49 @@ export function ComparisonViewer({
       const primaRows = [
         new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Aseguradora', bold: true })] })], borders }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Prima Anual', bold: true })] })], borders }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Forma de Pago', bold: true })] })], borders }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Concepto', bold: true })] })], borders }),
+            ...insurers.map(ins => new TableCell({ 
+              children: [new Paragraph({ children: [new TextRun({ text: ins.name || '', bold: true })] })], 
+              borders 
+            })),
           ],
         }),
-        ...insurers.map(ins => new TableRow({
+        new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph(ins.name || '')], borders }),
-            new TableCell({ children: [new Paragraph(ins.prima?.total_anual || 'No especificado')], borders }),
-            new TableCell({ children: [new Paragraph(ins.prima?.forma_pago || 'No especificado')], borders }),
+            new TableCell({ children: [new Paragraph('Prima Neta')], borders }),
+            ...insurers.map(ins => new TableCell({ 
+              children: [new Paragraph(ins.prima?.prima_neta || ins.prima?.total_anual || 'No especificado')], 
+              borders 
+            })),
           ],
-        })),
+        }),
+        new TableRow({
+          children: [
+            new TableCell({ children: [new Paragraph('IVA')], borders }),
+            ...insurers.map(ins => new TableCell({ 
+              children: [new Paragraph(ins.prima?.iva || '-')], 
+              borders 
+            })),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'PRIMA TOTAL', bold: true })] })], borders }),
+            ...insurers.map(ins => new TableCell({ 
+              children: [new Paragraph({ children: [new TextRun({ text: ins.prima?.total_anual || 'No especificado', bold: true })] })], 
+              borders 
+            })),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({ children: [new Paragraph('Forma de Pago')], borders }),
+            ...insurers.map(ins => new TableCell({ 
+              children: [new Paragraph(ins.prima?.forma_pago || 'No especificado')], 
+              borders 
+            })),
+          ],
+        }),
       ];
 
       children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: primaRows }));
@@ -413,7 +446,7 @@ export function ComparisonViewer({
         </CardContent>
       </Card>
 
-      {/* PRIMAS */}
+      {/* PRIMAS EN COLUMNAS */}
       <Card>
         <CardHeader className="py-3 bg-amber-50 border-b">
           <CardTitle className="text-base flex items-center gap-2">💰 Resumen de Primas</CardTitle>
@@ -423,19 +456,45 @@ export function ComparisonViewer({
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-100 border-b">
-                  <th className="text-left p-3 font-semibold">Aseguradora</th>
-                  <th className="text-right p-3 font-semibold">Prima Anual</th>
-                  <th className="text-left p-3 font-semibold">Forma de Pago</th>
+                  <th className="text-left p-3 font-semibold min-w-[150px]">Concepto</th>
+                  {insurers.map((ins, i) => (
+                    <th key={i} className="text-right p-3 font-semibold min-w-[140px]">{ins.name}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {insurers.map((ins, i) => (
-                  <tr key={i} className="border-b hover:bg-slate-50">
-                    <td className="p-3 font-medium">{ins.name}</td>
-                    <td className="p-3 text-right font-bold text-primary text-lg">{ins.prima?.total_anual || 'No especificado'}</td>
-                    <td className="p-3 text-muted-foreground">{ins.prima?.forma_pago || 'No especificado'}</td>
-                  </tr>
-                ))}
+                <tr className="border-b hover:bg-slate-50">
+                  <td className="p-3 font-medium">Prima Neta</td>
+                  {insurers.map((ins, i) => (
+                    <td key={i} className="p-3 text-right">
+                      {ins.prima?.prima_neta || ins.prima?.total_anual || 'No especificado'}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b hover:bg-slate-50">
+                  <td className="p-3 font-medium">IVA</td>
+                  {insurers.map((ins, i) => (
+                    <td key={i} className="p-3 text-right">
+                      {ins.prima?.iva || '-'}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b hover:bg-amber-50 bg-amber-50">
+                  <td className="p-3 font-bold">PRIMA TOTAL</td>
+                  {insurers.map((ins, i) => (
+                    <td key={i} className="p-3 text-right font-bold text-primary text-lg">
+                      {ins.prima?.total_anual || 'No especificado'}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b hover:bg-slate-50">
+                  <td className="p-3 font-medium">Forma de Pago</td>
+                  {insurers.map((ins, i) => (
+                    <td key={i} className="p-3 text-right text-muted-foreground">
+                      {ins.prima?.forma_pago || 'No especificado'}
+                    </td>
+                  ))}
+                </tr>
               </tbody>
             </table>
           </div>

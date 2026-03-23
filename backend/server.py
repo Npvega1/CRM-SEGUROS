@@ -177,7 +177,7 @@ async def compare_quotations(request: CompareRequest):
         for i, doc in enumerate(extracted_texts, 1):
             files_content += f"\n\n{'='*60}\nCOTIZACIÓN {i}: {doc['name']}\n{'='*60}\n{doc['content']}\n"
         
-        analysis_prompt = f"""Eres un experto analista de seguros. Analiza las siguientes {len(extracted_texts)} cotizaciones de seguro del ramo "{request.line}" y crea un cuadro comparativo estructurado.
+        analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza las siguientes {len(extracted_texts)} cotizaciones de seguro del ramo "{request.line}" y crea un cuadro comparativo estructurado.
 
 {files_content}
 
@@ -185,54 +185,53 @@ INSTRUCCIONES DETALLADAS:
 
 1. EXTRAE el nombre EXACTO de cada aseguradora de cada documento.
 
-2. Para VALORES ASEGURADOS, identifica y normaliza usando estos nombres estándar:
-   - "Edificio" (también llamado: inmueble, construcción, casa, apartamento)
-   - "Contenidos" (también: muebles y enseres, bienes muebles, ajuar)
-   - "Equipos Electrónicos" (también: equipo eléctrico, electrodomésticos, cómputo)
-   - "Maquinaria y Equipo" (si aplica para empresas)
-   - "Responsabilidad Civil" (RC extracontractual, RC familiar)
-   - "Hurto/Sustracción" (límite de cobertura)
-   - "TOTAL ASEGURADO" (suma de todos los valores)
+2. VALORES ASEGURADOS - Son los MONTOS/SUMAS de los bienes físicos asegurados:
+   - "Edificio" (inmueble, construcción, casa, apartamento)
+   - "Contenidos" (muebles y enseres, bienes muebles, ajuar doméstico)
+   - "Equipos Electrónicos" (equipo eléctrico, electrodomésticos, cómputo)
+   - "Maquinaria y Equipo" (solo para empresas/PYME)
+   - "TOTAL ASEGURADO" (suma de todos los valores anteriores)
+   
+   ⚠️ NO incluir aquí: Hurto, Sustracción, Responsabilidad Civil - estos son AMPAROS, no valores.
 
-3. Para AMPAROS/COBERTURAS, usa estos nombres estándar:
-   - "Incendio y Rayo" 
-   - "Terremoto/Temblor"
+3. AMPAROS/COBERTURAS - Son los RIESGOS/EVENTOS cubiertos:
+   - "Incendio y Rayo" (incluye explosión)
+   - "Terremoto/Temblor" (incluye volcán, maremoto)
    - "HMACC/AMIT" (huelga, motín, actos malintencionados, terrorismo)
-   - "Daños por Agua" (anegación, inundación)
-   - "Hurto/Sustracción"
-   - "Responsabilidad Civil"
-   - "Daños a Equipos Eléctricos"
+   - "Daños por Agua" (anegación, inundación, rotura de tuberías)
+   - "Hurto/Sustracción" (con su límite o sublímite)
+   - "Responsabilidad Civil" (RC extracontractual, RC familiar, con su límite)
+   - "Daños a Equipos Eléctricos/Electrónicos"
    - "Rotura de Vidrios"
    - "Remoción de Escombros"
    (Agrega otros amparos específicos que encuentres)
 
-4. Para DEDUCIBLES, usa estos nombres:
+4. DEDUCIBLES - Porcentaje o monto a cargo del asegurado:
    - "General/Básico"
    - "Terremoto"
    - "HMACC/AMIT"
    - "Hurto"
    - "Equipos Eléctricos"
-   - "Responsabilidad Civil"
-   (Incluye el porcentaje y mínimo en SMMLV o pesos)
+   (Incluye el porcentaje Y el mínimo en SMMLV o pesos)
 
-5. Para BENEFICIOS, lista servicios adicionales como:
-   - Asistencia domiciliaria (plomería, cerrajería, electricidad)
-   - Hospedaje temporal
-   - Asesoría legal
-   - Gastos médicos
+5. BENEFICIOS - Servicios adicionales sin costo extra:
+   - Asistencia domiciliaria (plomería, cerrajería, electricidad, vidrios)
+   - Hospedaje/alojamiento temporal
+   - Asesoría legal/jurídica
+   - Mudanza de emergencia
    - Etc.
 
-6. Para PRIMA, extrae:
-   - Prima neta (sin IVA)
-   - IVA
-   - Prima TOTAL a pagar (con IVA) - ESTE ES EL MÁS IMPORTANTE
-   - Forma de pago (anual, semestral, cuotas)
+6. PRIMA - Desglose del costo:
+   - "prima_neta": Valor sin IVA
+   - "iva": Monto del IVA
+   - "total_anual": Prima TOTAL a pagar (con IVA)
+   - "forma_pago": Opciones de pago
 
 REGLAS CRÍTICAS:
-- TODAS las aseguradoras deben tener los MISMOS campos/conceptos
-- Si una aseguradora NO tiene un valor específico, usa "No incluido" o "No aplica"
-- Usa formato de moneda colombiana: $1,234,567
-- NO inventes datos, solo extrae lo que está en los documentos
+- TODAS las aseguradoras deben tener los MISMOS campos/conceptos normalizados
+- Si una aseguradora NO tiene un valor, usa "No incluido" o "No especificado"
+- NO mezclar valores asegurados con amparos
+- Formato moneda: $1,234,567
 
 Responde ÚNICAMENTE con este JSON (sin markdown, sin explicaciones):
 {{
@@ -243,22 +242,24 @@ Responde ÚNICAMENTE con este JSON (sin markdown, sin explicaciones):
         {{"concepto": "Edificio", "valor": "$600,000,000"}},
         {{"concepto": "Contenidos", "valor": "$50,000,000"}},
         {{"concepto": "Equipos Electrónicos", "valor": "$20,000,000"}},
-        {{"concepto": "Responsabilidad Civil", "valor": "$100,000,000"}},
-        {{"concepto": "TOTAL ASEGURADO", "valor": "$770,000,000"}}
+        {{"concepto": "TOTAL ASEGURADO", "valor": "$670,000,000"}}
       ],
       "amparos": [
         {{"amparo": "Incendio y Rayo", "limite": "100% valor asegurado"}},
         {{"amparo": "Terremoto/Temblor", "limite": "100% valor asegurado"}},
         {{"amparo": "HMACC/AMIT", "limite": "100% valor asegurado"}},
-        {{"amparo": "Hurto/Sustracción", "limite": "$50,000,000"}}
+        {{"amparo": "Hurto/Sustracción", "limite": "$50,000,000"}},
+        {{"amparo": "Responsabilidad Civil", "limite": "$100,000,000"}},
+        {{"amparo": "Daños Equipos Eléctricos", "limite": "Incluido"}}
       ],
       "deducibles": [
-        {{"concepto": "General/Básico", "valor": "10% mínimo 1 SMMLV"}},
-        {{"concepto": "Terremoto", "valor": "2% del valor asegurado, mín 3 SMMLV"}},
+        {{"concepto": "General/Básico", "valor": "Sin deducible"}},
+        {{"concepto": "Terremoto", "valor": "2% valor asegurado, mín 3 SMMLV"}},
+        {{"concepto": "HMACC/AMIT", "valor": "10% mínimo 2 SMMLV"}},
         {{"concepto": "Hurto", "valor": "10% mínimo 1 SMMLV"}}
       ],
       "beneficios": [
-        "Asistencia domiciliaria 24/7",
+        "Asistencia domiciliaria 24/7 (plomería, electricidad, cerrajería)",
         "Hospedaje temporal hasta $5,000,000",
         "Asesoría legal telefónica"
       ],
