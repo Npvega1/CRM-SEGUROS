@@ -3,14 +3,14 @@
 // =====================================================
 // PÁGINA: Comparativos con IA
 // /ai-compare
-// Módulo 09 del CRM Multi-tenant
+// Módulo 09 - Con procesamiento en segundo plano
 // =====================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { getBrowserClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   UsageProgress,
   ComparisonsList,
@@ -30,11 +30,10 @@ import {
 } from '@/lib/services/comparison-service';
 import type { 
   ComparisonWithRelations, 
-  UsageStats,
-  ComparisonTable 
+  UsageStats
 } from '@/lib/validations/comparisons';
 import type { PolicyLine } from '@/lib/validations/policies';
-import { Plus, RefreshCw, ArrowLeft, Sparkles, AlertCircle } from 'lucide-react';
+import { Plus, RefreshCw, ArrowLeft, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
@@ -49,19 +48,16 @@ export default function AIComparePage() {
   const [selectedComparison, setSelectedComparison] = useState<ComparisonWithRelations | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
-  // Wizard states
   const [showWizard, setShowWizard] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingProgress, setProcessingProgress] = useState(0);
+  
+  // Ref para el polling
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   // Cargar datos
   const loadData = useCallback(async () => {
     if (!tenantId) return;
 
     try {
-      setIsLoading(true);
-      
       const [usage, compList] = await Promise.all([
         getMonthlyUsage(tenantId),
         getComparisons(tenantId)
@@ -71,20 +67,27 @@ export default function AIComparePage() {
       setComparisons(compList);
     } catch (error) {
       console.error('Error loading data:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los datos',
-        variant: 'destructive'
-      });
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId, toast]);
+  }, [tenantId]);
 
+  // Polling para actualizar comparativos en proceso
   useEffect(() => {
     if (!tenantLoading && tenantId) {
       loadData();
+      
+      // Iniciar polling cada 5 segundos para actualizar estados
+      pollingRef.current = setInterval(() => {
+        loadData();
+      }, 5000);
     }
+    
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
   }, [tenantLoading, tenantId, loadData]);
 
   const handleRefresh = async () => {
@@ -109,6 +112,105 @@ export default function AIComparePage() {
     setShowWizard(true);
   };
 
+  // Procesar comparativo en segundo plano
+  const processComparisonInBackground = async (
+    comparisonId: string,
+    tenantId: string,
+    line: PolicyLine,
+    files: Array<{ name: string; type: string; size: number; base64: string }>
+  ) => {
+    try {
+      // Obtener criterios
+      const criteria = await getComparisonCriteria(tenantId, line);
+      const criteriaNames = criteria.map(c => c.criteria_name);
+
+      // Preparar archivos para la IA
+      const filesForAI = files.map(f => ({
+        name: f.name,
+        file_type: f.name.split('.').pop()?.toLowerCase() || 'pdf',
+        base64_content: f.base64
+      }));
+
+      // Usar la URL del backend
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || window.location.origin;
+
+      const aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comparisonId,
+          tenantId,
+          line,
+          files: filesForAI,
+          criteria: criteriaNames
+        })
+      });
+
+      const aiResult = await aiResponse.json();
+
+      const supabase = getBrowserClient();
+
+      if (aiResult.success) {
+        // Actualizar con resultados exitosos
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('comparisons')
+          .update({
+            comparison_table: aiResult.comparison_table,
+            ai_recommendation: aiResult.ai_recommendation,
+            status: 'ready'
+          })
+          .eq('id', comparisonId);
+
+        toast({
+          title: 'Comparativo listo',
+          description: 'El análisis de cotizaciones está completo'
+        });
+      } else {
+        // Marcar como error
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('comparisons')
+          .update({
+            status: 'error',
+            error_message: aiResult.error || 'Error al procesar'
+          })
+          .eq('id', comparisonId);
+
+        toast({
+          title: 'Error en comparativo',
+          description: aiResult.error || 'No se pudo procesar',
+          variant: 'destructive'
+        });
+      }
+
+      // Recargar lista
+      loadData();
+
+    } catch (error) {
+      console.error('Background processing error:', error);
+      
+      // Marcar como error en la base de datos
+      const supabase = getBrowserClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('comparisons')
+        .update({
+          status: 'error',
+          error_message: error instanceof Error ? error.message : 'Error desconocido'
+        })
+        .eq('id', comparisonId);
+
+      toast({
+        title: 'Error',
+        description: 'Error al procesar el comparativo',
+        variant: 'destructive'
+      });
+
+      loadData();
+    }
+  };
+
   const handleCreateComparison = async (data: {
     clientId?: string;
     prospectName?: string;
@@ -117,11 +219,8 @@ export default function AIComparePage() {
   }) => {
     if (!tenantId || !userId) return;
 
-    setIsProcessing(true);
-    setProcessingProgress(10);
-
     try {
-      // Crear el comparativo en la base de datos
+      // 1. Crear el registro en la base de datos (estado: processing)
       const result = await createComparison({
         tenantId,
         clientId: data.clientId,
@@ -135,93 +234,25 @@ export default function AIComparePage() {
         throw new Error(result.error || 'Error al crear comparativo');
       }
 
-      setProcessingProgress(30);
-
-      // Obtener los criterios para este ramo
-      const criteria = await getComparisonCriteria(tenantId, data.line);
-      const criteriaNames = criteria.map(c => c.criteria_name);
-
-      setProcessingProgress(40);
-
-      // Llamar al API de IA para procesar
-      const filesForAI = data.files.map(f => ({
-        name: f.name,
-        file_type: f.name.split('.').pop()?.toLowerCase() || 'pdf',
-        base64_content: f.base64
-      }));
-
-      // Usar la URL del backend (REACT_APP_BACKEND_URL apunta al mismo dominio con proxy a puerto 8001)
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || window.location.origin;
-
-      // Crear AbortController para timeout de 3 minutos
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000);
-
-      try {
-        const aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            comparisonId: result.comparisonId,
-            tenantId,
-            line: data.line,
-            files: filesForAI,
-            criteria: criteriaNames
-          }),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        setProcessingProgress(80);
-
-        if (!aiResponse.ok) {
-          const errorText = await aiResponse.text();
-          throw new Error(`Error del servidor: ${aiResponse.status} - ${errorText}`);
-        }
-
-        const aiResult = await aiResponse.json();
-
-        if (!aiResult.success) {
-          throw new Error(aiResult.error || 'Error al procesar con IA');
-        }
-
-        // Actualizar el comparativo con los resultados
-        const supabase = getBrowserClient();
-        
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from('comparisons')
-          .update({
-            comparison_table: aiResult.comparison_table,
-            ai_recommendation: aiResult.ai_recommendation,
-            status: 'ready'
-          })
-          .eq('id', result.comparisonId);
-
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          throw new Error('La solicitud tardó demasiado. Intenta con archivos más pequeños.');
-        }
-        throw fetchError;
-      }
-
-      setProcessingProgress(100);
-
-      // Recargar datos y mostrar el comparativo
-      await loadData();
-      
-      const newComparison = await getComparisonById(result.comparisonId);
-      if (newComparison) {
-        setSelectedComparison(newComparison);
-      }
-
+      // 2. Cerrar el wizard inmediatamente
       setShowWizard(false);
+
+      // 3. Mostrar notificación
       toast({
-        title: 'Comparativo creado',
-        description: 'El análisis de cotizaciones está listo'
+        title: 'Comparativo en proceso',
+        description: 'Se está generando en segundo plano. Puedes seguir trabajando.'
       });
+
+      // 4. Recargar lista para mostrar el nuevo comparativo con status "processing"
+      await loadData();
+
+      // 5. Procesar en segundo plano (no bloquea la UI)
+      processComparisonInBackground(
+        result.comparisonId,
+        tenantId,
+        data.line,
+        data.files
+      );
 
     } catch (error) {
       console.error('Error creating comparison:', error);
@@ -230,13 +261,27 @@ export default function AIComparePage() {
         description: error instanceof Error ? error.message : 'Error al crear comparativo',
         variant: 'destructive'
       });
-    } finally {
-      setIsProcessing(false);
-      setProcessingProgress(0);
     }
   };
 
   const handleViewComparison = async (comparison: ComparisonWithRelations) => {
+    if (comparison.status === 'processing') {
+      toast({
+        title: 'En proceso',
+        description: 'Este comparativo aún se está generando. Espera unos segundos.'
+      });
+      return;
+    }
+    
+    if (comparison.status === 'error') {
+      toast({
+        title: 'Error en comparativo',
+        description: (comparison as unknown as { error_message?: string }).error_message || 'Hubo un error al generar este comparativo',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     const fullComparison = await getComparisonById(comparison.id);
     if (fullComparison) {
       setSelectedComparison(fullComparison);
@@ -249,14 +294,13 @@ export default function AIComparePage() {
     const result = await deleteComparison(comparisonId);
     if (result.success) {
       toast({
-        title: 'Comparativo eliminado',
-        description: 'El comparativo ha sido eliminado correctamente'
+        title: 'Comparativo eliminado'
       });
       await loadData();
     } else {
       toast({
         title: 'Error',
-        description: result.error || 'No se pudo eliminar el comparativo',
+        description: result.error || 'No se pudo eliminar',
         variant: 'destructive'
       });
     }
@@ -273,7 +317,6 @@ export default function AIComparePage() {
     );
 
     if (result.success) {
-      // Actualizar localmente
       const updated = await getComparisonById(selectedComparison.id);
       if (updated) {
         setSelectedComparison(updated);
@@ -306,7 +349,6 @@ export default function AIComparePage() {
   const handleCreatePolicy = (insurerName: string) => {
     if (!selectedComparison) return;
     
-    // Navegar a crear póliza con datos pre-completados
     const params = new URLSearchParams({
       client_id: selectedComparison.client_id,
       insurer: insurerName,
@@ -356,6 +398,9 @@ export default function AIComparePage() {
     );
   }
 
+  // Contar comparativos en proceso
+  const processingCount = comparisons.filter(c => c.status === 'processing').length;
+
   // Vista de lista
   return (
     <div className="p-6 space-y-6" data-testid="ai-compare-page">
@@ -396,19 +441,34 @@ export default function AIComparePage() {
         <UsageProgress stats={usageStats} isLoading={isLoading} />
       )}
 
+      {/* Processing indicator */}
+      {processingCount > 0 && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="py-3">
+            <div className="flex items-center gap-2 text-blue-700">
+              <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
+              <span className="text-sm font-medium">
+                {processingCount} comparativo{processingCount > 1 ? 's' : ''} en proceso...
+              </span>
+              <span className="text-xs text-blue-600">
+                (se actualiza automáticamente)
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Info Card */}
-      <Card className="bg-blue-50 border-blue-200">
+      <Card className="bg-slate-50 border-slate-200">
         <CardContent className="py-4">
           <div className="flex items-start gap-3">
-            <Sparkles className="h-5 w-5 text-blue-600 mt-0.5" />
-            <div className="text-sm text-blue-800">
+            <Sparkles className="h-5 w-5 text-slate-600 mt-0.5" />
+            <div className="text-sm text-slate-700">
               <p className="font-medium">¿Cómo funciona?</p>
               <p className="mt-1">
-                1. Sube las cotizaciones de diferentes aseguradoras (PDF o DOCX)
-                <br />
-                2. La IA analiza y extrae automáticamente la información
-                <br />
-                3. Obtén un cuadro comparativo editable con recomendaciones
+                1. Sube las cotizaciones (PDF o DOCX) → 
+                2. La IA analiza en segundo plano → 
+                3. Obtén el cuadro comparativo cuando esté listo
               </p>
             </div>
           </div>
@@ -417,7 +477,7 @@ export default function AIComparePage() {
 
       {/* Comparisons List */}
       <div>
-        <h2 className="text-lg font-semibold mb-4">Comparativos anteriores</h2>
+        <h2 className="text-lg font-semibold mb-4">Historial de comparativos</h2>
         <ComparisonsList
           comparisons={comparisons}
           isLoading={isLoading}
@@ -426,13 +486,13 @@ export default function AIComparePage() {
         />
       </div>
 
-      {/* New Comparison Wizard */}
+      {/* New Comparison Wizard - Sin estado de procesamiento */}
       <NewComparisonWizard
         open={showWizard}
         onClose={() => setShowWizard(false)}
         onSubmit={handleCreateComparison}
-        isProcessing={isProcessing}
-        processingProgress={processingProgress}
+        isProcessing={false}
+        processingProgress={0}
       />
     </div>
   );
