@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTenant } from '@/lib/context/TenantContext';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ import {
 
 export default function ClientsPage() {
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
+  const { isAdmin, canCreate } = usePermissions();
   
   const [clients, setClients] = useState<(Client & { policies_count?: number })[]>([]);
   const [total, setTotal] = useState(0);
@@ -190,6 +192,9 @@ export default function ClientsPage() {
     return <LoadingScreen message="Cargando..." />;
   }
 
+  // Verificar si puede crear clientes
+  const showCreateButton = isAdmin || canCreate('clientes');
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -304,13 +309,18 @@ export default function ClientsPage() {
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                <CSVImporter onSuccess={handleImportSuccess} />
-                <Link href="/clientes/nuevo">
-                  <Button data-testid="new-client-button">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Nuevo Cliente
-                  </Button>
-                </Link>
+                {/* Importar CSV - Solo administradores */}
+                {isAdmin && <CSVImporter onSuccess={handleImportSuccess} />}
+                
+                {/* Nuevo Cliente - Admin o con permiso de crear */}
+                {showCreateButton && (
+                  <Link href="/clientes/nuevo">
+                    <Button data-testid="new-client-button">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Nuevo Cliente
+                    </Button>
+                  </Link>
+                )}
               </div>
             </div>
           </CardHeader>
