@@ -159,7 +159,7 @@ async def compare_quotations(request: CompareRequest):
                 if text.strip():
                     extracted_texts.append({
                         "name": file_name,
-                        "content": text[:12000]  # 12000 chars por archivo - Vercel Pro permite más tiempo
+                        "content": text[:8000]  # 8000 chars por archivo para mantenerse dentro del timeout
                     })
                     logger.info(f"Extracted {len(text)} chars from {file_name}")
                 else:
