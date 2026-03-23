@@ -6,7 +6,7 @@
 ## Stack Tecnológico
 - Next.js 14, Supabase, TypeScript, Tailwind CSS, Shadcn/UI, Zod
 - FastAPI Backend (para procesamiento IA)
-- Gemini 2.5 Flash via Emergent LLM Key
+- **Gemini 2.5 Pro** via Emergent LLM Key (~$0.04 USD por comparativo)
 
 ## Módulos Completados
 - [✓] Módulo 00 - Fundación
@@ -18,59 +18,60 @@
 - [✓] Módulo 06 - Automatizaciones y Workflows
 - [✓] Módulo 07 - Portal del Cliente
 - [✓] Módulo 08 - Configuración Visual
-- [✓] Módulo 09 - Comparativos con IA (COMPLETADO 2026-03-23)
+- [🔄] Módulo 09 - Comparativos con IA (90% - funcional, pendiente ajustes de prompt)
 
 ## Módulos Pendientes
 - [ ] Módulo 10 - Planes y Pagos
-- [ ] Módulo 11 - Super Admin (incluye configuración de templates IA por ramo)
+- [ ] Módulo 11 - Super Admin (incluye configuración de prompts por ramo)
 - [ ] Módulo 12 - Agentes Aliados
 
-## Implementación del Módulo 09 - Comparativos con IA
+## Módulo 09 - Comparativos con IA
 
 ### Funcionalidades Implementadas:
-1. **Backend API** (`/api/ai/compare`) usando Gemini 2.5 Flash via Emergent LLM Key
-2. **Proxy API Route** (`/app/api/ai/compare/route.ts`) para compatibilidad con Vercel
-3. **Página principal** `/ai-compare` con:
-   - Barra de progreso de uso mensual (10 comparativos/mes)
-   - Lista de comparativos con estados (procesando, listo, error)
-   - Wizard de 3 pasos para crear nuevo comparativo
-   - Procesamiento en segundo plano (non-blocking)
-4. **Nueva Estructura de Tabla Comparativa** con secciones:
-   - Información del Riesgo (cliente, dirección, ciudad, descripción)
-   - Valores Asegurados (tabla)
-   - Amparos/Coberturas (tabla con límites)
-   - Deducibles (tabla)
-   - Beneficios Adicionales (lista)
-   - Prima (total anual + forma de pago)
-5. **Exportación a Word (.docx)** con formato profesional
-6. **Soporte para Prospectos** (clientes no registrados)
-7. **Migración SQL** con tablas: comparisons, comparison_files, comparison_criteria, usage_logs
+1. **Backend API asíncrono** (`/api/ai/compare`) con Gemini 2.5 Pro
+2. **Procesamiento en background** - No hay timeout, archivos grandes soportados
+3. **Actualización directa a Supabase** desde el backend
+4. **Exportación a Word** con diseño profesional (tablas con colores, bordes)
+5. **Polling automático** para detectar cuando termina el procesamiento
 
-### Arquitectura de Despliegue:
+### Arquitectura:
 ```
 [Vercel Frontend] 
-    → /api/ai/compare (Next.js API Route - Proxy)
+    → Envía archivos + credenciales Supabase
     → [FastAPI Backend en Emergent]
-    → Gemini 2.5 Flash
+    → Procesa en background con Gemini 2.5 Pro
+    → Actualiza Supabase directamente cuando termina
+    → Frontend detecta via polling
 ```
 
-### Variables de Entorno Requeridas en Vercel:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `FASTAPI_BACKEND_URL` (URL del backend Emergent)
-- `EMERGENT_LLM_KEY` (sk-emergent-c3c4103Ac62B474038)
+### Variables de Entorno en Vercel:
+- `NEXT_PUBLIC_SUPABASE_URL` - URL de Supabase
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - API Key de Supabase
+- `NEXT_PUBLIC_FASTAPI_BACKEND_URL` - https://quote-ai-2.preview.emergentagent.com
+- `EMERGENT_LLM_KEY` - sk-emergent-c3c4103Ac62B474038
 
-## Próximas Tareas (P0)
-1. **Probar en Vercel** - Usuario debe verificar funcionalidad en su ambiente
-2. **Módulo 11 - Super Admin** (P1):
-   - Configuración de templates de comparación por ramo
-   - Tenants pueden habilitar/deshabilitar templates
+### Pendiente para Módulo 09:
+- [ ] Ajustar prompt para normalizar mejor los datos extraídos
+- [ ] Probar con archivos más grandes de otros ramos
+- [ ] Validar exportación Word con datos reales
 
-## Backlog (P1/P2)
+## Próximas Tareas
+
+### Módulo 11 - Super Admin (Próximo):
+- Configuración de **prompts personalizables por ramo** (hogar, auto, pyme, vida, etc.)
+- El Super Admin crea templates de extracción de datos
+- Los tenants solo usan los templates, no ven los prompts
+- CRUD de templates con campos: nombre, ramo, prompt, activo/inactivo
+
+### Backlog (P2):
 - Módulo 10 - Planes y Pagos
 - Módulo 12 - Agentes Aliados
 - Exportar comparativo a PDF
-- Compartir comparativo con cliente via portal
-- Integrar servicio de email real (Resend/SendGrid)
-- Implementar Magic Link OTP real
-- Regenerar tipos TypeScript de Supabase (eliminar `as any` casts)
+- Compartir comparativo via Portal del Cliente
+- Regenerar tipos TypeScript de Supabase
+
+## Archivos Clave Módulo 09
+- `/app/backend/server.py` - Backend FastAPI con procesamiento asíncrono
+- `/app/frontend/src/app/(tenant)/ai-compare/page.tsx` - Página principal
+- `/app/frontend/src/components/modules/ai-compare/ComparisonViewer.tsx` - Vista + Export Word
+- `/app/frontend/supabase/migrations/00009_comparisons.sql` - Schema DB
