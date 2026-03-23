@@ -143,8 +143,8 @@ export async function getComparisons(tenantId: string): Promise<ComparisonWithRe
     .from('comparisons')
     .select(`
       *,
-      clients!inner(id, full_name, email),
-      users!inner(id, full_name)
+      clients(id, full_name, email),
+      users(id, full_name)
     `)
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false });
@@ -172,8 +172,8 @@ export async function getComparisonById(comparisonId: string): Promise<Compariso
     .from('comparisons')
     .select(`
       *,
-      clients!inner(id, full_name, email),
-      users!inner(id, full_name)
+      clients(id, full_name, email),
+      users(id, full_name)
     `)
     .eq('id', comparisonId)
     .single();
