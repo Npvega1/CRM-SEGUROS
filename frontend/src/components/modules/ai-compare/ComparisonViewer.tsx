@@ -120,8 +120,7 @@ export function ComparisonViewer({
         AlignmentType,
         BorderStyle,
         ShadingType,
-        VerticalAlign,
-        PageBreak
+        VerticalAlign
       } = docxModule;
       
       const saveAs = fileSaverModule.saveAs || fileSaverModule.default?.saveAs;
@@ -133,297 +132,243 @@ export function ComparisonViewer({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const children: any[] = [];
       
-      // Colores corporativos
-      const PRIMARY_COLOR = '1E40AF'; // Azul oscuro
-      const SECONDARY_COLOR = '3B82F6'; // Azul medio
-      const ACCENT_COLOR = 'FEF3C7'; // Amarillo suave
-      const LIGHT_GRAY = 'F3F4F6';
-      const WHITE = 'FFFFFF';
+      // Colores (sin # para docx)
+      const HEADER_BG = '2563EB'; // Azul
+      const HEADER_TEXT = 'FFFFFF'; // Blanco
+      const ROW_ODD = 'F8FAFC'; // Gris muy claro
+      const ROW_EVEN = 'FFFFFF'; // Blanco
+      const HIGHLIGHT_BG = 'FEF9C3'; // Amarillo suave para destacar
+      const BORDER_COLOR = 'CBD5E1'; // Gris para bordes
       
       // Configuración de bordes
-      const thinBorder = { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' };
-      const borders = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
-      const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
-      const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+      const cellBorder = { style: BorderStyle.SINGLE, size: 6, color: BORDER_COLOR };
+      const borders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
       
-      // Helper para crear celda de encabezado
-      const headerCell = (text: string, width?: number) => new TableCell({
+      // Helper para celda de encabezado (fondo azul, texto blanco)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const headerCell = (text: string) => new TableCell({
         children: [new Paragraph({ 
-          children: [new TextRun({ text, bold: true, color: WHITE, size: 20 })],
+          children: [new TextRun({ text, bold: true, color: HEADER_TEXT, size: 20 })],
           alignment: AlignmentType.CENTER
         })],
         borders,
-        shading: { fill: PRIMARY_COLOR, type: ShadingType.SOLID },
+        shading: { fill: HEADER_BG, type: ShadingType.CLEAR, color: HEADER_BG },
         verticalAlign: VerticalAlign.CENTER,
-        width: width ? { size: width, type: WidthType.PERCENTAGE } : undefined,
       });
       
-      // Helper para crear celda de datos
+      // Helper para celda de datos normal
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const dataCell = (text: string, isHighlight = false, isBold = false, align: any = AlignmentType.LEFT) => new TableCell({
+      const dataCell = (text: string, isOdd: boolean, isBold = false, align: any = AlignmentType.LEFT, isHighlight = false) => new TableCell({
         children: [new Paragraph({ 
           children: [new TextRun({ text, bold: isBold, size: 18 })],
           alignment: align
         })],
         borders,
-        shading: { fill: isHighlight ? ACCENT_COLOR : WHITE, type: ShadingType.SOLID },
-        verticalAlign: VerticalAlign.CENTER,
-      });
-      
-      // Helper para celda alternada (zebra)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const zebraCell = (text: string, isOdd: boolean, isBold = false, align: any = AlignmentType.LEFT) => new TableCell({
-        children: [new Paragraph({ 
-          children: [new TextRun({ text, bold: isBold, size: 18 })],
-          alignment: align
-        })],
-        borders,
-        shading: { fill: isOdd ? LIGHT_GRAY : WHITE, type: ShadingType.SOLID },
+        shading: { 
+          fill: isHighlight ? HIGHLIGHT_BG : (isOdd ? ROW_ODD : ROW_EVEN), 
+          type: ShadingType.CLEAR, 
+          color: isHighlight ? HIGHLIGHT_BG : (isOdd ? ROW_ODD : ROW_EVEN)
+        },
         verticalAlign: VerticalAlign.CENTER,
       });
 
       // ========== ENCABEZADO ==========
       children.push(
         new Paragraph({
-          children: [new TextRun({ text: branding?.agencyName || 'LA PRIMA JUSTA', bold: true, size: 44, color: PRIMARY_COLOR })],
+          children: [new TextRun({ text: 'Cuadro Comparativo de Cotizaciones', bold: true, size: 36 })],
           alignment: AlignmentType.CENTER,
           spacing: { after: 100 },
         }),
         new Paragraph({
-          children: [new TextRun({ text: 'CUADRO COMPARATIVO DE COTIZACIONES', bold: true, size: 32, color: SECONDARY_COLOR })],
+          children: [new TextRun({ text: branding?.agencyName || 'LA PRIMA JUSTA', bold: true, size: 28, color: '2563EB' })],
           alignment: AlignmentType.CENTER,
           spacing: { after: 300 },
         })
       );
       
-      // Información del cliente en tabla elegante
-      const infoTable = new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideHorizontal: noBorder, insideVertical: noBorder },
-        rows: [
-          new TableRow({
-            children: [
-              new TableCell({
-                children: [new Paragraph({ children: [
-                  new TextRun({ text: 'Cliente: ', bold: true, size: 20 }),
-                  new TextRun({ text: clientName, size: 20 })
-                ]})],
-                borders: noBorders,
-                width: { size: 40, type: WidthType.PERCENTAGE },
-              }),
-              new TableCell({
-                children: [new Paragraph({ children: [
-                  new TextRun({ text: 'Ramo: ', bold: true, size: 20 }),
-                  new TextRun({ text: POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line, size: 20 })
-                ]})],
-                borders: noBorders,
-                width: { size: 30, type: WidthType.PERCENTAGE },
-              }),
-              new TableCell({
-                children: [new Paragraph({ children: [
-                  new TextRun({ text: 'Fecha: ', bold: true, size: 20 }),
-                  new TextRun({ text: comparison.created_at ? format(new Date(comparison.created_at), 'dd/MM/yyyy') : 'N/A', size: 20 })
-                ]})],
-                borders: noBorders,
-                width: { size: 30, type: WidthType.PERCENTAGE },
-              }),
-            ],
+      // Info del cliente
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: 'Cliente: ', bold: true, size: 22 }),
+            new TextRun({ text: clientName, size: 22, bold: true }),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: 'Ramo: ', bold: true, size: 20 }),
+            new TextRun({ text: POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line, size: 20 }),
+            new TextRun({ text: '     |     Fecha: ', bold: true, size: 20 }),
+            new TextRun({ text: comparison.created_at ? format(new Date(comparison.created_at), 'dd/MM/yyyy') : 'N/A', size: 20 }),
+          ],
+          spacing: { after: 300 },
+        })
+      );
+
+      // ========== TABLA PRINCIPAL COMPARATIVA ==========
+      // Encabezado con nombres de aseguradoras
+      const mainHeaderRow = new TableRow({
+        children: [
+          headerCell('Criterio'),
+          ...insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
+        ],
+      });
+
+      // Fila de iconos/logos (simulado con emoji o texto)
+      const logoRow = new TableRow({
+        children: [
+          dataCell('🏢', false, false, AlignmentType.CENTER),
+          ...insurers.map((ins, i) => dataCell(ins.name?.split(' ')[0] || 'ASG', false, true, AlignmentType.CENTER)),
+        ],
+      });
+
+      // ========== VALORES ASEGURADOS ==========
+      const valoresHeaderRow = new TableRow({
+        children: [
+          dataCell('📊 VALORES ASEGURADOS', true, true, AlignmentType.LEFT),
+          ...insurers.map(() => dataCell('', true)),
+        ],
+      });
+
+      const valoresRows = Array.from(allValores).map((concepto, idx) => new TableRow({
+        children: [
+          dataCell(concepto, idx % 2 === 0, concepto.toUpperCase() === 'TOTAL ASEGURADO'),
+          ...insurers.map(ins => {
+            const valor = ins.valores_asegurados?.find(v => v.concepto === concepto)?.valor || '-';
+            return dataCell(valor, idx % 2 === 0, concepto.toUpperCase() === 'TOTAL ASEGURADO', AlignmentType.RIGHT);
+          }),
+        ],
+      }));
+
+      // ========== AMPAROS ==========
+      const amparosHeaderRow = new TableRow({
+        children: [
+          dataCell('🛡️ COBERTURAS', true, true, AlignmentType.LEFT),
+          ...insurers.map(() => dataCell('', true)),
+        ],
+      });
+
+      const amparosRows = Array.from(allAmparos).map((amparo, idx) => new TableRow({
+        children: [
+          dataCell(amparo, idx % 2 === 0),
+          ...insurers.map(ins => {
+            const amp = ins.amparos?.find(a => a.amparo === amparo);
+            const text = amp ? (amp.limite || '✓ Incluido') : '✗ No incluido';
+            return dataCell(text, idx % 2 === 0);
+          }),
+        ],
+      }));
+
+      // ========== DEDUCIBLES ==========
+      const deduciblesHeaderRow = new TableRow({
+        children: [
+          dataCell('📋 DEDUCIBLES', true, true, AlignmentType.LEFT),
+          ...insurers.map(() => dataCell('', true)),
+        ],
+      });
+
+      const deduciblesRows = Array.from(allDeducibles).map((ded, idx) => new TableRow({
+        children: [
+          dataCell(ded, idx % 2 === 0),
+          ...insurers.map(ins => {
+            const deducible = ins.deducibles?.find(d => d.concepto === ded);
+            return dataCell(deducible?.valor || '-', idx % 2 === 0);
+          }),
+        ],
+      }));
+
+      // ========== BENEFICIOS ==========
+      const beneficiosHeaderRow = new TableRow({
+        children: [
+          dataCell('🎁 BENEFICIOS', true, true, AlignmentType.LEFT),
+          ...insurers.map(() => dataCell('', true)),
+        ],
+      });
+
+      const beneficiosRow = new TableRow({
+        children: [
+          dataCell('Asistencias incluidas', false),
+          ...insurers.map(ins => {
+            const bens = ins.beneficios?.join('\n• ') || 'No especificados';
+            return dataCell(ins.beneficios && ins.beneficios.length > 0 ? '• ' + bens : 'No especificados', false);
           }),
         ],
       });
-      children.push(infoTable);
-      children.push(new Paragraph({ children: [], spacing: { after: 300 } }));
 
-      // ========== RESUMEN DE PRIMAS ==========
-      children.push(
-        new Paragraph({ 
-          children: [new TextRun({ text: '💰 RESUMEN DE PRIMAS', bold: true, size: 26, color: PRIMARY_COLOR })],
-          spacing: { before: 200, after: 150 } 
-        })
-      );
+      // ========== PRIMA (DESTACADA) ==========
+      const primaHeaderRow = new TableRow({
+        children: [
+          dataCell('💰 VALOR A PAGAR', true, true, AlignmentType.LEFT, true),
+          ...insurers.map(() => dataCell('', true, false, AlignmentType.LEFT, true)),
+        ],
+      });
 
-      const primaRows = [
-        new TableRow({
-          children: [
-            headerCell('Concepto', 25),
-            ...insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
-          ],
-        }),
-        new TableRow({
-          children: [
-            zebraCell('Prima Neta', true),
-            ...insurers.map(ins => zebraCell(ins.prima?.prima_neta || '-', true, false, AlignmentType.RIGHT)),
-          ],
-        }),
-        new TableRow({
-          children: [
-            zebraCell('IVA (19%)', false),
-            ...insurers.map(ins => zebraCell(ins.prima?.iva || '-', false, false, AlignmentType.RIGHT)),
-          ],
-        }),
-        new TableRow({
-          children: [
-            dataCell('PRIMA TOTAL A PAGAR', true, true),
-            ...insurers.map(ins => dataCell(ins.prima?.total_anual || 'No especificado', true, true, AlignmentType.RIGHT)),
-          ],
-        }),
-        new TableRow({
-          children: [
-            zebraCell('Forma de Pago', true),
-            ...insurers.map(ins => zebraCell(ins.prima?.forma_pago || 'No especificado', true)),
-          ],
-        }),
-      ];
+      const primaTotalRow = new TableRow({
+        children: [
+          dataCell('Prima Total Anual', false, true, AlignmentType.LEFT, true),
+          ...insurers.map(ins => dataCell(ins.prima?.total_anual || 'No especificado', false, true, AlignmentType.RIGHT, true)),
+        ],
+      });
 
-      children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: primaRows }));
+      const primaFormaRow = new TableRow({
+        children: [
+          dataCell('Forma de Pago', false, false, AlignmentType.LEFT),
+          ...insurers.map(ins => dataCell(ins.prima?.forma_pago || 'No especificado', false)),
+        ],
+      });
 
-      // ========== VALORES ASEGURADOS ==========
-      if (allValores.size > 0) {
-        children.push(
-          new Paragraph({ 
-            children: [new TextRun({ text: '📊 VALORES ASEGURADOS', bold: true, size: 26, color: PRIMARY_COLOR })],
-            spacing: { before: 400, after: 150 } 
-          })
-        );
+      // Construir tabla completa
+      const mainTable = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          mainHeaderRow,
+          valoresHeaderRow,
+          ...valoresRows,
+          amparosHeaderRow,
+          ...amparosRows,
+          deduciblesHeaderRow,
+          ...deduciblesRows,
+          beneficiosHeaderRow,
+          beneficiosRow,
+          primaHeaderRow,
+          primaTotalRow,
+          primaFormaRow,
+        ],
+      });
 
-        const valoresRows = [
-          new TableRow({
-            children: [
-              headerCell('Concepto', 25),
-              ...insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
-            ],
-          }),
-          ...Array.from(allValores).map((concepto, idx) => new TableRow({
-            children: [
-              zebraCell(concepto, idx % 2 === 0, concepto === 'TOTAL ASEGURADO'),
-              ...insurers.map(ins => {
-                const valor = ins.valores_asegurados?.find(v => v.concepto === concepto)?.valor || '-';
-                return zebraCell(valor, idx % 2 === 0, concepto === 'TOTAL ASEGURADO', AlignmentType.RIGHT);
-              }),
-            ],
-          })),
-        ];
-
-        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: valoresRows }));
-      }
-
-      // ========== AMPAROS / COBERTURAS ==========
-      if (allAmparos.size > 0) {
-        children.push(
-          new Paragraph({ 
-            children: [new TextRun({ text: '🛡️ AMPAROS / COBERTURAS', bold: true, size: 26, color: PRIMARY_COLOR })],
-            spacing: { before: 400, after: 150 } 
-          })
-        );
-
-        const amparosRows = [
-          new TableRow({
-            children: [
-              headerCell('Amparo', 25),
-              ...insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
-            ],
-          }),
-          ...Array.from(allAmparos).map((amparo, idx) => new TableRow({
-            children: [
-              zebraCell(amparo, idx % 2 === 0),
-              ...insurers.map(ins => {
-                const amp = ins.amparos?.find(a => a.amparo === amparo);
-                const text = amp ? (amp.limite || '✓ Incluido') : '✗ No incluido';
-                return zebraCell(text, idx % 2 === 0);
-              }),
-            ],
-          })),
-        ];
-
-        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: amparosRows }));
-      }
-
-      // ========== DEDUCIBLES ==========
-      if (allDeducibles.size > 0) {
-        children.push(
-          new Paragraph({ 
-            children: [new TextRun({ text: '⚠️ DEDUCIBLES', bold: true, size: 26, color: PRIMARY_COLOR })],
-            spacing: { before: 400, after: 150 } 
-          })
-        );
-
-        const deduciblesRows = [
-          new TableRow({
-            children: [
-              headerCell('Deducible', 25),
-              ...insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
-            ],
-          }),
-          ...Array.from(allDeducibles).map((ded, idx) => new TableRow({
-            children: [
-              zebraCell(ded, idx % 2 === 0),
-              ...insurers.map(ins => {
-                const deducible = ins.deducibles?.find(d => d.concepto === ded);
-                return zebraCell(deducible?.valor || '-', idx % 2 === 0);
-              }),
-            ],
-          })),
-        ];
-
-        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: deduciblesRows }));
-      }
-
-      // ========== BENEFICIOS ADICIONALES ==========
-      children.push(
-        new Paragraph({ 
-          children: [new TextRun({ text: '🎁 BENEFICIOS ADICIONALES / ASISTENCIAS', bold: true, size: 26, color: PRIMARY_COLOR })],
-          spacing: { before: 400, after: 150 } 
-        })
-      );
-      
-      const beneficiosRows = [
-        new TableRow({
-          children: insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
-        }),
-        new TableRow({
-          children: insurers.map(ins => new TableCell({
-            children: ins.beneficios && ins.beneficios.length > 0 
-              ? ins.beneficios.map(ben => new Paragraph({ 
-                  children: [new TextRun({ text: `• ${ben}`, size: 18 })],
-                  spacing: { after: 50 }
-                }))
-              : [new Paragraph({ children: [new TextRun({ text: 'No especificados', size: 18, italics: true })] })],
-            borders,
-            shading: { fill: WHITE, type: ShadingType.SOLID },
-            verticalAlign: VerticalAlign.TOP,
-          })),
-        }),
-      ];
-
-      children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: beneficiosRows }));
+      children.push(mainTable);
 
       // ========== RECOMENDACIÓN ==========
       if (comparison.ai_recommendation) {
         children.push(
+          new Paragraph({ children: [], spacing: { before: 300 } }),
           new Paragraph({ 
-            children: [new TextRun({ text: '🏆 RECOMENDACIÓN DEL ASESOR', bold: true, size: 26, color: PRIMARY_COLOR })],
-            spacing: { before: 400, after: 150 } 
+            children: [new TextRun({ text: '🏆 Recomendación del Asesor', bold: true, size: 24 })],
+            spacing: { after: 150 } 
           })
         );
         
-        // Caja de recomendación con fondo
+        // Caja de recomendación
         const recoTable = new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
           rows: [
             new TableRow({
               children: [
                 new TableCell({
-                  children: [new Paragraph({ 
-                    children: [new TextRun({ text: comparison.ai_recommendation, size: 20 })],
-                    spacing: { after: 100 }
-                  })],
+                  children: comparison.ai_recommendation.split('\n').map(line => 
+                    new Paragraph({ 
+                      children: [new TextRun({ text: line, size: 20 })],
+                      spacing: { after: 80 }
+                    })
+                  ),
                   borders: { 
-                    top: { style: BorderStyle.SINGLE, size: 8, color: SECONDARY_COLOR },
-                    bottom: { style: BorderStyle.SINGLE, size: 8, color: SECONDARY_COLOR },
-                    left: { style: BorderStyle.SINGLE, size: 8, color: SECONDARY_COLOR },
-                    right: { style: BorderStyle.SINGLE, size: 8, color: SECONDARY_COLOR },
+                    top: { style: BorderStyle.SINGLE, size: 12, color: '2563EB' },
+                    bottom: { style: BorderStyle.SINGLE, size: 12, color: '2563EB' },
+                    left: { style: BorderStyle.SINGLE, size: 12, color: '2563EB' },
+                    right: { style: BorderStyle.SINGLE, size: 12, color: '2563EB' },
                   },
-                  shading: { fill: 'EFF6FF', type: ShadingType.SOLID },
+                  shading: { fill: 'EFF6FF', type: ShadingType.CLEAR, color: 'EFF6FF' },
                 }),
               ],
             }),
@@ -434,25 +379,25 @@ export function ComparisonViewer({
 
       // ========== PIE DE PÁGINA ==========
       children.push(
-        new Paragraph({ children: [], spacing: { before: 400 } }),
+        new Paragraph({ children: [], spacing: { before: 300 } }),
         new Paragraph({
           children: [new TextRun({ 
-            text: `Documento generado el ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })} por ${branding?.agencyName || 'La Prima Justa'}`,
+            text: `Documento generado el ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}`,
             size: 16, 
             italics: true,
-            color: '6B7280'
+            color: '64748B'
           })],
           alignment: AlignmentType.CENTER,
         }),
         new Paragraph({
           children: [new TextRun({ 
-            text: 'Este cuadro comparativo es de carácter informativo. Las condiciones definitivas están sujetas a las pólizas emitidas por cada aseguradora.',
+            text: 'Este cuadro comparativo es informativo. Las condiciones definitivas están sujetas a las pólizas de cada aseguradora.',
             size: 14, 
             italics: true,
-            color: '9CA3AF'
+            color: '94A3B8'
           })],
           alignment: AlignmentType.CENTER,
-          spacing: { before: 100 }
+          spacing: { before: 50 }
         })
       );
 
@@ -461,7 +406,7 @@ export function ComparisonViewer({
         sections: [{ 
           properties: {
             page: {
-              margin: { top: 720, bottom: 720, left: 720, right: 720 }, // 0.5 inch margins
+              margin: { top: 720, bottom: 720, left: 720, right: 720 },
             }
           }, 
           children 

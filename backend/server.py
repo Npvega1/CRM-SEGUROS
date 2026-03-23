@@ -177,97 +177,77 @@ async def compare_quotations(request: CompareRequest):
         for i, doc in enumerate(extracted_texts, 1):
             files_content += f"\n\n{'='*60}\nCOTIZACIÓN {i}: {doc['name']}\n{'='*60}\n{doc['content']}\n"
         
-        analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza las siguientes {len(extracted_texts)} cotizaciones de seguro del ramo "{request.line}" y crea un cuadro comparativo estructurado.
+        analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza estas {len(extracted_texts)} cotizaciones del ramo "{request.line}" y crea UN cuadro comparativo CONSOLIDADO.
 
 {files_content}
 
-INSTRUCCIONES DETALLADAS:
+REGLAS CRÍTICAS DE NORMALIZACIÓN:
 
-1. EXTRAE el nombre EXACTO de cada aseguradora de cada documento.
-
-2. VALORES ASEGURADOS - Son los MONTOS/SUMAS de los bienes físicos asegurados:
-   - "Edificio" (inmueble, construcción, casa, apartamento)
-   - "Contenidos" (muebles y enseres, bienes muebles, ajuar doméstico)
-   - "Equipos Electrónicos" (equipo eléctrico, electrodomésticos, cómputo)
-   - "Maquinaria y Equipo" (solo para empresas/PYME)
-   - "TOTAL ASEGURADO" (suma de todos los valores anteriores)
+1. **VALORES ASEGURADOS** - Usa SOLO estos nombres exactos (si aplican):
+   - "Edificio"
+   - "Contenidos" (agrupa: muebles, enseres, equipos electrónicos fijos/móviles)
+   - "Maquinaria y Equipo" (solo PYME)
+   - "TOTAL ASEGURADO"
    
-   ⚠️ NO incluir aquí: Hurto, Sustracción, Responsabilidad Civil - estos son AMPAROS, no valores.
+   ⚠️ Si una aseguradora NO tiene un concepto, NO lo incluyas (no pongas $0)
 
-3. AMPAROS/COBERTURAS - Son los RIESGOS/EVENTOS cubiertos:
-   - "Incendio y Rayo" (incluye explosión)
-   - "Terremoto/Temblor" (incluye volcán, maremoto)
-   - "HMACC/AMIT" (huelga, motín, actos malintencionados, terrorismo)
-   - "Daños por Agua" (anegación, inundación, rotura de tuberías)
-   - "Hurto/Sustracción" (con su límite o sublímite)
-   - "Responsabilidad Civil" (RC extracontractual, RC familiar, con su límite)
-   - "Daños a Equipos Eléctricos/Electrónicos"
+2. **AMPAROS** - NORMALIZA los nombres. Usa EXACTAMENTE estos:
+   - "Incendio y Rayo" (agrupa: incendio, rayo, explosión, riesgos aliados)
+   - "Terremoto" (agrupa: temblor, erupción volcánica, maremoto)
+   - "Eventos Naturales" (agrupa: inundación, vientos, granizo, avalancha)
+   - "HMACC/AMIT" (agrupa: huelga, motín, terrorismo, actos maliciosos)
+   - "Daños por Agua" (agrupa: anegación, rotura tuberías)
+   - "Hurto Calificado"
+   - "Hurto Simple" (solo si es diferente al calificado)
+   - "Responsabilidad Civil"
+   - "Daños Equipos Eléctricos"
    - "Rotura de Vidrios"
    - "Remoción de Escombros"
-   (Agrega otros amparos específicos que encuentres)
+   - "Gastos de Arrendamiento" (agrupa: renta temporal, arrendamiento)
+   
+   ⚠️ NO dupliques amparos con nombres similares. CONSOLIDA todo bajo el nombre estándar.
+   ⚠️ Si una aseguradora NO tiene un amparo, pon "No incluido"
 
-4. DEDUCIBLES - Porcentaje o monto a cargo del asegurado:
-   - "General/Básico"
+3. **DEDUCIBLES** - Usa estos nombres:
+   - "Incendio/Básico"
    - "Terremoto"
    - "HMACC/AMIT"
    - "Hurto"
    - "Equipos Eléctricos"
-   (Incluye el porcentaje Y el mínimo en SMMLV o pesos)
+   - "Rotura Vidrios"
+   
+   ⚠️ Solo incluye deducibles que SÍ tengan información. No pongas "No especificado" para todos.
 
-5. BENEFICIOS - Servicios adicionales sin costo extra:
-   - Asistencia domiciliaria (plomería, cerrajería, electricidad, vidrios)
-   - Hospedaje/alojamiento temporal
-   - Asesoría legal/jurídica
-   - Mudanza de emergencia
-   - Etc.
+4. **BENEFICIOS** - Lista solo los servicios de ASISTENCIA gratuitos (no sublímites de cobertura)
 
-6. PRIMA - Desglose del costo:
-   - "prima_neta": Valor sin IVA
-   - "iva": Monto del IVA
-   - "total_anual": Prima TOTAL a pagar (con IVA)
-   - "forma_pago": Opciones de pago
+5. **PRIMA** - Extrae prima neta, IVA y total. Si no hay desglose, pon el total.
 
-REGLAS CRÍTICAS:
-- TODAS las aseguradoras deben tener los MISMOS campos/conceptos normalizados
-- Si una aseguradora NO tiene un valor, usa "No incluido" o "No especificado"
-- NO mezclar valores asegurados con amparos
-- Formato moneda: $1,234,567
-
-Responde ÚNICAMENTE con este JSON (sin markdown, sin explicaciones):
+RESPONDE SOLO CON JSON VÁLIDO:
 {{
   "insurers": [
     {{
-      "name": "NOMBRE EXACTO DE LA ASEGURADORA",
+      "name": "NOMBRE ASEGURADORA",
       "valores_asegurados": [
         {{"concepto": "Edificio", "valor": "$600,000,000"}},
         {{"concepto": "Contenidos", "valor": "$50,000,000"}},
-        {{"concepto": "Equipos Electrónicos", "valor": "$20,000,000"}},
-        {{"concepto": "TOTAL ASEGURADO", "valor": "$670,000,000"}}
+        {{"concepto": "TOTAL ASEGURADO", "valor": "$650,000,000"}}
       ],
       "amparos": [
-        {{"amparo": "Incendio y Rayo", "limite": "100% valor asegurado"}},
-        {{"amparo": "Terremoto/Temblor", "limite": "100% valor asegurado"}},
-        {{"amparo": "HMACC/AMIT", "limite": "100% valor asegurado"}},
-        {{"amparo": "Hurto/Sustracción", "limite": "$50,000,000"}},
-        {{"amparo": "Responsabilidad Civil", "limite": "$100,000,000"}},
-        {{"amparo": "Daños Equipos Eléctricos", "limite": "Incluido"}}
+        {{"amparo": "Incendio y Rayo", "limite": "100%"}},
+        {{"amparo": "Terremoto", "limite": "100%"}},
+        {{"amparo": "Hurto Calificado", "limite": "$30,000,000"}},
+        {{"amparo": "Responsabilidad Civil", "limite": "$50,000,000"}}
       ],
       "deducibles": [
-        {{"concepto": "General/Básico", "valor": "Sin deducible"}},
-        {{"concepto": "Terremoto", "valor": "2% valor asegurado, mín 3 SMMLV"}},
-        {{"concepto": "HMACC/AMIT", "valor": "10% mínimo 2 SMMLV"}},
-        {{"concepto": "Hurto", "valor": "10% mínimo 1 SMMLV"}}
+        {{"concepto": "Incendio/Básico", "valor": "0.5% del valor de la pérdida"}},
+        {{"concepto": "Terremoto", "valor": "3% valor asegurado, mín 1 SMMLV"}}
       ],
-      "beneficios": [
-        "Asistencia domiciliaria 24/7 (plomería, electricidad, cerrajería)",
-        "Hospedaje temporal hasta $5,000,000",
-        "Asesoría legal telefónica"
-      ],
+      "beneficios": ["Asistencia domiciliaria 24/7", "Hospedaje temporal"],
       "prima": {{
-        "prima_neta": "$1,200,000",
-        "iva": "$228,000",
-        "total_anual": "$1,428,000",
-        "forma_pago": "Anual o 4 cuotas sin interés"
+        "prima_neta": "$1,000,000",
+        "iva": "$190,000",
+        "total_anual": "$1,190,000",
+        "forma_pago": "Anual o cuotas"
       }}
     }}
   ]
