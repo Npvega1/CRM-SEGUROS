@@ -159,7 +159,8 @@ export function ComparisonViewer({
       });
       
       // Helper para crear celda de datos
-      const dataCell = (text: string, isHighlight = false, isBold = false, align = AlignmentType.LEFT) => new TableCell({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const dataCell = (text: string, isHighlight = false, isBold = false, align: any = AlignmentType.LEFT) => new TableCell({
         children: [new Paragraph({ 
           children: [new TextRun({ text, bold: isBold, size: 18 })],
           alignment: align
@@ -170,7 +171,8 @@ export function ComparisonViewer({
       });
       
       // Helper para celda alternada (zebra)
-      const zebraCell = (text: string, isOdd: boolean, isBold = false, align = AlignmentType.LEFT) => new TableCell({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const zebraCell = (text: string, isOdd: boolean, isBold = false, align: any = AlignmentType.LEFT) => new TableCell({
         children: [new Paragraph({ 
           children: [new TextRun({ text, bold: isBold, size: 18 })],
           alignment: align
