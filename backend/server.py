@@ -260,7 +260,7 @@ RESPONDE SOLO CON JSON VÁLIDO:
             system_message="""Eres un experto analista de seguros colombiano. Tu tarea es analizar cotizaciones de seguros y extraer información estructurada.
 Debes extraer los datos de cada cotización y organizarlos en un formato JSON estructurado.
 Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
-        ).with_model("gemini", "gemini-2.5-flash")
+        ).with_model("gemini", "gemini-2.5-pro")
         
         # Obtener respuesta de IA
         logger.info(f"Sending {len(analysis_prompt)} chars to Gemini...")
@@ -293,7 +293,7 @@ Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
             api_key=api_key,
             session_id=f"recommendation-{request.comparisonId}",
             system_message="Eres un asesor de seguros experto colombiano. Das recomendaciones profesionales, claras y objetivas."
-        ).with_model("gemini", "gemini-2.5-flash")
+        ).with_model("gemini", "gemini-2.5-pro")
         
         # Preparar resumen para la recomendación
         resumen_aseguradoras = []

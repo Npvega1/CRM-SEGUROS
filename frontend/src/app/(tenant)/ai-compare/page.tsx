@@ -139,20 +139,47 @@ export default function AIComparePage() {
       const apiUrl = '/api/ai/compare';
       console.log('🌐 Calling AI backend directly...');
 
-      // Llamar directamente al backend de Emergent (Vercel Pro tiene 60s, pero mejor ir directo)
+      // Llamar directamente al backend de Emergent con reintentos
       const backendUrl = process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL || 'https://quote-ai-2.preview.emergentagent.com';
       
-      const aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          comparisonId,
-          tenantId,
-          line,
-          files: filesForAI,
-          criteria: criteriaNames
-        })
-      });
+      // Función para hacer la llamada con retry
+      const callWithRetry = async (maxRetries = 2): Promise<Response> => {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            console.log(`🔄 Intento ${attempt}/${maxRetries}...`);
+            const response = await fetch(`${backendUrl}/api/ai/compare`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                comparisonId,
+                tenantId,
+                line,
+                files: filesForAI,
+                criteria: criteriaNames
+              })
+            });
+            
+            // Si es 502 o 504, reintentar
+            if ((response.status === 502 || response.status === 504) && attempt < maxRetries) {
+              console.log(`⚠️ Error ${response.status}, reintentando en 3 segundos...`);
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              continue;
+            }
+            
+            return response;
+          } catch (error) {
+            if (attempt < maxRetries) {
+              console.log(`⚠️ Error de red, reintentando en 3 segundos...`);
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              continue;
+            }
+            throw error;
+          }
+        }
+        throw new Error('Se agotaron los reintentos');
+      };
+      
+      const aiResponse = await callWithRetry(2);
       
       console.log('📡 Response status:', aiResponse.status);
       
