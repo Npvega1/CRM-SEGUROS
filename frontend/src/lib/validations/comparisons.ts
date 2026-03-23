@@ -229,7 +229,7 @@ export const DEFAULT_COMPARISON_CRITERIA: Record<PolicyLine, string[]> = {
 /**
  * Límite mensual por defecto
  */
-export const DEFAULT_MONTHLY_LIMIT = 10;
+export const DEFAULT_MONTHLY_LIMIT = 50;
 
 /**
  * Tipos MIME permitidos
