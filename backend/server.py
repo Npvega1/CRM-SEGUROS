@@ -172,84 +172,77 @@ async def compare_quotations(request: CompareRequest):
         if not extracted_texts:
             raise HTTPException(status_code=400, detail="No se pudo extraer texto de los archivos. Verifica que los PDFs no sean imágenes escaneadas.")
         
-        # Construir el prompt con el texto extraído - NUEVA ESTRUCTURA
+        # Construir el prompt con el texto extraído - ESTRUCTURA NORMALIZADA
         files_content = ""
         for i, doc in enumerate(extracted_texts, 1):
             files_content += f"\n\n=== COTIZACIÓN {i}: {doc['name']} ===\n{doc['content']}\n"
         
-        analysis_prompt = f"""Analiza las siguientes {len(extracted_texts)} cotizaciones de seguro de ramo "{request.line}".
+        analysis_prompt = f"""Analiza las siguientes {len(extracted_texts)} cotizaciones de seguro de ramo "{request.line}" y COMPÁRALAS.
 
 {files_content}
 
-Extrae la información de CADA cotización y organízala en las siguientes secciones:
+INSTRUCCIONES CRÍTICAS:
+1. Extrae información de TODAS las cotizaciones
+2. USA LOS MISMOS NOMBRES DE CAMPO para todas las aseguradoras (normaliza los nombres)
+3. Si una aseguradora no tiene un valor, pon "No incluido" en vez de omitirlo
 
-1. INFORMACIÓN DEL RIESGO:
-   - Cliente/Asegurado (nombre completo)
-   - Dirección del riesgo
-   - Ciudad
-   - Descripción del bien/riesgo
+Para VALORES ASEGURADOS, usa estos nombres estándar:
+- "Edificio" (o inmueble, construcción)
+- "Contenidos" (o muebles y enseres)
+- "Equipos Electrónicos" (o equipo eléctrico)
+- "Maquinaria" (si aplica)
+- "Responsabilidad Civil"
+- "TOTAL ASEGURADO"
 
-2. VALORES ASEGURADOS:
-   - Lista todos los valores asegurados que encuentres (edificio, contenido, maquinaria, etc.)
-   - Incluye el monto de cada uno
+Para AMPAROS, usa estos nombres estándar:
+- "Incendio y Rayo"
+- "Terremoto"
+- "HMACC/AMIT" (huelga, motín, actos terroristas)
+- "Daños por Agua"
+- "Hurto/Sustracción"
+- "Responsabilidad Civil"
+- "Daño a Equipos Electrónicos"
 
-3. AMPAROS/COBERTURAS:
-   - Lista todas las coberturas incluidas
-   - Indica límites si los hay
+Para DEDUCIBLES, usa estos nombres estándar:
+- "Deducible General"
+- "Terremoto"
+- "HMACC/AMIT"
+- "Hurto/Sustracción"
+- "Equipos Electrónicos"
 
-4. DEDUCIBLES:
-   - Lista todos los deducibles aplicables
-   - Indica porcentaje o monto mínimo
-
-5. BENEFICIOS ADICIONALES:
-   - Lista beneficios especiales de cada aseguradora
-   - Asistencias incluidas
-
-6. PRIMA:
-   - Prima total anual
-   - Forma de pago si se indica
-
-Responde ÚNICAMENTE con un JSON válido con esta estructura exacta:
+Responde ÚNICAMENTE con JSON válido:
 {{
   "insurers": [
     {{
-      "name": "Nombre de la aseguradora",
-      "informacion_riesgo": {{
-        "cliente": "valor",
-        "direccion": "valor", 
-        "ciudad": "valor",
-        "descripcion_riesgo": "valor"
-      }},
+      "name": "NOMBRE EXACTO DE LA ASEGURADORA",
       "valores_asegurados": [
-        {{"concepto": "Edificio", "valor": "$100,000,000"}},
-        {{"concepto": "Contenido", "valor": "$50,000,000"}}
+        {{"concepto": "Edificio", "valor": "$600,000,000"}},
+        {{"concepto": "Contenidos", "valor": "$30,000,000"}},
+        {{"concepto": "Equipos Electrónicos", "valor": "$20,000,000"}},
+        {{"concepto": "TOTAL ASEGURADO", "valor": "$650,000,000"}}
       ],
       "amparos": [
-        {{"amparo": "Incendio y/o rayo", "limite": "100% valor asegurado"}},
-        {{"amparo": "Terremoto", "limite": "100% valor asegurado"}}
+        {{"amparo": "Incendio y Rayo", "limite": "100%"}},
+        {{"amparo": "Terremoto", "limite": "100%"}}
       ],
       "deducibles": [
-        {{"concepto": "Deducible general", "valor": "10% del valor del siniestro, mínimo 1 SMMLV"}},
-        {{"concepto": "Terremoto", "valor": "2% del valor asegurado"}}
+        {{"concepto": "Deducible General", "valor": "10% mín 1 SMMLV"}},
+        {{"concepto": "Terremoto", "valor": "2% valor asegurado"}}
       ],
-      "beneficios": [
-        "Asistencia domiciliaria 24/7",
-        "Gastos de arrendamiento temporal"
-      ],
+      "beneficios": ["Asistencia domiciliaria", "Hospedaje temporal"],
       "prima": {{
-        "total_anual": "$2,500,000",
-        "forma_pago": "Contado o financiado a 4 cuotas"
+        "total_anual": "$1,500,000",
+        "forma_pago": "Anual o 4 cuotas"
       }}
     }}
   ]
 }}
 
-IMPORTANTE:
-- Extrae el nombre exacto de la aseguradora de cada documento
-- Si un valor no está disponible, usa "No especificado"
-- Incluye todos los valores con su moneda
-- NO incluyas texto fuera del JSON
-- Responde SOLO con el JSON, sin explicaciones adicionales"""
+CRÍTICO: 
+- Todas las aseguradoras DEBEN tener los mismos campos de valores_asegurados, amparos y deducibles
+- Si una aseguradora no cubre algo, usa "No incluido" como valor
+- Extrae la prima TOTAL a pagar (con IVA si está disponible)
+- NO incluyas información_riesgo, solo los datos comparativos"""
 
         # Inicializar chat con Gemini
         chat = LlmChat(
