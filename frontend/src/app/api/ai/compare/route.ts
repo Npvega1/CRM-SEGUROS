@@ -25,84 +25,77 @@ interface InsurerData {
   fields: Record<string, InsurerField>;
 }
 
-// Extract text from PDF using pdf-parse (works in Edge/Vercel)
-async function extractTextFromPDF(base64Content: string): Promise<string> {
+// Simple text extraction from PDF
+function extractTextFromPDF(base64Content: string): string {
   try {
-    // Decode base64
     let cleanBase64 = base64Content;
     if (cleanBase64.includes(',')) {
       cleanBase64 = cleanBase64.split(',')[1];
     }
     
     const binaryString = atob(cleanBase64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    
-    // Simple text extraction from PDF (basic approach)
-    // Look for text streams in the PDF
-    const text = binaryString;
     const textMatches: string[] = [];
     
-    // Find text between BT and ET (text objects in PDF)
-    const btPattern = /BT[\s\S]*?ET/g;
-    const matches = text.match(btPattern) || [];
+    // Find readable ASCII text sequences
+    const readablePattern = /[\x20-\x7E\xC0-\xFF]{15,}/g;
+    const matches = binaryString.match(readablePattern) || [];
     
     for (const match of matches) {
-      // Extract text from Tj and TJ operators
-      const tjPattern = /\(([^)]*)\)\s*Tj/g;
-      let tjMatch;
-      while ((tjMatch = tjPattern.exec(match)) !== null) {
-        textMatches.push(tjMatch[1]);
+      // Filter out PDF structure keywords
+      if (!match.includes('stream') && 
+          !match.includes('endobj') && 
+          !match.includes('xref') &&
+          !match.includes('/Type') &&
+          !match.includes('/Filter') &&
+          !match.includes('trailer') &&
+          !match.includes('startxref')) {
+        textMatches.push(match);
       }
     }
     
-    // Also try to find readable text directly
-    const readablePattern = /[\x20-\x7E]{10,}/g;
-    const readable = binaryString.match(readablePattern) || [];
-    textMatches.push(...readable.filter(t => !t.includes('stream') && !t.includes('endobj')));
-    
-    return textMatches.join(' ').slice(0, 15000);
+    return textMatches.join(' ').slice(0, 12000);
   } catch (error) {
     console.error('Error extracting PDF text:', error);
     return '';
   }
 }
 
-// Extract text from DOCX
-async function extractTextFromDOCX(base64Content: string): Promise<string> {
-  try {
-    let cleanBase64 = base64Content;
-    if (cleanBase64.includes(',')) {
-      cleanBase64 = cleanBase64.split(',')[1];
-    }
-    
-    const binaryString = atob(cleanBase64);
-    
-    // DOCX is a ZIP file, look for document.xml content
-    // Simple approach: find readable text
-    const readablePattern = /[\x20-\x7E\xC0-\xFF]{5,}/g;
-    const matches = binaryString.match(readablePattern) || [];
-    
-    // Filter out XML tags and binary garbage
-    const text = matches
-      .filter(t => !t.includes('<?xml') && !t.includes('xmlns') && !t.includes('w:'))
-      .join(' ');
-    
-    return text.slice(0, 15000);
-  } catch (error) {
-    console.error('Error extracting DOCX text:', error);
-    return '';
+// Call Gemini via Emergent proxy
+async function callGeminiViaEmergent(apiKey: string, prompt: string, systemPrompt: string): Promise<string> {
+  // Use the emergent integrations endpoint
+  const response = await fetch('https://api.emergentmethods.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gemini-2.5-flash',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.1,
+      max_tokens: 4096
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Emergent API error:', response.status, errorText);
+    throw new Error(`API error: ${response.status}`);
   }
+
+  const result = await response.json();
+  return result.choices?.[0]?.message?.content || '';
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: CompareRequest = await request.json();
-    const { comparisonId, tenantId, line, files, criteria } = body;
+    const { comparisonId, line, files, criteria } = body;
 
-    // Get API key from environment
+    // Get API key
     const apiKey = process.env.EMERGENT_LLM_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -111,28 +104,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('Processing comparison:', comparisonId);
+    console.log('Files:', files.map(f => f.name));
+
     // Extract text from files
     const extractedTexts: { name: string; content: string }[] = [];
 
     for (const file of files) {
-      let text = '';
+      const text = extractTextFromPDF(file.base64_content);
       
-      if (file.file_type === 'pdf') {
-        text = await extractTextFromPDF(file.base64_content);
-      } else if (file.file_type === 'docx') {
-        text = await extractTextFromDOCX(file.base64_content);
-      }
-
-      if (text.trim()) {
+      if (text.trim().length > 50) {
         extractedTexts.push({ name: file.name, content: text });
         console.log(`Extracted ${text.length} chars from ${file.name}`);
+      } else {
+        console.log(`Warning: Little text extracted from ${file.name}`);
       }
     }
 
     if (extractedTexts.length === 0) {
       return NextResponse.json({
         success: false,
-        error: 'No se pudo extraer texto de los archivos. Verifica que los PDFs contengan texto (no sean imágenes escaneadas).'
+        error: 'No se pudo extraer texto de los archivos. Los PDFs pueden ser imágenes escaneadas.'
       });
     }
 
@@ -170,39 +162,17 @@ Importante:
 - Los valores numéricos deben incluir la moneda cuando aplique
 - NO incluyas texto fuera del JSON`;
 
-    // Call Gemini API directly
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `Eres un experto analista de seguros. Analiza cotizaciones y extrae información estructurada. Responde SOLO con JSON válido.\n\n${analysisPrompt}`
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 4096
-          }
-        })
-      }
+    console.log('Calling Gemini API...');
+    
+    const responseText = await callGeminiViaEmergent(
+      apiKey,
+      analysisPrompt,
+      'Eres un experto analista de seguros. Analiza cotizaciones y extrae información estructurada. Responde SOLO con JSON válido, sin markdown ni texto adicional.'
     );
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
-      console.error('Gemini API error:', errorText);
-      return NextResponse.json({
-        success: false,
-        error: `Error de API: ${geminiResponse.status}`
-      });
-    }
+    console.log('Gemini response length:', responseText.length);
 
-    const geminiResult = await geminiResponse.json();
-    let responseText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    // Clean and parse JSON
+    // Parse JSON response
     let cleanResponse = responseText.trim();
     if (cleanResponse.startsWith('```')) {
       cleanResponse = cleanResponse.split('```')[1];
@@ -218,7 +188,7 @@ Importante:
     try {
       comparisonData = JSON.parse(cleanResponse.trim());
     } catch (parseError) {
-      console.error('Failed to parse AI response:', responseText.slice(0, 500));
+      console.error('Failed to parse:', responseText.slice(0, 500));
       return NextResponse.json({
         success: false,
         error: 'Error al parsear respuesta de IA'
@@ -236,37 +206,25 @@ Importante:
 
 ${JSON.stringify(comparisonTable, null, 2)}
 
-Genera una recomendación concisa (máximo 3 párrafos) para el cliente que incluya:
+Genera una recomendación concisa (máximo 3 párrafos) para el cliente:
 1. Cuál cotización ofrece mejor relación costo-beneficio
 2. Puntos fuertes y débiles de cada opción
 3. Recomendación final
 
-Sé objetivo y profesional. No uses markdown, solo texto plano.`;
-
-    const recResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: recommendationPrompt
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 1024
-          }
-        })
-      }
-    );
+Sé objetivo y profesional. Solo texto plano, sin markdown.`;
 
     let recommendation = 'No se pudo generar la recomendación.';
-    if (recResponse.ok) {
-      const recResult = await recResponse.json();
-      recommendation = recResult.candidates?.[0]?.content?.parts?.[0]?.text || recommendation;
+    try {
+      recommendation = await callGeminiViaEmergent(
+        apiKey,
+        recommendationPrompt,
+        'Eres un asesor de seguros experto. Da recomendaciones claras y objetivas.'
+      );
+    } catch (recError) {
+      console.error('Recommendation error:', recError);
     }
+
+    console.log('Comparison completed successfully');
 
     return NextResponse.json({
       success: true,
