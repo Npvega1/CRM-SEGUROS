@@ -143,19 +143,22 @@ export default function AIComparePage() {
 
       setProcessingProgress(40);
 
-      // Llamar al API de IA para procesar - usar URL relativa para evitar problemas de CORS
+      // Llamar al API de IA para procesar
       const filesForAI = data.files.map(f => ({
         name: f.name,
         file_type: f.name.split('.').pop()?.toLowerCase() || 'pdf',
         base64_content: f.base64
       }));
 
+      // Usar la URL del backend (REACT_APP_BACKEND_URL apunta al mismo dominio con proxy a puerto 8001)
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || window.location.origin;
+
       // Crear AbortController para timeout de 3 minutos
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000);
 
       try {
-        const aiResponse = await fetch('/api/ai/compare', {
+        const aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
