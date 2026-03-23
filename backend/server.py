@@ -159,7 +159,7 @@ async def compare_quotations(request: CompareRequest):
                 if text.strip():
                     extracted_texts.append({
                         "name": file_name,
-                        "content": text[:8000]  # Limitar a 8000 chars por archivo para mayor velocidad
+                        "content": text[:5000]  # Limitar a 5000 chars por archivo para mayor velocidad
                     })
                     logger.info(f"Extracted {len(text)} chars from {file_name}")
                 else:
@@ -175,74 +175,43 @@ async def compare_quotations(request: CompareRequest):
         # Construir el prompt con el texto extraído - ESTRUCTURA NORMALIZADA
         files_content = ""
         for i, doc in enumerate(extracted_texts, 1):
-            files_content += f"\n\n=== COTIZACIÓN {i}: {doc['name']} ===\n{doc['content']}\n"
+            files_content += f"\n=== COTIZACIÓN {i}: {doc['name']} ===\n{doc['content']}\n"
         
-        analysis_prompt = f"""Analiza las siguientes {len(extracted_texts)} cotizaciones de seguro de ramo "{request.line}" y COMPÁRALAS.
+        analysis_prompt = f"""Analiza estas {len(extracted_texts)} cotizaciones de seguro "{request.line}" y extrae datos comparables.
 
 {files_content}
 
-INSTRUCCIONES CRÍTICAS:
-1. Extrae información de TODAS las cotizaciones
-2. USA LOS MISMOS NOMBRES DE CAMPO para todas las aseguradoras (normaliza los nombres)
-3. Si una aseguradora no tiene un valor, pon "No incluido" en vez de omitirlo
+Responde SOLO con JSON válido. Usa EXACTAMENTE los mismos nombres de campo para todas las aseguradoras:
 
-Para VALORES ASEGURADOS, usa estos nombres estándar:
-- "Edificio" (o inmueble, construcción)
-- "Contenidos" (o muebles y enseres)
-- "Equipos Electrónicos" (o equipo eléctrico)
-- "Maquinaria" (si aplica)
-- "Responsabilidad Civil"
-- "TOTAL ASEGURADO"
-
-Para AMPAROS, usa estos nombres estándar:
-- "Incendio y Rayo"
-- "Terremoto"
-- "HMACC/AMIT" (huelga, motín, actos terroristas)
-- "Daños por Agua"
-- "Hurto/Sustracción"
-- "Responsabilidad Civil"
-- "Daño a Equipos Electrónicos"
-
-Para DEDUCIBLES, usa estos nombres estándar:
-- "Deducible General"
-- "Terremoto"
-- "HMACC/AMIT"
-- "Hurto/Sustracción"
-- "Equipos Electrónicos"
-
-Responde ÚNICAMENTE con JSON válido:
 {{
   "insurers": [
     {{
-      "name": "NOMBRE EXACTO DE LA ASEGURADORA",
+      "name": "NOMBRE ASEGURADORA",
       "valores_asegurados": [
-        {{"concepto": "Edificio", "valor": "$600,000,000"}},
-        {{"concepto": "Contenidos", "valor": "$30,000,000"}},
-        {{"concepto": "Equipos Electrónicos", "valor": "$20,000,000"}},
-        {{"concepto": "TOTAL ASEGURADO", "valor": "$650,000,000"}}
+        {{"concepto": "Edificio", "valor": "$X"}},
+        {{"concepto": "Contenidos", "valor": "$X"}},
+        {{"concepto": "Equipos Electrónicos", "valor": "$X"}}
       ],
       "amparos": [
         {{"amparo": "Incendio y Rayo", "limite": "100%"}},
-        {{"amparo": "Terremoto", "limite": "100%"}}
+        {{"amparo": "Terremoto", "limite": "100%"}},
+        {{"amparo": "Hurto", "limite": "$X"}}
       ],
       "deducibles": [
-        {{"concepto": "Deducible General", "valor": "10% mín 1 SMMLV"}},
-        {{"concepto": "Terremoto", "valor": "2% valor asegurado"}}
+        {{"concepto": "General", "valor": "10% min X"}},
+        {{"concepto": "Terremoto", "valor": "2%"}}
       ],
-      "beneficios": ["Asistencia domiciliaria", "Hospedaje temporal"],
-      "prima": {{
-        "total_anual": "$1,500,000",
-        "forma_pago": "Anual o 4 cuotas"
-      }}
+      "beneficios": ["beneficio1", "beneficio2"],
+      "prima": {{"total_anual": "$X", "forma_pago": "anual/cuotas"}}
     }}
   ]
 }}
 
-CRÍTICO: 
-- Todas las aseguradoras DEBEN tener los mismos campos de valores_asegurados, amparos y deducibles
-- Si una aseguradora no cubre algo, usa "No incluido" como valor
-- Extrae la prima TOTAL a pagar (con IVA si está disponible)
-- NO incluyas información_riesgo, solo los datos comparativos"""
+REGLAS:
+1. USA los mismos nombres de concepto para TODAS las aseguradoras
+2. Si no hay dato, usa "No incluido"
+3. Extrae la prima TOTAL (con IVA si está)
+4. Solo JSON, sin explicaciones"""
 
         # Inicializar chat con Gemini
         chat = LlmChat(

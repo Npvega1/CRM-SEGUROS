@@ -140,11 +140,10 @@ export default function AIComparePage() {
       console.log('🌐 API URL:', apiUrl);
 
       // Intentar primero con el proxy de Vercel, si falla por timeout, ir directo al backend
-      let aiResponse: Response;
       let aiResult: { success: boolean; comparison_table?: unknown; ai_recommendation?: string; error?: string };
       
       try {
-        aiResponse = await fetch(apiUrl, {
+        const aiResponse = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -157,14 +156,25 @@ export default function AIComparePage() {
         });
         
         console.log('📡 Response status:', aiResponse.status);
+        
+        // Si es timeout (504) o el proxy falló, reintentar directo
+        if (aiResponse.status === 504 || aiResponse.status === 502) {
+          throw new Error('Proxy timeout');
+        }
+        
         aiResult = await aiResponse.json();
+        
+        // Si el resultado indica timeout, reintentar directo
+        if (!aiResult.success && aiResult.error?.includes('tardó demasiado')) {
+          throw new Error('Processing timeout');
+        }
         
       } catch (proxyError) {
         // Si el proxy falla (timeout de Vercel), intentar directo al backend
-        console.log('⚠️ Proxy failed, trying direct backend call...');
+        console.log('⚠️ Proxy failed, trying direct backend call...', proxyError);
         const backendUrl = process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL || 'https://quote-ai-2.preview.emergentagent.com';
         
-        aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
+        const directResponse = await fetch(`${backendUrl}/api/ai/compare`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -176,8 +186,8 @@ export default function AIComparePage() {
           })
         });
         
-        console.log('📡 Direct response status:', aiResponse.status);
-        aiResult = await aiResponse.json();
+        console.log('📡 Direct response status:', directResponse.status);
+        aiResult = await directResponse.json();
       }
       
       console.log('📦 AI Result:', aiResult.success ? 'SUCCESS' : 'FAILED', aiResult.error || '');
