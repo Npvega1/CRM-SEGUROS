@@ -135,26 +135,51 @@ export default function AIComparePage() {
       }));
       console.log('📁 Files to send:', filesForAI.map(f => f.name));
 
-      // Llamar directamente al backend de FastAPI (sin proxy de Vercel)
-      // Esto evita el timeout de 10s de Vercel
-      const backendUrl = process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL || 'https://quote-ai-2.preview.emergentagent.com';
-      const apiUrl = `${backendUrl}/api/ai/compare`;
-      console.log('🌐 API URL (direct):', apiUrl);
+      // Usar URL relativa para pasar por el proxy de Next.js
+      const apiUrl = '/api/ai/compare';
+      console.log('🌐 API URL:', apiUrl);
 
-      const aiResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          comparisonId,
-          tenantId,
-          line,
-          files: filesForAI,
-          criteria: criteriaNames
-        })
-      });
-
-      console.log('📡 Response status:', aiResponse.status);
-      const aiResult = await aiResponse.json();
+      // Intentar primero con el proxy de Vercel, si falla por timeout, ir directo al backend
+      let aiResponse: Response;
+      let aiResult: { success: boolean; comparison_table?: unknown; ai_recommendation?: string; error?: string };
+      
+      try {
+        aiResponse = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            comparisonId,
+            tenantId,
+            line,
+            files: filesForAI,
+            criteria: criteriaNames
+          })
+        });
+        
+        console.log('📡 Response status:', aiResponse.status);
+        aiResult = await aiResponse.json();
+        
+      } catch (proxyError) {
+        // Si el proxy falla (timeout de Vercel), intentar directo al backend
+        console.log('⚠️ Proxy failed, trying direct backend call...');
+        const backendUrl = process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL || 'https://quote-ai-2.preview.emergentagent.com';
+        
+        aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            comparisonId,
+            tenantId,
+            line,
+            files: filesForAI,
+            criteria: criteriaNames
+          })
+        });
+        
+        console.log('📡 Direct response status:', aiResponse.status);
+        aiResult = await aiResponse.json();
+      }
+      
       console.log('📦 AI Result:', aiResult.success ? 'SUCCESS' : 'FAILED', aiResult.error || '');
 
       const supabase = getBrowserClient();

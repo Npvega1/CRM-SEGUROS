@@ -159,7 +159,7 @@ async def compare_quotations(request: CompareRequest):
                 if text.strip():
                     extracted_texts.append({
                         "name": file_name,
-                        "content": text[:15000]  # Limitar a 15000 chars por archivo
+                        "content": text[:8000]  # Limitar a 8000 chars por archivo para mayor velocidad
                     })
                     logger.info(f"Extracted {len(text)} chars from {file_name}")
                 else:
@@ -286,23 +286,23 @@ Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
             "insurers": comparison_data.get("insurers", [])
         }
         
-        # Generar recomendación
+        # Generar recomendación (versión corta para velocidad)
         recommendation_chat = LlmChat(
             api_key=api_key,
             session_id=f"recommendation-{request.comparisonId}",
-            system_message="Eres un asesor de seguros experto. Da recomendaciones claras y objetivas."
+            system_message="Eres un asesor de seguros. Sé breve y directo."
         ).with_model("gemini", "gemini-2.5-flash")
         
-        recommendation_prompt = f"""Basándote en este análisis comparativo de cotizaciones de seguro:
+        # Solo enviar las primas para la recomendación (más rápido)
+        primas_resumen = []
+        for ins in comparison_table.get("insurers", []):
+            prima = ins.get("prima", {}).get("total_anual", "No especificado")
+            primas_resumen.append(f"- {ins.get('name', 'Aseguradora')}: {prima}")
+        
+        recommendation_prompt = f"""Compara estas cotizaciones de seguro {request.line}:
+{chr(10).join(primas_resumen)}
 
-{json.dumps(comparison_table, indent=2, ensure_ascii=False)}
-
-Genera una recomendación concisa (máximo 3 párrafos) para el cliente que incluya:
-1. Cuál cotización ofrece mejor relación costo-beneficio
-2. Puntos fuertes y débiles de cada opción
-3. Recomendación final
-
-Sé objetivo y profesional. No uses markdown, solo texto plano."""
+En máximo 2 párrafos: ¿Cuál recomiendas y por qué? Sé directo."""
 
         recommendation = await recommendation_chat.send_message(UserMessage(text=recommendation_prompt))
         
