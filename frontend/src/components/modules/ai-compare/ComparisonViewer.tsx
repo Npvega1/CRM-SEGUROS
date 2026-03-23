@@ -123,24 +123,34 @@ export function ComparisonViewer({
       const cellBorder = { style: BorderStyle.SINGLE, size: 6, color: BORDER_COLOR };
       const borders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
       
+      // ========== ANCHOS DE COLUMNAS UNIFORMES ==========
+      // Primera columna (criterio) = 25%, resto dividido equitativamente entre aseguradoras
+      const numInsurers = insurers.length;
+      const CRITERIA_WIDTH = 25; // 25% para la columna de criterios
+      const INSURER_WIDTH = Math.floor((100 - CRITERIA_WIDTH) / numInsurers); // % para cada aseguradora
+      
       // Helper para celda de encabezado (fondo azul, texto blanco)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const headerCell = (text: string) => new TableCell({
+      const headerCell = (text: string, widthPercent: number) => new TableCell({
         children: [new Paragraph({ 
           children: [new TextRun({ text, bold: true, color: HEADER_TEXT, size: 20 })],
-          alignment: AlignmentType.CENTER
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 60, after: 60 }
         })],
         borders,
         shading: { fill: HEADER_BG, type: ShadingType.CLEAR, color: HEADER_BG },
         verticalAlign: VerticalAlign.CENTER,
+        width: { size: widthPercent, type: WidthType.PERCENTAGE },
+        margins: { top: 60, bottom: 60, left: 80, right: 80 }
       });
       
-      // Helper para celda de datos normal
+      // Helper para celda de datos normal con ancho uniforme
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const dataCell = (text: string, isOdd: boolean, isBold = false, align: any = AlignmentType.LEFT, isHighlight = false) => new TableCell({
+      const dataCell = (text: string, isOdd: boolean, isBold = false, align: any = AlignmentType.LEFT, isHighlight = false, widthPercent?: number) => new TableCell({
         children: [new Paragraph({ 
           children: [new TextRun({ text, bold: isBold, size: 18 })],
-          alignment: align
+          alignment: align,
+          spacing: { before: 40, after: 40 }
         })],
         borders,
         shading: { 
@@ -149,6 +159,8 @@ export function ComparisonViewer({
           color: isHighlight ? HIGHLIGHT_BG : (isOdd ? ROW_ODD : ROW_EVEN)
         },
         verticalAlign: VerticalAlign.CENTER,
+        width: widthPercent ? { size: widthPercent, type: WidthType.PERCENTAGE } : undefined,
+        margins: { top: 40, bottom: 40, left: 80, right: 80 }
       });
 
       // ========== ENCABEZADO ==========
@@ -189,33 +201,25 @@ export function ComparisonViewer({
       // Encabezado con nombres de aseguradoras
       const mainHeaderRow = new TableRow({
         children: [
-          headerCell('Criterio'),
-          ...insurers.map(ins => headerCell(ins.name || 'Aseguradora')),
-        ],
-      });
-
-      // Fila de iconos/logos (simulado con emoji o texto)
-      const logoRow = new TableRow({
-        children: [
-          dataCell('🏢', false, false, AlignmentType.CENTER),
-          ...insurers.map((ins, i) => dataCell(ins.name?.split(' ')[0] || 'ASG', false, true, AlignmentType.CENTER)),
+          headerCell('Criterio', CRITERIA_WIDTH),
+          ...insurers.map(ins => headerCell(ins.name || 'Aseguradora', INSURER_WIDTH)),
         ],
       });
 
       // ========== VALORES ASEGURADOS ==========
       const valoresHeaderRow = new TableRow({
         children: [
-          dataCell('📊 VALORES ASEGURADOS', true, true, AlignmentType.LEFT),
-          ...insurers.map(() => dataCell('', true)),
+          dataCell('📊 VALORES ASEGURADOS', true, true, AlignmentType.LEFT, false, CRITERIA_WIDTH),
+          ...insurers.map(() => dataCell('', true, false, AlignmentType.LEFT, false, INSURER_WIDTH)),
         ],
       });
 
       const valoresRows = Array.from(allValores).map((concepto, idx) => new TableRow({
         children: [
-          dataCell(concepto, idx % 2 === 0, concepto.toUpperCase() === 'TOTAL ASEGURADO'),
+          dataCell(concepto, idx % 2 === 0, concepto.toUpperCase() === 'TOTAL ASEGURADO', AlignmentType.LEFT, false, CRITERIA_WIDTH),
           ...insurers.map(ins => {
             const valor = ins.valores_asegurados?.find(v => v.concepto === concepto)?.valor || '-';
-            return dataCell(valor, idx % 2 === 0, concepto.toUpperCase() === 'TOTAL ASEGURADO', AlignmentType.RIGHT);
+            return dataCell(valor, idx % 2 === 0, concepto.toUpperCase() === 'TOTAL ASEGURADO', AlignmentType.RIGHT, false, INSURER_WIDTH);
           }),
         ],
       }));
@@ -223,18 +227,18 @@ export function ComparisonViewer({
       // ========== AMPAROS ==========
       const amparosHeaderRow = new TableRow({
         children: [
-          dataCell('🛡️ COBERTURAS', true, true, AlignmentType.LEFT),
-          ...insurers.map(() => dataCell('', true)),
+          dataCell('🛡️ COBERTURAS', true, true, AlignmentType.LEFT, false, CRITERIA_WIDTH),
+          ...insurers.map(() => dataCell('', true, false, AlignmentType.LEFT, false, INSURER_WIDTH)),
         ],
       });
 
       const amparosRows = Array.from(allAmparos).map((amparo, idx) => new TableRow({
         children: [
-          dataCell(amparo, idx % 2 === 0),
+          dataCell(amparo, idx % 2 === 0, false, AlignmentType.LEFT, false, CRITERIA_WIDTH),
           ...insurers.map(ins => {
             const amp = ins.amparos?.find(a => a.amparo === amparo);
             const text = amp ? (amp.limite || '✓ Incluido') : '✗ No incluido';
-            return dataCell(text, idx % 2 === 0);
+            return dataCell(text, idx % 2 === 0, false, AlignmentType.LEFT, false, INSURER_WIDTH);
           }),
         ],
       }));
@@ -242,17 +246,17 @@ export function ComparisonViewer({
       // ========== DEDUCIBLES ==========
       const deduciblesHeaderRow = new TableRow({
         children: [
-          dataCell('📋 DEDUCIBLES', true, true, AlignmentType.LEFT),
-          ...insurers.map(() => dataCell('', true)),
+          dataCell('📋 DEDUCIBLES', true, true, AlignmentType.LEFT, false, CRITERIA_WIDTH),
+          ...insurers.map(() => dataCell('', true, false, AlignmentType.LEFT, false, INSURER_WIDTH)),
         ],
       });
 
       const deduciblesRows = Array.from(allDeducibles).map((ded, idx) => new TableRow({
         children: [
-          dataCell(ded, idx % 2 === 0),
+          dataCell(ded, idx % 2 === 0, false, AlignmentType.LEFT, false, CRITERIA_WIDTH),
           ...insurers.map(ins => {
             const deducible = ins.deducibles?.find(d => d.concepto === ded);
-            return dataCell(deducible?.valor || '-', idx % 2 === 0);
+            return dataCell(deducible?.valor || '-', idx % 2 === 0, false, AlignmentType.LEFT, false, INSURER_WIDTH);
           }),
         ],
       }));
@@ -260,17 +264,17 @@ export function ComparisonViewer({
       // ========== BENEFICIOS ==========
       const beneficiosHeaderRow = new TableRow({
         children: [
-          dataCell('🎁 BENEFICIOS', true, true, AlignmentType.LEFT),
-          ...insurers.map(() => dataCell('', true)),
+          dataCell('🎁 BENEFICIOS', true, true, AlignmentType.LEFT, false, CRITERIA_WIDTH),
+          ...insurers.map(() => dataCell('', true, false, AlignmentType.LEFT, false, INSURER_WIDTH)),
         ],
       });
 
       const beneficiosRow = new TableRow({
         children: [
-          dataCell('Asistencias incluidas', false),
+          dataCell('Asistencias incluidas', false, false, AlignmentType.LEFT, false, CRITERIA_WIDTH),
           ...insurers.map(ins => {
             const bens = ins.beneficios?.join('\n• ') || 'No especificados';
-            return dataCell(ins.beneficios && ins.beneficios.length > 0 ? '• ' + bens : 'No especificados', false);
+            return dataCell(ins.beneficios && ins.beneficios.length > 0 ? '• ' + bens : 'No especificados', false, false, AlignmentType.LEFT, false, INSURER_WIDTH);
           }),
         ],
       });
@@ -278,28 +282,31 @@ export function ComparisonViewer({
       // ========== PRIMA (DESTACADA) ==========
       const primaHeaderRow = new TableRow({
         children: [
-          dataCell('💰 VALOR A PAGAR', true, true, AlignmentType.LEFT, true),
-          ...insurers.map(() => dataCell('', true, false, AlignmentType.LEFT, true)),
+          dataCell('💰 VALOR A PAGAR', true, true, AlignmentType.LEFT, true, CRITERIA_WIDTH),
+          ...insurers.map(() => dataCell('', true, false, AlignmentType.LEFT, true, INSURER_WIDTH)),
         ],
       });
 
       const primaTotalRow = new TableRow({
         children: [
-          dataCell('Prima Total Anual', false, true, AlignmentType.LEFT, true),
-          ...insurers.map(ins => dataCell(ins.prima?.total_anual || 'No especificado', false, true, AlignmentType.RIGHT, true)),
+          dataCell('Prima Total Anual', false, true, AlignmentType.LEFT, true, CRITERIA_WIDTH),
+          ...insurers.map(ins => dataCell(ins.prima?.total_anual || 'No especificado', false, true, AlignmentType.RIGHT, true, INSURER_WIDTH)),
         ],
       });
 
       const primaFormaRow = new TableRow({
         children: [
-          dataCell('Forma de Pago', false, false, AlignmentType.LEFT),
-          ...insurers.map(ins => dataCell(ins.prima?.forma_pago || 'No especificado', false)),
+          dataCell('Forma de Pago', false, false, AlignmentType.LEFT, false, CRITERIA_WIDTH),
+          ...insurers.map(ins => dataCell(ins.prima?.forma_pago || 'No especificado', false, false, AlignmentType.LEFT, false, INSURER_WIDTH)),
         ],
       });
 
-      // Construir tabla completa
+      // Construir tabla completa con anchos de columna fijos
+      const columnWidths = [CRITERIA_WIDTH, ...insurers.map(() => INSURER_WIDTH)];
+      
       const mainTable = new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
+        columnWidths: columnWidths.map(w => w * 100), // Convertir a twips aproximados
         rows: [
           mainHeaderRow,
           valoresHeaderRow,
