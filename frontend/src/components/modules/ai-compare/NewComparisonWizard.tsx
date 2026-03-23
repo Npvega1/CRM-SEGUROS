@@ -23,13 +23,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Progress } from '@/components/ui/progress';
 import { ClientSearchSelect } from './ClientSearchSelect';
 import { 
   isValidFile, 
   formatFileSize, 
-  getFileType,
-  ALLOWED_EXTENSIONS 
+  getFileType
 } from '@/lib/validations/comparisons';
 import { POLICY_LINE_LABELS, type PolicyLine } from '@/lib/validations/policies';
 import { 
@@ -92,15 +90,7 @@ export function NewComparisonWizard({
   };
 
   const handleClose = () => {
-    // Permitir cerrar siempre, excepto cuando está procesando activamente
-    if (!isProcessing) {
-      resetForm();
-      onClose();
-    }
-  };
-
-  // Función para forzar cierre (cuando hay error)
-  const forceClose = () => {
+    // Siempre permitir cerrar
     resetForm();
     onClose();
   };
@@ -181,6 +171,8 @@ export function NewComparisonWizard({
     }
 
     setIsSubmitting(true);
+    setErrors([]);
+    
     try {
       const filesWithBase64 = await convertFilesToBase64();
       await onSubmit({
@@ -189,8 +181,11 @@ export function NewComparisonWizard({
         line,
         files: filesWithBase64
       });
+      // El onSubmit debería cerrar el wizard, pero por si acaso:
+      resetForm();
     } catch (error) {
       setErrors([error instanceof Error ? error.message : 'Error al crear comparativo']);
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -220,59 +215,34 @@ export function NewComparisonWizard({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[600px]" data-testid="new-comparison-wizard">
         <DialogHeader>
-          <DialogTitle>
-            {isProcessing ? 'Procesando con IA...' : 'Nuevo Comparativo'}
-          </DialogTitle>
+          <DialogTitle>Nuevo Comparativo</DialogTitle>
         </DialogHeader>
 
-        {/* Processing State */}
-        {isProcessing ? (
-          <div className="py-12 text-center space-y-6">
-            <div className="relative">
-              <div className="h-24 w-24 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
-                <Sparkles className="h-12 w-12 text-primary animate-pulse" />
+        {/* Step Indicator */}
+        <div className="flex items-center justify-center gap-2 py-4">
+          {[1, 2, 3].map((s) => (
+            <div key={s} className="flex items-center">
+              <div
+                className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                  s < step
+                    ? 'bg-green-100 text-green-600'
+                    : s === step
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-slate-100 text-slate-400'
+                }`}
+              >
+                {s < step ? <CheckCircle className="h-4 w-4" /> : s}
               </div>
+              {s < 3 && (
+                <div
+                  className={`w-12 h-0.5 mx-1 ${
+                    s < step ? 'bg-green-400' : 'bg-slate-200'
+                  }`}
+                />
+              )}
             </div>
-            <div className="space-y-2">
-              <p className="text-lg font-medium">La IA está analizando las cotizaciones...</p>
-              <p className="text-sm text-muted-foreground">
-                Esto puede tomar unos segundos
-              </p>
-            </div>
-            <div className="max-w-xs mx-auto">
-              <Progress value={processingProgress} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-2">
-                {processingProgress}% completado
-              </p>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Step Indicator */}
-            <div className="flex items-center justify-center gap-2 py-4">
-              {[1, 2, 3].map((s) => (
-                <div key={s} className="flex items-center">
-                  <div
-                    className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      s < step
-                        ? 'bg-green-100 text-green-600'
-                        : s === step
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-slate-100 text-slate-400'
-                    }`}
-                  >
-                    {s < step ? <CheckCircle className="h-4 w-4" /> : s}
-                  </div>
-                  {s < 3 && (
-                    <div
-                      className={`w-12 h-0.5 mx-1 ${
-                        s < step ? 'bg-green-400' : 'bg-slate-200'
-                      }`}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
+          ))}
+        </div>
 
             {/* Step 1: Client & Line */}
             {step === 1 && (
@@ -433,7 +403,7 @@ export function NewComparisonWizard({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={forceClose}
+                      onClick={handleClose}
                       className="mt-2"
                     >
                       Cerrar
@@ -530,8 +500,6 @@ export function NewComparisonWizard({
                 </Button>
               )}
             </div>
-          </>
-        )}
       </DialogContent>
     </Dialog>
   );
