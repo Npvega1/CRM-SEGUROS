@@ -135,9 +135,11 @@ export default function AIComparePage() {
       }));
       console.log('📁 Files to send:', filesForAI.map(f => f.name));
 
-      // Usar URL relativa - funciona tanto en Emergent como en Vercel
-      const apiUrl = '/api/ai/compare';
-      console.log('🌐 API URL:', apiUrl);
+      // Llamar directamente al backend de FastAPI (sin proxy de Vercel)
+      // Esto evita el timeout de 10s de Vercel
+      const backendUrl = process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL || 'https://quote-ai-2.preview.emergentagent.com';
+      const apiUrl = `${backendUrl}/api/ai/compare`;
+      console.log('🌐 API URL (direct):', apiUrl);
 
       const aiResponse = await fetch(apiUrl, {
         method: 'POST',
