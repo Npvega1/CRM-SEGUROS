@@ -13,7 +13,9 @@ import asyncio
 import json
 import base64
 import tempfile
-from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
+import fitz  # PyMuPDF para extraer texto de PDFs
+from docx import Document  # python-docx para extraer texto de DOCX
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 
 ROOT_DIR = Path(__file__).parent
@@ -89,72 +91,97 @@ async def get_status_checks():
     return status_checks
 
 # =====================================================
-# AI COMPARISON ENDPOINT
+# AI COMPARISON ENDPOINT - OPTIMIZADO
+# Extrae texto de PDFs para procesamiento más rápido
 # =====================================================
+
+def extract_text_from_pdf(binary_data: bytes) -> str:
+    """Extrae texto de un PDF usando PyMuPDF (muy rápido)"""
+    try:
+        doc = fitz.open(stream=binary_data, filetype="pdf")
+        text_parts = []
+        for page in doc:
+            text_parts.append(page.get_text())
+        doc.close()
+        return "\n".join(text_parts)
+    except Exception as e:
+        logger.error(f"Error extracting PDF text: {e}")
+        return ""
+
+def extract_text_from_docx(binary_data: bytes) -> str:
+    """Extrae texto de un DOCX"""
+    try:
+        # Guardar temporalmente para leer con python-docx
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp:
+            tmp.write(binary_data)
+            tmp_path = tmp.name
+        
+        doc = Document(tmp_path)
+        text_parts = [para.text for para in doc.paragraphs]
+        os.unlink(tmp_path)
+        return "\n".join(text_parts)
+    except Exception as e:
+        logger.error(f"Error extracting DOCX text: {e}")
+        return ""
 
 @api_router.post("/ai/compare", response_model=CompareResponse)
 async def compare_quotations(request: CompareRequest):
     """
-    Process insurance quotation files and generate a comparison table using AI.
-    Uses Gemini for file analysis via emergentintegrations library.
+    Procesa cotizaciones de seguros y genera tabla comparativa con IA.
+    OPTIMIZADO: Extrae texto de PDFs primero para mayor velocidad.
     """
     try:
         api_key = os.environ.get('EMERGENT_LLM_KEY')
         if not api_key:
             raise HTTPException(status_code=500, detail="API key not configured")
         
-        # Initialize Gemini chat (required for file attachments)
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"comparison-{request.comparisonId}",
-            system_message="""Eres un experto analista de seguros. Tu tarea es analizar cotizaciones de seguros y extraer información estructurada.
-            
-Debes extraer los datos de cada cotización y organizarlos en un formato JSON estructurado.
-Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
-        ).with_model("gemini", "gemini-2.5-flash")
-        
-        # Prepare file contents
-        temp_files = []
-        file_contents = []
+        # Extraer texto de cada archivo
+        extracted_texts = []
         
         for file_data in request.files:
             try:
-                # Decode base64 and save to temp file
+                file_name = file_data.get('name', 'archivo')
                 base64_content = file_data.get('base64_content', '')
                 if ',' in base64_content:
                     base64_content = base64_content.split(',')[1]
                 
                 binary_data = base64.b64decode(base64_content)
-                
-                # Determine mime type
                 file_type = file_data.get('file_type', 'pdf')
-                mime_type = 'application/pdf' if file_type == 'pdf' else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
                 
-                # Create temp file
-                suffix = f".{file_type}"
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-                temp_file.write(binary_data)
-                temp_file.close()
-                temp_files.append(temp_file.name)
+                # Extraer texto según el tipo de archivo
+                if file_type == 'pdf':
+                    text = extract_text_from_pdf(binary_data)
+                elif file_type == 'docx':
+                    text = extract_text_from_docx(binary_data)
+                else:
+                    text = ""
                 
-                # Create FileContentWithMimeType
-                file_content = FileContentWithMimeType(
-                    file_path=temp_file.name,
-                    mime_type=mime_type
-                )
-                file_contents.append(file_content)
-                
+                if text.strip():
+                    extracted_texts.append({
+                        "name": file_name,
+                        "content": text[:15000]  # Limitar a 15000 chars por archivo
+                    })
+                    logger.info(f"Extracted {len(text)} chars from {file_name}")
+                else:
+                    logger.warning(f"No text extracted from {file_name}")
+                    
             except Exception as e:
                 logger.error(f"Error processing file {file_data.get('name', 'unknown')}: {e}")
                 continue
         
-        if not file_contents:
-            raise HTTPException(status_code=400, detail="No se pudieron procesar los archivos")
+        if not extracted_texts:
+            raise HTTPException(status_code=400, detail="No se pudo extraer texto de los archivos. Verifica que los PDFs no sean imágenes escaneadas.")
         
-        # Build the analysis prompt
+        # Construir el prompt con el texto extraído
         criteria_list = "\n".join([f"- {c}" for c in request.criteria])
         
-        analysis_prompt = f"""Analiza estas {len(file_contents)} cotizaciones de seguro de ramo "{request.line}".
+        files_content = ""
+        for i, doc in enumerate(extracted_texts, 1):
+            files_content += f"\n\n=== COTIZACIÓN {i}: {doc['name']} ===\n{doc['content']}\n"
+        
+        analysis_prompt = f"""Analiza las siguientes {len(extracted_texts)} cotizaciones de seguro de ramo "{request.line}".
+
+{files_content}
 
 Para cada cotización, extrae la siguiente información:
 {criteria_list}
@@ -178,25 +205,22 @@ Importante:
 - Los valores numéricos deben incluir la moneda cuando aplique
 - NO incluyas texto fuera del JSON"""
 
-        # Send message with file attachments
-        user_message = UserMessage(
-            text=analysis_prompt,
-            file_contents=file_contents
-        )
+        # Inicializar chat con Gemini
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"comparison-{request.comparisonId}",
+            system_message="""Eres un experto analista de seguros. Tu tarea es analizar cotizaciones de seguros y extraer información estructurada.
+Debes extraer los datos de cada cotización y organizarlos en un formato JSON estructurado.
+Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
+        ).with_model("gemini", "gemini-2.5-flash")
         
-        # Get AI response
-        response_text = await chat.send_message(user_message)
+        # Obtener respuesta de IA
+        logger.info(f"Sending {len(analysis_prompt)} chars to Gemini...")
+        response_text = await chat.send_message(UserMessage(text=analysis_prompt))
+        logger.info(f"Received response: {len(response_text)} chars")
         
-        # Clean up temp files
-        for temp_path in temp_files:
-            try:
-                os.unlink(temp_path)
-            except OSError:
-                pass
-        
-        # Parse JSON response
+        # Parsear respuesta JSON
         try:
-            # Remove markdown code blocks if present
             clean_response = response_text.strip()
             if clean_response.startswith('```'):
                 clean_response = clean_response.split('```')[1]
@@ -210,17 +234,17 @@ Importante:
             logger.error(f"Failed to parse AI response: {response_text[:500]}")
             raise HTTPException(status_code=500, detail=f"Error al parsear respuesta de IA: {str(e)}")
         
-        # Build comparison table
+        # Construir tabla comparativa
         comparison_table = {
             "criteria": request.criteria,
             "insurers": comparison_data.get("insurers", [])
         }
         
-        # Generate recommendation
+        # Generar recomendación
         recommendation_chat = LlmChat(
             api_key=api_key,
             session_id=f"recommendation-{request.comparisonId}",
-            system_message="Eres un asesor de seguros experto. Debes dar recomendaciones claras y objetivas basadas en los datos."
+            system_message="Eres un asesor de seguros experto. Da recomendaciones claras y objetivas."
         ).with_model("gemini", "gemini-2.5-flash")
         
         recommendation_prompt = f"""Basándote en este análisis comparativo de cotizaciones de seguro:
