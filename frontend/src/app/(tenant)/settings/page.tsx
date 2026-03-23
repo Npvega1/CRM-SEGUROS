@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, Palette, Users, Building2, Save, Loader2, UserPlus, Mail, Clock, X } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Settings, Palette, Users, Building2, Save, Loader2, UserPlus, Mail, Clock, X, Shield, ChevronRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -30,8 +31,27 @@ interface Invitation {
   expires_at: string;
 }
 
+interface UserPermission {
+  section: string;
+  can_view: boolean;
+  can_create: boolean;
+  can_edit: boolean;
+  can_download: boolean;
+}
+
+const SECTIONS = [
+  { id: 'clientes', label: 'Clientes', hasCreate: true, hasEdit: true, hasDownload: true },
+  { id: 'polizas', label: 'Pólizas', hasCreate: true, hasEdit: true, hasDownload: true },
+  { id: 'pipeline', label: 'Pipeline', hasCreate: true, hasEdit: true, hasDownload: true },
+  { id: 'siniestros', label: 'Siniestros', hasCreate: true, hasEdit: true, hasDownload: true },
+  { id: 'facturacion', label: 'Facturación', hasCreate: true, hasEdit: true, hasDownload: true },
+  { id: 'reportes', label: 'Reportes', hasCreate: false, hasEdit: false, hasDownload: true },
+  { id: 'mensajes', label: 'Mensajes', hasCreate: true, hasEdit: false, hasDownload: false },
+  { id: 'automatizaciones', label: 'Automatizaciones', hasCreate: true, hasEdit: true, hasDownload: false },
+];
+
 export default function SettingsPage() {
-  const { tenantId, tenantName, tenantSlug, userId } = useTenant();
+  const { tenantId, tenantName, tenantSlug, userId, role: currentUserRole } = useTenant();
   const [activeTab, setActiveTab] = useState('account');
   const { toast } = useToast();
   const supabase = createClient();
@@ -47,8 +67,14 @@ export default function SettingsPage() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('agent');
   const [inviting, setInviting] = useState(false);
+
+  // Permisos
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [permissions, setPermissions] = useState<UserPermission[]>([]);
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
+  const [savingPermissions, setSavingPermissions] = useState(false);
+  const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
 
   // Cargar branding
   useEffect(() => {
@@ -95,6 +121,89 @@ export default function SettingsPage() {
     loadTeam();
   }, [tenantId, supabase]);
 
+  // Cargar permisos de un agente
+  const loadAgentPermissions = async (agent: Agent) => {
+    setSelectedAgent(agent);
+    setLoadingPermissions(true);
+    setPermissionsDialogOpen(true);
+
+    try {
+      const { data } = await (supabase.from('user_permissions') as any)
+        .select('section, can_view, can_create, can_edit, can_download')
+        .eq('user_id', agent.id);
+
+      // Crear permisos para todas las secciones
+      const allPermissions: UserPermission[] = SECTIONS.map(section => {
+        const existing = data?.find((p: UserPermission) => p.section === section.id);
+        return {
+          section: section.id,
+          can_view: existing?.can_view || false,
+          can_create: existing?.can_create || false,
+          can_edit: existing?.can_edit || false,
+          can_download: existing?.can_download || false,
+        };
+      });
+
+      setPermissions(allPermissions);
+    } catch (error) {
+      console.error('Error loading permissions:', error);
+      toast({ title: 'Error', description: 'No se pudieron cargar los permisos', variant: 'destructive' });
+    } finally {
+      setLoadingPermissions(false);
+    }
+  };
+
+  // Actualizar permiso localmente
+  const updatePermission = (section: string, field: keyof UserPermission, value: boolean) => {
+    setPermissions(prev => prev.map(p => {
+      if (p.section === section) {
+        // Si desactivan "Ver", desactivar todo lo demás
+        if (field === 'can_view' && !value) {
+          return { ...p, can_view: false, can_create: false, can_edit: false, can_download: false };
+        }
+        return { ...p, [field]: value };
+      }
+      return p;
+    }));
+  };
+
+  // Guardar permisos
+  const savePermissions = async () => {
+    if (!selectedAgent || !tenantId) return;
+    setSavingPermissions(true);
+
+    try {
+      // Eliminar permisos existentes
+      await (supabase.from('user_permissions') as any)
+        .delete()
+        .eq('user_id', selectedAgent.id);
+
+      // Insertar nuevos permisos
+      const permissionsToInsert = permissions.map(p => ({
+        user_id: selectedAgent.id,
+        tenant_id: tenantId,
+        section: p.section,
+        can_view: p.can_view,
+        can_create: p.can_create,
+        can_edit: p.can_edit,
+        can_download: p.can_download,
+      }));
+
+      const { error } = await (supabase.from('user_permissions') as any)
+        .insert(permissionsToInsert);
+
+      if (error) throw error;
+
+      toast({ title: 'Permisos guardados', description: `Los permisos de ${selectedAgent.full_name || selectedAgent.email} han sido actualizados` });
+      setPermissionsDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving permissions:', error);
+      toast({ title: 'Error', description: 'No se pudieron guardar los permisos', variant: 'destructive' });
+    } finally {
+      setSavingPermissions(false);
+    }
+  };
+
   const handleSaveBranding = async () => {
     if (!tenantId) return;
     setSaving(true);
@@ -114,7 +223,6 @@ export default function SettingsPage() {
     if (!inviteEmail || !tenantId || !userId) return;
     setInviting(true);
     try {
-      // Verificar si ya existe
       const { data: existing } = await (supabase.from('users') as any)
         .select('id').eq('tenant_id', tenantId).eq('email', inviteEmail.toLowerCase()).single();
       if (existing) {
@@ -123,7 +231,6 @@ export default function SettingsPage() {
         return;
       }
 
-      // Verificar invitación pendiente
       const { data: pendingInv } = await (supabase.from('invitations') as any)
         .select('id').eq('tenant_id', tenantId).eq('email', inviteEmail.toLowerCase())
         .is('accepted_at', null).gt('expires_at', new Date().toISOString()).single();
@@ -133,21 +240,20 @@ export default function SettingsPage() {
         return;
       }
 
-      // Crear invitación
+      // Siempre crear como "agent" - los permisos se configuran después
       const { data: newInv, error } = await (supabase.from('invitations') as any)
         .insert({
           tenant_id: tenantId,
           email: inviteEmail.toLowerCase(),
-          role: inviteRole,
+          role: 'agent',
           invited_by: userId,
         }).select().single();
 
       if (error) throw error;
 
       setInvitations([newInv, ...invitations]);
-      toast({ title: 'Invitación creada', description: `Se ha creado la invitación para ${inviteEmail} (Email MOCK - no se envía realmente)` });
+      toast({ title: 'Invitación creada', description: `Se ha creado la invitación para ${inviteEmail}. Configura los permisos cuando el agente acepte.` });
       setInviteEmail('');
-      setInviteRole('agent');
     } catch (error) {
       console.error('Error:', error);
       toast({ title: 'Error', description: 'No se pudo crear la invitación', variant: 'destructive' });
@@ -168,18 +274,21 @@ export default function SettingsPage() {
 
   const getRoleBadge = (role: string) => {
     const colors: Record<string, string> = {
-      admin: 'bg-red-100 text-red-800', superadmin: 'bg-purple-100 text-purple-800',
-      senior_agent: 'bg-blue-100 text-blue-800', agent: 'bg-green-100 text-green-800', readonly: 'bg-gray-100 text-gray-800',
+      admin: 'bg-red-100 text-red-800',
+      agent: 'bg-green-100 text-green-800',
     };
     return colors[role] || 'bg-gray-100 text-gray-800';
   };
 
   const getRoleLabel = (role: string) => {
     const labels: Record<string, string> = {
-      admin: 'Administrador', superadmin: 'Super Admin', senior_agent: 'Agente Senior', agent: 'Agente', readonly: 'Solo Lectura',
+      admin: 'Administrador',
+      agent: 'Agente',
     };
     return labels[role] || role;
   };
+
+  const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
 
   return (
     <div className="space-y-6" data-testid="settings-page">
@@ -265,31 +374,24 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="team" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><UserPlus className="h-5 w-5" />Invitar Agente</CardTitle>
-              <CardDescription>Envía una invitación para unirse a tu equipo</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input type="email" placeholder="correo@ejemplo.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
-                <Select value={inviteRole} onValueChange={setInviteRole}>
-                  <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="agent">Agente</SelectItem>
-                    <SelectItem value="senior_agent">Agente Senior</SelectItem>
-                    <SelectItem value="admin">Administrador</SelectItem>
-                    <SelectItem value="readonly">Solo Lectura</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button onClick={handleInviteAgent} disabled={inviting || !inviteEmail}>
-                  {inviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-                  Invitar
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">La invitación se guardará en la base de datos. El email es MOCK (no se envía realmente).</p>
-            </CardContent>
-          </Card>
+          {isAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><UserPlus className="h-5 w-5" />Invitar Agente</CardTitle>
+                <CardDescription>Envía una invitación para unirse a tu equipo. Podrás configurar sus permisos después.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input type="email" placeholder="correo@ejemplo.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
+                  <Button onClick={handleInviteAgent} disabled={inviting || !inviteEmail}>
+                    {inviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                    Invitar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">El nuevo agente se creará sin permisos. Configúralos desde la lista de miembros.</p>
+              </CardContent>
+            </Card>
+          )}
 
           {invitations.length > 0 && (
             <Card>
@@ -305,8 +407,10 @@ export default function SettingsPage() {
                         <p className="text-xs text-muted-foreground">Expira: {new Date(inv.expires_at).toLocaleDateString()}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge className={getRoleBadge(inv.role)}>{getRoleLabel(inv.role)}</Badge>
-                        <Button variant="ghost" size="sm" onClick={() => handleCancelInvitation(inv.id)}><X className="h-4 w-4" /></Button>
+                        <Badge className={getRoleBadge('agent')}>Agente</Badge>
+                        {isAdmin && (
+                          <Button variant="ghost" size="sm" onClick={() => handleCancelInvitation(inv.id)}><X className="h-4 w-4" /></Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -318,7 +422,9 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" />Miembros del Equipo ({agents.length})</CardTitle>
-              <CardDescription>Agentes activos en tu organización</CardDescription>
+              <CardDescription>
+                {isAdmin ? 'Haz clic en un agente para configurar sus permisos' : 'Agentes activos en tu organización'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {loadingAgents ? (
@@ -328,7 +434,11 @@ export default function SettingsPage() {
               ) : (
                 <div className="space-y-3">
                   {agents.map((agent) => (
-                    <div key={agent.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div 
+                      key={agent.id} 
+                      className={`flex items-center justify-between p-4 border rounded-lg ${isAdmin && agent.role !== 'admin' ? 'hover:bg-slate-50 cursor-pointer' : ''}`}
+                      onClick={() => isAdmin && agent.role !== 'admin' && loadAgentPermissions(agent)}
+                    >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                           <span className="text-sm font-medium">{agent.full_name?.charAt(0) || agent.email.charAt(0).toUpperCase()}</span>
@@ -341,6 +451,9 @@ export default function SettingsPage() {
                       <div className="flex items-center gap-2">
                         <Badge className={getRoleBadge(agent.role)}>{getRoleLabel(agent.role)}</Badge>
                         {!agent.is_active && <Badge variant="outline" className="text-red-600">Inactivo</Badge>}
+                        {isAdmin && agent.role !== 'admin' && (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        )}
                       </div>
                     </div>
                   ))}
@@ -350,6 +463,100 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Modal de Permisos */}
+      <Dialog open={permissionsDialogOpen} onOpenChange={setPermissionsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Permisos de {selectedAgent?.full_name || selectedAgent?.email}
+            </DialogTitle>
+            <DialogDescription>
+              Configura qué puede hacer este agente en cada sección del sistema
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingPermissions ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Encabezado de la tabla */}
+              <div className="grid grid-cols-5 gap-2 text-xs font-medium text-muted-foreground border-b pb-2">
+                <div>Sección</div>
+                <div className="text-center">Ver</div>
+                <div className="text-center">Crear</div>
+                <div className="text-center">Editar</div>
+                <div className="text-center">Descargar</div>
+              </div>
+
+              {/* Filas de permisos */}
+              {SECTIONS.map((section) => {
+                const perm = permissions.find(p => p.section === section.id);
+                return (
+                  <div key={section.id} className="grid grid-cols-5 gap-2 items-center py-2 border-b">
+                    <div className="font-medium text-sm">{section.label}</div>
+                    <div className="flex justify-center">
+                      <Switch
+                        checked={perm?.can_view || false}
+                        onCheckedChange={(checked) => updatePermission(section.id, 'can_view', checked)}
+                      />
+                    </div>
+                    <div className="flex justify-center">
+                      {section.hasCreate ? (
+                        <Switch
+                          checked={perm?.can_create || false}
+                          onCheckedChange={(checked) => updatePermission(section.id, 'can_create', checked)}
+                          disabled={!perm?.can_view}
+                        />
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </div>
+                    <div className="flex justify-center">
+                      {section.hasEdit ? (
+                        <Switch
+                          checked={perm?.can_edit || false}
+                          onCheckedChange={(checked) => updatePermission(section.id, 'can_edit', checked)}
+                          disabled={!perm?.can_view}
+                        />
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </div>
+                    <div className="flex justify-center">
+                      {section.hasDownload ? (
+                        <Switch
+                          checked={perm?.can_download || false}
+                          onCheckedChange={(checked) => updatePermission(section.id, 'can_download', checked)}
+                          disabled={!perm?.can_view}
+                        />
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button variant="outline" onClick={() => setPermissionsDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={savePermissions} disabled={savingPermissions}>
+                  {savingPermissions ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Guardando...</>
+                  ) : (
+                    <><Save className="mr-2 h-4 w-4" />Guardar Permisos</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
