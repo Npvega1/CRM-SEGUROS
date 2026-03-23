@@ -171,17 +171,26 @@ async def compare_quotations(request: CompareRequest, background_tasks: Backgrou
 
 
 async def update_supabase(supabase_url: str, supabase_key: str, comparison_id: str, data: dict):
-    """Actualiza el registro en Supabase directamente"""
+    """Actualiza el registro en Supabase directamente usando service_role key"""
     try:
-        url = f"{supabase_url}/rest/v1/comparisons?id=eq.{comparison_id}"
+        # Usar service_role key del backend (bypassa RLS)
+        service_key = os.environ.get('SUPABASE_SERVICE_KEY')
+        backend_supabase_url = os.environ.get('SUPABASE_URL')
+        
+        # Usar las credenciales del backend si están disponibles
+        final_url = backend_supabase_url or supabase_url
+        final_key = service_key or supabase_key
+        
+        url = f"{final_url}/rest/v1/comparisons?id=eq.{comparison_id}"
         headers = {
-            "apikey": supabase_key,
-            "Authorization": f"Bearer {supabase_key}",
+            "apikey": final_key,
+            "Authorization": f"Bearer {final_key}",
             "Content-Type": "application/json",
             "Prefer": "return=minimal"
         }
         
         logger.info(f"Updating Supabase: {url}")
+        logger.info(f"Using service_role key: {bool(service_key)}")
         logger.info(f"Data keys: {list(data.keys())}")
         
         async with httpx.AsyncClient() as client:
