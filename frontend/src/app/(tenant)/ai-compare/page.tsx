@@ -38,7 +38,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
 export default function AIComparePage() {
-  const { tenantId, userId, isLoading: tenantLoading } = useTenant();
+  const { tenantId, userId, tenantName, isLoading: tenantLoading } = useTenant();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -401,6 +401,9 @@ export default function AIComparePage() {
           onUpdateCell={handleUpdateCell}
           onUpdateRecommendation={handleUpdateRecommendation}
           onCreatePolicy={handleCreatePolicy}
+          branding={{
+            agencyName: tenantName || 'Agencia de Seguros'
+          }}
         />
       </div>
     );

@@ -227,7 +227,9 @@ export function ComparisonViewer({
               <User className="h-4 w-4 text-muted-foreground" />
               <div>
                 <p className="text-muted-foreground">Cliente</p>
-                <p className="font-medium">{comparison.client?.full_name}</p>
+                <p className="font-medium">
+                  {comparison.client?.full_name || (comparison as unknown as {prospect_name?: string}).prospect_name || 'No especificado'}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -243,7 +245,7 @@ export function ComparisonViewer({
               <User className="h-4 w-4 text-muted-foreground" />
               <div>
                 <p className="text-muted-foreground">Agente</p>
-                <p className="font-medium">{comparison.agent?.full_name}</p>
+                <p className="font-medium">{comparison.agent?.full_name || 'No especificado'}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
