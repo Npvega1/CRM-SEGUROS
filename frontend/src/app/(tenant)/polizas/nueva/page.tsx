@@ -23,7 +23,10 @@ interface PolicyFormData {
   client_id: string;
   policy_number: string;
   insurer: string;
-  line: 'vida' | 'auto' | 'salud' | 'hogar' | 'soat' | 'otro';
+  insurer_id?: string;
+  line: string;
+  line_id?: string;
+  group_id?: string;
   status: 'cotizacion' | 'activa' | 'vencida' | 'cancelada' | 'renovacion';
   premium: number;
   currency?: string;
@@ -101,7 +104,10 @@ function NewPolicyContent() {
           client_id: selectedClientId,
           policy_number: data.policy_number,
           insurer: data.insurer,
+          insurer_id: data.insurer_id || null,
           line: data.line,
+          line_id: data.line_id || null,
+          group_id: data.group_id || null,
           status: data.status || 'cotizacion',
           premium: data.premium,
           currency: data.currency || 'COP',

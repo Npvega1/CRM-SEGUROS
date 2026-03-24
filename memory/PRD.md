@@ -111,10 +111,13 @@
 - Campo para código de agente por compañía
 - Tabla: `tenant_companies` con RLS
 
-### 🔲 Fase 3 - Formulario de Nueva Póliza (Pendiente)
+### ✅ Fase 3 - Formulario de Nueva Póliza con Selección en Cascada (Completada - Marzo 2026)
 - Selección en cascada: Compañía → Grupo → Ramo
-- Filtrar compañías basándose en las activadas por el tenant
-- Archivo: `app/(tenant)/policies/new/page.tsx`
+- Solo muestra compañías activas del tenant (desde `tenant_companies`)
+- Carga dinámica de grupos según compañía (desde `company_lines`)
+- Carga dinámica de ramos según grupo (desde `insurance_groups`)
+- Migración: `00013_policies_catalog_relations.sql` (nuevas columnas en policies)
+- Archivo modificado: `components/modules/policies/PolicyForm.tsx`
 
 ### 🔲 Fase 4 - Filtrar Comparativos IA (Pendiente)
 - Mostrar solo Grupos con `has_ai_prompt = true`
@@ -128,7 +131,6 @@
 - [ ] Configurar credenciales reales de Supabase
 
 ### P1 - Importante
-- [ ] **Fase 3:** Modificar formulario de Nueva Póliza con selección en cascada
 - [ ] **Fase 4:** Filtrar Comparativos IA por grupos con prompt activo
 - [ ] Integrar Claude API real para test de prompts
 - [ ] Implementar email real (Resend/SendGrid)
@@ -167,8 +169,8 @@
 - Tipos Supabase: actualizar manualmente al agregar columnas
 
 ## Próximos Pasos
-1. Probar Fase 2 (pestaña Compañías) con credenciales reales de Supabase
-2. Implementar Fase 3: Formulario de Nueva Póliza con selección en cascada
+1. Ejecutar migración `00013_policies_catalog_relations.sql` en Supabase
+2. Probar formulario de Nueva Póliza con selección en cascada
 3. Implementar Fase 4: Filtrar Comparativos IA
 4. Desplegar en Vercel con credenciales reales
 5. Crear usuario superadmin en Supabase Auth
