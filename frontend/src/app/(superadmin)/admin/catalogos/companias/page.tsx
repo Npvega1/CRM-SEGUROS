@@ -2,7 +2,7 @@
 
 // =====================================================
 // PAGE: Super Admin - Compañías de Seguros
-// Gestión del catálogo de aseguradoras
+// Gestión del catálogo de aseguradoras y sus grupos
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -11,7 +11,8 @@ import { getUntypedClient } from '@/lib/supabase/untyped-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -26,7 +27,15 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { LoadingScreen } from '@/components/ui/spinner';
 import {
@@ -41,6 +50,7 @@ import {
   RefreshCw,
   Loader2,
   Layers,
+  Settings,
 } from 'lucide-react';
 
 interface InsuranceCompany {
@@ -53,6 +63,21 @@ interface InsuranceCompany {
   lines_count?: number;
 }
 
+interface InsuranceLine {
+  id: string;
+  name: string;
+  slug: string;
+  unit: string;
+  is_active: boolean;
+}
+
+interface CompanyLine {
+  id: string;
+  company_id: string;
+  line_id: string;
+  is_active: boolean;
+}
+
 export default function CompaniasPage() {
   const router = useRouter();
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
@@ -62,6 +87,14 @@ export default function CompaniasPage() {
   const [editingCompany, setEditingCompany] = useState<InsuranceCompany | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({ name: '', slug: '' });
+  
+  // Estados para gestionar grupos de compañía
+  const [isLinesSheetOpen, setIsLinesSheetOpen] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState<InsuranceCompany | null>(null);
+  const [allLines, setAllLines] = useState<InsuranceLine[]>([]);
+  const [companyLines, setCompanyLines] = useState<CompanyLine[]>([]);
+  const [loadingLines, setLoadingLines] = useState(false);
+  const [savingLine, setSavingLine] = useState<string | null>(null);
   
   const supabase = getUntypedClient();
 
@@ -187,6 +220,91 @@ export default function CompaniasPage() {
     c.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Cargar grupos de una compañía
+  const openLinesSheet = async (company: InsuranceCompany) => {
+    setSelectedCompany(company);
+    setIsLinesSheetOpen(true);
+    setLoadingLines(true);
+
+    try {
+      // Cargar todas las líneas (grupos)
+      const { data: linesData } = await supabase
+        .from('insurance_lines')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (linesData) {
+        setAllLines(linesData);
+      }
+
+      // Cargar líneas asignadas a esta compañía
+      const { data: clData } = await supabase
+        .from('company_lines')
+        .select('*')
+        .eq('company_id', company.id);
+
+      if (clData) {
+        setCompanyLines(clData);
+      }
+    } catch (error) {
+      console.error('Error loading lines:', error);
+    } finally {
+      setLoadingLines(false);
+    }
+  };
+
+  // Verificar si una línea está asignada a la compañía
+  const isLineAssigned = (lineId: string): boolean => {
+    return companyLines.some(cl => cl.line_id === lineId && cl.is_active);
+  };
+
+  // Asignar o desasignar una línea a la compañía
+  const toggleLineAssignment = async (lineId: string) => {
+    if (!selectedCompany) return;
+    setSavingLine(lineId);
+
+    try {
+      const existingCl = companyLines.find(cl => cl.line_id === lineId);
+
+      if (existingCl) {
+        // Actualizar estado
+        const newStatus = !existingCl.is_active;
+        const { error } = await supabase
+          .from('company_lines')
+          .update({ is_active: newStatus })
+          .eq('id', existingCl.id);
+
+        if (error) throw error;
+
+        setCompanyLines(prev =>
+          prev.map(cl => cl.id === existingCl.id ? { ...cl, is_active: newStatus } : cl)
+        );
+      } else {
+        // Crear nueva relación
+        const { data, error } = await supabase
+          .from('company_lines')
+          .insert({
+            company_id: selectedCompany.id,
+            line_id: lineId,
+            is_active: true,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        setCompanyLines(prev => [...prev, data]);
+      }
+
+      // Actualizar conteo en la lista de compañías
+      fetchCompanies();
+    } catch (error) {
+      console.error('Error toggling line:', error);
+    } finally {
+      setSavingLine(null);
+    }
+  };
+
   if (isLoading) {
     return <LoadingScreen message="Cargando compañías..." />;
   }
@@ -287,6 +405,15 @@ export default function CompaniasPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => openLinesSheet(company)}
+                          className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                          title="Gestionar Grupos"
+                        >
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => openModal(company)}
                           className="text-zinc-400 hover:text-white hover:bg-zinc-800"
                         >
@@ -377,6 +504,79 @@ export default function CompaniasPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Sheet para gestionar grupos de la compañía */}
+      <Sheet open={isLinesSheetOpen} onOpenChange={setIsLinesSheetOpen}>
+        <SheetContent className="bg-zinc-900 border-zinc-800 text-white w-full sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2 text-white">
+              <Layers className="h-5 w-5 text-blue-500" />
+              Grupos de {selectedCompany?.name}
+            </SheetTitle>
+            <SheetDescription className="text-zinc-400">
+              Activa los grupos (líneas de seguro) disponibles para esta compañía
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-4">
+            {loadingLines ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+              </div>
+            ) : allLines.length === 0 ? (
+              <p className="text-center py-8 text-zinc-500">No hay grupos disponibles</p>
+            ) : (
+              <div className="space-y-2">
+                {allLines.map((line) => {
+                  const isAssigned = isLineAssigned(line.id);
+                  const isSaving = savingLine === line.id;
+
+                  return (
+                    <div
+                      key={line.id}
+                      className={`p-4 rounded-lg border transition-colors ${
+                        isAssigned 
+                          ? 'bg-green-500/10 border-green-500/30' 
+                          : 'bg-zinc-800 border-zinc-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
+                            isAssigned ? 'bg-green-500/20' : 'bg-zinc-700'
+                          }`}>
+                            <Layers className={`h-4 w-4 ${isAssigned ? 'text-green-400' : 'text-zinc-400'}`} />
+                          </div>
+                          <div>
+                            <p className="font-medium text-white">{line.name}</p>
+                            <p className="text-xs text-zinc-500">
+                              {line.unit === 'generales' ? 'Generales' : 'Vida'} • {line.slug}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isSaving && <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />}
+                          <Switch
+                            checked={isAssigned}
+                            onCheckedChange={() => toggleLineAssignment(line.id)}
+                            disabled={isSaving}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 pt-4 border-t border-zinc-800">
+            <p className="text-xs text-zinc-500">
+              Los grupos activos estarán disponibles cuando los tenants seleccionen esta compañía.
+            </p>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
