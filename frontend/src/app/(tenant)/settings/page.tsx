@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Settings, Palette, Users, Building2, Save, Loader2, UserPlus, Mail, Clock, X, Shield, ChevronRight } from 'lucide-react';
+import { Settings, Palette, Users, Building2, Save, Loader2, UserPlus, Mail, Clock, X, Shield, ChevronRight, Building } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -29,6 +29,21 @@ interface Invitation {
   role: string;
   created_at: string;
   expires_at: string;
+}
+
+interface InsuranceCompany {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+}
+
+interface TenantCompany {
+  id: string;
+  company_id: string;
+  is_active: boolean;
+  company_code: string | null;
+  company?: InsuranceCompany;
 }
 
 interface UserPermission {
@@ -76,6 +91,14 @@ export default function SettingsPage() {
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
 
+  // Compañías
+  const [allCompanies, setAllCompanies] = useState<InsuranceCompany[]>([]);
+  const [tenantCompanies, setTenantCompanies] = useState<TenantCompany[]>([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const [savingCompanies, setSavingCompanies] = useState(false);
+  const [editingCompanyCode, setEditingCompanyCode] = useState<string | null>(null);
+  const [tempCompanyCode, setTempCompanyCode] = useState('');
+
   // Cargar branding
   useEffect(() => {
     async function loadSettings() {
@@ -119,6 +142,39 @@ export default function SettingsPage() {
       }
     }
     loadTeam();
+  }, [tenantId, supabase]);
+
+  // Cargar compañías disponibles y las del tenant
+  useEffect(() => {
+    async function loadCompanies() {
+      if (!tenantId) return;
+      setLoadingCompanies(true);
+      try {
+        // Cargar todas las compañías activas
+        const { data: companiesData } = await (supabase.from('insurance_companies') as any)
+          .select('id, name, slug, is_active')
+          .eq('is_active', true)
+          .order('display_order');
+        
+        if (companiesData) {
+          setAllCompanies(companiesData);
+        }
+
+        // Cargar compañías del tenant
+        const { data: tenantCompData } = await (supabase.from('tenant_companies') as any)
+          .select('id, company_id, is_active, company_code')
+          .eq('tenant_id', tenantId);
+        
+        if (tenantCompData) {
+          setTenantCompanies(tenantCompData);
+        }
+      } catch (error) {
+        console.log('Error loading companies:', error);
+      } finally {
+        setLoadingCompanies(false);
+      }
+    }
+    loadCompanies();
   }, [tenantId, supabase]);
 
   // Cargar permisos de un agente
@@ -292,6 +348,112 @@ export default function SettingsPage() {
 
   const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
 
+  // Funciones para manejar compañías del tenant
+  const isCompanyActive = (companyId: string): boolean => {
+    const tc = tenantCompanies.find(tc => tc.company_id === companyId);
+    return tc?.is_active || false;
+  };
+
+  const getCompanyCode = (companyId: string): string => {
+    const tc = tenantCompanies.find(tc => tc.company_id === companyId);
+    return tc?.company_code || '';
+  };
+
+  const handleToggleCompany = async (companyId: string) => {
+    if (!tenantId) return;
+    setSavingCompanies(true);
+
+    try {
+      const existingTc = tenantCompanies.find(tc => tc.company_id === companyId);
+      
+      if (existingTc) {
+        // Actualizar
+        const newStatus = !existingTc.is_active;
+        const { error } = await (supabase.from('tenant_companies') as any)
+          .update({ is_active: newStatus, updated_at: new Date().toISOString() })
+          .eq('id', existingTc.id);
+        
+        if (error) throw error;
+        
+        setTenantCompanies(prev => 
+          prev.map(tc => tc.id === existingTc.id ? { ...tc, is_active: newStatus } : tc)
+        );
+      } else {
+        // Crear nuevo
+        const { data, error } = await (supabase.from('tenant_companies') as any)
+          .insert({
+            tenant_id: tenantId,
+            company_id: companyId,
+            is_active: true,
+            company_code: null,
+          })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        
+        setTenantCompanies(prev => [...prev, data]);
+      }
+
+      toast({ title: 'Compañía actualizada', description: 'El estado de la compañía ha sido actualizado' });
+    } catch (error) {
+      console.error('Error toggling company:', error);
+      toast({ title: 'Error', description: 'No se pudo actualizar la compañía', variant: 'destructive' });
+    } finally {
+      setSavingCompanies(false);
+    }
+  };
+
+  const handleSaveCompanyCode = async (companyId: string) => {
+    if (!tenantId) return;
+    setSavingCompanies(true);
+
+    try {
+      const existingTc = tenantCompanies.find(tc => tc.company_id === companyId);
+      
+      if (existingTc) {
+        const { error } = await (supabase.from('tenant_companies') as any)
+          .update({ company_code: tempCompanyCode || null, updated_at: new Date().toISOString() })
+          .eq('id', existingTc.id);
+        
+        if (error) throw error;
+        
+        setTenantCompanies(prev => 
+          prev.map(tc => tc.id === existingTc.id ? { ...tc, company_code: tempCompanyCode || null } : tc)
+        );
+      } else {
+        // Crear con código
+        const { data, error } = await (supabase.from('tenant_companies') as any)
+          .insert({
+            tenant_id: tenantId,
+            company_id: companyId,
+            is_active: true,
+            company_code: tempCompanyCode || null,
+          })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        
+        setTenantCompanies(prev => [...prev, data]);
+      }
+
+      setEditingCompanyCode(null);
+      setTempCompanyCode('');
+      toast({ title: 'Código guardado', description: 'El código de la compañía ha sido actualizado' });
+    } catch (error) {
+      console.error('Error saving company code:', error);
+      toast({ title: 'Error', description: 'No se pudo guardar el código', variant: 'destructive' });
+    } finally {
+      setSavingCompanies(false);
+    }
+  };
+
+  const startEditingCode = (companyId: string) => {
+    setEditingCompanyCode(companyId);
+    setTempCompanyCode(getCompanyCode(companyId));
+  };
+
   return (
     <div className="space-y-6" data-testid="settings-page">
       <div className="flex items-center gap-3">
@@ -303,15 +465,18 @@ export default function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 h-auto gap-2 bg-transparent p-0">
-          <TabsTrigger value="account" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3">
+        <TabsList className="grid w-full grid-cols-4 h-auto gap-2 bg-transparent p-0">
+          <TabsTrigger value="account" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3" data-testid="tab-account">
             <Building2 className="h-4 w-4" /><span className="hidden sm:inline">Cuenta</span>
           </TabsTrigger>
-          <TabsTrigger value="branding" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3">
+          <TabsTrigger value="branding" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3" data-testid="tab-branding">
             <Palette className="h-4 w-4" /><span className="hidden sm:inline">Visual</span>
           </TabsTrigger>
-          <TabsTrigger value="team" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3">
+          <TabsTrigger value="team" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3" data-testid="tab-team">
             <Users className="h-4 w-4" /><span className="hidden sm:inline">Equipo</span>
+          </TabsTrigger>
+          <TabsTrigger value="companies" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3" data-testid="tab-companies">
+            <Building className="h-4 w-4" /><span className="hidden sm:inline">Compañías</span>
           </TabsTrigger>
         </TabsList>
 
@@ -459,6 +624,123 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="companies" className="mt-6 space-y-6" data-testid="companies-tab-content">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building className="h-5 w-5" />
+                Compañías de Seguros
+              </CardTitle>
+              <CardDescription>
+                Activa las compañías con las que trabajas y configura tu código de agente para cada una
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCompanies ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : allCompanies.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">
+                  No hay compañías disponibles en el catálogo
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground mb-4">
+                    Activa las compañías de seguros con las que trabajas. Para cada compañía activa, puedes agregar tu código de agente.
+                  </div>
+                  <div className="space-y-3">
+                    {allCompanies.map((company) => {
+                      const isActive = isCompanyActive(company.id);
+                      const companyCode = getCompanyCode(company.id);
+                      const isEditing = editingCompanyCode === company.id;
+
+                      return (
+                        <div 
+                          key={company.id} 
+                          className={`p-4 border rounded-lg transition-colors ${isActive ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}
+                          data-testid={`company-row-${company.slug}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isActive ? 'bg-green-100' : 'bg-gray-200'}`}>
+                                <Building className={`h-5 w-5 ${isActive ? 'text-green-600' : 'text-gray-500'}`} />
+                              </div>
+                              <div>
+                                <p className="font-medium">{company.name}</p>
+                                {isActive && companyCode && !isEditing && (
+                                  <p className="text-sm text-muted-foreground">
+                                    Código: <span className="font-mono">{companyCode}</span>
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {isActive && (
+                                <>
+                                  {isEditing ? (
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        value={tempCompanyCode}
+                                        onChange={(e) => setTempCompanyCode(e.target.value)}
+                                        placeholder="Código de agente"
+                                        className="w-40 h-8 text-sm"
+                                        data-testid={`company-code-input-${company.slug}`}
+                                      />
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleSaveCompanyCode(company.id)}
+                                        disabled={savingCompanies}
+                                        data-testid={`save-code-btn-${company.slug}`}
+                                      >
+                                        {savingCompanies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          setEditingCompanyCode(null);
+                                          setTempCompanyCode('');
+                                        }}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => startEditingCode(company.id)}
+                                      data-testid={`edit-code-btn-${company.slug}`}
+                                    >
+                                      {companyCode ? 'Editar código' : 'Agregar código'}
+                                    </Button>
+                                  )}
+                                </>
+                              )}
+                              <Switch
+                                checked={isActive}
+                                onCheckedChange={() => handleToggleCompany(company.id)}
+                                disabled={savingCompanies}
+                                data-testid={`company-switch-${company.slug}`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="pt-4 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium">Nota:</span> Las compañías activas aparecerán disponibles al crear nuevas pólizas.
+                    </p>
+                  </div>
                 </div>
               )}
             </CardContent>
