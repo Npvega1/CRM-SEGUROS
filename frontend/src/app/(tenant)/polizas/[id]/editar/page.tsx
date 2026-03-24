@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PolicyForm } from '@/components/modules/policies/PolicyForm';
-import type { Policy, PolicyLine, PolicyStatus } from '@/lib/validations/policies';
+import type { Policy, PolicyStatus } from '@/lib/validations/policies';
 import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -22,7 +22,10 @@ interface PolicyFormData {
   client_id: string;
   policy_number: string;
   insurer: string;
-  line: PolicyLine;
+  insurer_id?: string;
+  line: string;
+  line_id?: string;
+  group_id?: string;
   status: PolicyStatus;
   premium: number;
   currency?: string;
@@ -92,7 +95,10 @@ export default function EditPolicyPage() {
         .update({
           policy_number: data.policy_number,
           insurer: data.insurer,
+          insurer_id: data.insurer_id || null,
           line: data.line,
+          line_id: data.line_id || null,
+          group_id: data.group_id || null,
           premium: data.premium,
           currency: data.currency || 'COP',
           start_date: data.start_date || null,
