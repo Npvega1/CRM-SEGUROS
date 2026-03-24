@@ -304,8 +304,8 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
       const systemPrompt = watch('prompt_system');
       const recommendationPrompt = watch('prompt_recommendation');
       
-      // Llamar a la API de Vercel (Python serverless function)
-      const response = await fetch('/api/test-prompt', {
+      // Llamar a la API Route de Next.js
+      const response = await fetch('/api/ai/test-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

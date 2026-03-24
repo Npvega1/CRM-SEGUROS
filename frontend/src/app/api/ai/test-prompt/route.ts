@@ -1,68 +1,99 @@
 // =====================================================
-// API ROUTE: Test AI Prompt with Claude
-// Prueba prompts de IA con texto de ejemplo
+// API Route: Test Prompt con Claude
+// Usa el SDK oficial de Anthropic
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import Anthropic from '@anthropic-ai/sdk';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { system_prompt, recommendation_prompt, model_id, test_input } = body;
+    const { system_prompt, recommendation_prompt, model_id, test_input, examples } = body;
 
     // Validación básica
-    if (!system_prompt || !recommendation_prompt || !test_input) {
+    if (!system_prompt || !test_input) {
       return NextResponse.json(
-        { error: 'Faltan campos requeridos' },
+        { success: false, error: 'Faltan campos requeridos' },
         { status: 400 }
       );
     }
 
-    // En producción, aquí se llamaría a Claude API usando emergentintegrations
-    // Por ahora retornamos un mock response para demostración
+    // Obtener API key
+    const apiKey = process.env.ANTHROPIC_API_KEY || process.env.EMERGENT_LLM_KEY;
     
-    // Mock: Simular llamada a Claude
-    const mockResponse = `[MOCK RESPONSE - Modelo: ${model_id}]
+    if (!apiKey) {
+      return NextResponse.json(
+        { success: false, error: 'API key no configurada. Agrega ANTHROPIC_API_KEY en las variables de entorno de Vercel.' },
+        { status: 500 }
+      );
+    }
 
-=== ANÁLISIS COMPARATIVO ===
+    // Construir prompt completo
+    let fullSystemPrompt = system_prompt;
 
-Basado en el texto proporcionado y siguiendo las instrucciones del prompt de sistema, he analizado la información.
+    // Agregar ejemplos si existen
+    if (examples && examples.length > 0) {
+      fullSystemPrompt += "\n\n=== EJEMPLOS DE ESTRUCTURA ===\n";
+      examples.forEach((example: { name: string; content: string }, i: number) => {
+        fullSystemPrompt += `\n--- Ejemplo ${i + 1}: ${example.name || 'Sin nombre'} ---\n`;
+        fullSystemPrompt += (example.content || '').substring(0, 3000);
+        fullSystemPrompt += "\n";
+      });
+    }
 
-**Prompt de Sistema aplicado:**
-${system_prompt.substring(0, 100)}...
+    // Agregar prompt de recomendación
+    if (recommendation_prompt) {
+      fullSystemPrompt += `\n\n=== INSTRUCCIONES DE RECOMENDACIÓN ===\n${recommendation_prompt}`;
+    }
 
-**Prompt de Recomendación aplicado:**
-${recommendation_prompt.substring(0, 100)}...
+    // Mapeo de modelos
+    const modelMapping: Record<string, string> = {
+      'claude-3-5-sonnet': 'claude-sonnet-4-5-20250929',
+      'claude-3-opus': 'claude-opus-4-5-20251101',
+      'claude-3-haiku': 'claude-haiku-4-5-20251001',
+    };
 
-**Entrada analizada:**
-${test_input.substring(0, 200)}...
+    const model = modelMapping[model_id] || 'claude-sonnet-4-5-20250929';
 
-=== RECOMENDACIÓN ===
+    // Inicializar cliente de Anthropic
+    const anthropic = new Anthropic({
+      apiKey: apiKey,
+    });
 
-Este es un resultado de prueba (MOCK). En producción, Claude generaría:
-1. Un análisis detallado de las cotizaciones
-2. Una comparación punto por punto
-3. Una recomendación personalizada para el cliente
+    // Enviar mensaje
+    const message = await anthropic.messages.create({
+      model: model,
+      max_tokens: 4096,
+      system: fullSystemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: test_input
+        }
+      ]
+    });
 
-El prompt parece estar configurado correctamente y listo para producción.
-
-=== MÉTRICAS ===
-- Tokens estimados: ~${Math.floor(Math.random() * 1000 + 500)}
-- Tiempo de respuesta simulado: ${Math.floor(Math.random() * 2000 + 500)}ms`;
-
-    // Simular delay de API
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Extraer texto de la respuesta
+    const responseText = message.content
+      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      .map(block => block.text)
+      .join('\n');
 
     return NextResponse.json({
-      result: mockResponse,
-      model: model_id,
-      tokens_used: Math.floor(Math.random() * 1000 + 500),
-      mock: true,
+      success: true,
+      result: responseText,
+      model: model,
+      tokens_used: message.usage?.output_tokens || 0
     });
+
   } catch (error) {
     console.error('Error testing prompt:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    
     return NextResponse.json(
-      { error: 'Error al probar el prompt' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
