@@ -42,7 +42,6 @@ import {
 } from 'lucide-react';
 import {
   CLAUDE_MODELS,
-  INSURANCE_LINES,
   PROMPT_VARIABLES,
 } from '@/lib/validations/superadmin';
 import { format } from 'date-fns';
@@ -88,8 +87,54 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
   const [activeTab, setActiveTab] = useState('editor');
   const [testInput, setTestInput] = useState('');
   
+  // Estado para ramos desde la base de datos
+  const [insuranceGroups, setInsuranceGroups] = useState<Array<{
+    id: string;
+    name: string;
+    slug: string;
+    line_name?: string;
+  }>>([]);
+  const [loadingGroups, setLoadingGroups] = useState(true);
+  
   const supabase = getUntypedClient();
   const isEditing = !!prompt;
+
+  // Cargar ramos desde la base de datos
+  useEffect(() => {
+    async function loadInsuranceGroups() {
+      if (!isOpen) return;
+      setLoadingGroups(true);
+      
+      try {
+        const { data, error } = await supabase
+          .from('insurance_groups')
+          .select(`
+            id, name, slug,
+            line:insurance_lines(name)
+          `)
+          .eq('is_active', true)
+          .order('display_order');
+        
+        if (error) {
+          console.error('Error loading groups:', error);
+        } else if (data) {
+          const groupsWithLine = data.map((g: any) => ({
+            id: g.id,
+            name: g.name,
+            slug: g.slug,
+            line_name: g.line?.name || 'Sin grupo'
+          }));
+          setInsuranceGroups(groupsWithLine);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+      } finally {
+        setLoadingGroups(false);
+      }
+    }
+    
+    loadInsuranceGroups();
+  }, [isOpen, supabase]);
 
   const {
     register,
@@ -380,25 +425,35 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-zinc-300">Ramo</Label>
-                    <Select
-                      value={watch('line') || 'null'}
-                      onValueChange={(v) => setValue('line', v === 'null' ? null : v)}
-                    >
-                      <SelectTrigger className="mt-1.5 bg-zinc-800 border-zinc-700 text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-zinc-800 border-zinc-700">
-                        {INSURANCE_LINES.map((line) => (
-                          <SelectItem 
-                            key={line.value || 'null'} 
-                            value={line.value || 'null'} 
-                            className="text-white"
-                          >
-                            {line.label}
+                    {loadingGroups ? (
+                      <div className="mt-1.5 flex items-center gap-2 p-2 bg-zinc-800 border border-zinc-700 rounded-md">
+                        <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+                        <span className="text-sm text-zinc-400">Cargando...</span>
+                      </div>
+                    ) : (
+                      <Select
+                        value={watch('line') || 'null'}
+                        onValueChange={(v) => setValue('line', v === 'null' ? null : v)}
+                      >
+                        <SelectTrigger className="mt-1.5 bg-zinc-800 border-zinc-700 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-zinc-800 border-zinc-700 max-h-[300px]">
+                          <SelectItem value="null" className="text-white">
+                            Todos los ramos
                           </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          {insuranceGroups.map((group) => (
+                            <SelectItem 
+                              key={group.slug} 
+                              value={group.slug} 
+                              className="text-white"
+                            >
+                              {group.name} ({group.line_name})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
 
                   <div>
