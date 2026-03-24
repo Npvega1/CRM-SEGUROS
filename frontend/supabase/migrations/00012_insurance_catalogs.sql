@@ -242,8 +242,8 @@ ON CONFLICT (slug) DO NOTHING;
 -- Función helper para insertar relaciones compañía-ramo
 DO $$
 DECLARE
-  comp_id UUID;
-  line_id UUID;
+  v_comp_id UUID;
+  v_line_id UUID;
   company_slugs TEXT[] := ARRAY['seguros-del-estado', 'equidad-seguros', 'axa-colpatria', 'bbva-seguros', 'hdi', 'bolivar', 'solidaria', 'mapfre', 'suramericana', 'mundial', 'allianz', 'previsora', 'zurich'];
   all_lines_slugs TEXT[] := ARRAY['automoviles', 'fianzas', 'generales', 'rc-pasajeros', 'soat', 'vida'];
   comp_slug TEXT;
@@ -251,29 +251,29 @@ DECLARE
 BEGIN
   -- Compañías con todos los ramos (menos ARL)
   FOREACH comp_slug IN ARRAY company_slugs LOOP
-    SELECT id INTO comp_id FROM insurance_companies WHERE slug = comp_slug;
+    SELECT id INTO v_comp_id FROM insurance_companies WHERE slug = comp_slug;
     FOREACH line_slug IN ARRAY all_lines_slugs LOOP
-      SELECT id INTO line_id FROM insurance_lines WHERE slug = line_slug;
+      SELECT id INTO v_line_id FROM insurance_lines WHERE slug = line_slug;
       INSERT INTO company_lines (company_id, line_id)
-      VALUES (comp_id, line_id)
+      VALUES (v_comp_id, v_line_id)
       ON CONFLICT (company_id, line_id) DO NOTHING;
     END LOOP;
   END LOOP;
   
   -- Axa Colpatria y Suramericana tienen ARL
-  SELECT id INTO comp_id FROM insurance_companies WHERE slug = 'axa-colpatria';
-  SELECT id INTO line_id FROM insurance_lines WHERE slug = 'arl';
-  INSERT INTO company_lines (company_id, line_id) VALUES (comp_id, line_id) ON CONFLICT DO NOTHING;
+  SELECT id INTO v_comp_id FROM insurance_companies WHERE slug = 'axa-colpatria';
+  SELECT id INTO v_line_id FROM insurance_lines WHERE slug = 'arl';
+  INSERT INTO company_lines (company_id, line_id) VALUES (v_comp_id, v_line_id) ON CONFLICT DO NOTHING;
   
-  SELECT id INTO comp_id FROM insurance_companies WHERE slug = 'suramericana';
-  INSERT INTO company_lines (company_id, line_id) VALUES (comp_id, line_id) ON CONFLICT DO NOTHING;
+  SELECT id INTO v_comp_id FROM insurance_companies WHERE slug = 'suramericana';
+  INSERT INTO company_lines (company_id, line_id) VALUES (v_comp_id, v_line_id) ON CONFLICT DO NOTHING;
   
   -- Colsanitas solo tiene Vida y ARL
-  SELECT id INTO comp_id FROM insurance_companies WHERE slug = 'colsanitas';
-  SELECT id INTO line_id FROM insurance_lines WHERE slug = 'vida';
-  INSERT INTO company_lines (company_id, line_id) VALUES (comp_id, line_id) ON CONFLICT DO NOTHING;
-  SELECT id INTO line_id FROM insurance_lines WHERE slug = 'arl';
-  INSERT INTO company_lines (company_id, line_id) VALUES (comp_id, line_id) ON CONFLICT DO NOTHING;
+  SELECT id INTO v_comp_id FROM insurance_companies WHERE slug = 'colsanitas';
+  SELECT id INTO v_line_id FROM insurance_lines WHERE slug = 'vida';
+  INSERT INTO company_lines (company_id, line_id) VALUES (v_comp_id, v_line_id) ON CONFLICT DO NOTHING;
+  SELECT id INTO v_line_id FROM insurance_lines WHERE slug = 'arl';
+  INSERT INTO company_lines (company_id, line_id) VALUES (v_comp_id, v_line_id) ON CONFLICT DO NOTHING;
 END $$;
 
 -- =====================================================
