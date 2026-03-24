@@ -652,9 +652,6 @@ export default function SettingsPage() {
                 </p>
               ) : (
                 <div className="space-y-4">
-                  <div className="text-sm text-muted-foreground mb-4">
-                    Activa las compañías de seguros con las que trabajas. Para cada compañía activa, puedes agregar tu código de agente.
-                  </div>
                   <div className="space-y-3">
                     {allCompanies.map((company) => {
                       const isActive = isCompanyActive(company.id);
