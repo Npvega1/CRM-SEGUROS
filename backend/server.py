@@ -55,6 +55,7 @@ class CompareRequest(BaseModel):
     line: str
     files: List[Dict]  # [{name, file_url, file_type, base64_content}]
     criteria: List[str]
+    operation_type: Optional[str] = 'comparison'  # 'comparison' o 'quotation'
     # Supabase credentials para actualizar directamente
     supabaseUrl: Optional[str] = None
     supabaseKey: Optional[str] = None
@@ -348,7 +349,7 @@ async def process_comparison_background(request: CompareRequest, api_key: str):
 
 
 async def process_comparison_sync(request: CompareRequest, api_key: str) -> CompareResponse:
-    """Procesa la comparación de forma síncrona"""
+    """Procesa la comparación o cotización de forma síncrona"""
     try:
         # Extraer texto de cada archivo
         extracted_texts = []
@@ -387,12 +388,54 @@ async def process_comparison_sync(request: CompareRequest, api_key: str) -> Comp
         if not extracted_texts:
             raise HTTPException(status_code=400, detail="No se pudo extraer texto de los archivos. Verifica que los PDFs no sean imágenes escaneadas.")
         
-        # Construir el prompt con el texto extraído - ESTRUCTURA COMPLETA PARA COMPARATIVO
-        files_content = ""
-        for i, doc in enumerate(extracted_texts, 1):
-            files_content += f"\n\n{'='*60}\nCOTIZACIÓN {i}: {doc['name']}\n{'='*60}\n{doc['content']}\n"
+        # Determinar si es cotización o comparativo
+        is_quotation = request.operation_type == 'quotation'
         
-        analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza estas {len(extracted_texts)} cotizaciones del ramo "{request.line}" y crea UN cuadro comparativo CONSOLIDADO.
+        if is_quotation:
+            # PROMPT PARA COTIZACIÓN (1 archivo - ej: contrato para fianzas)
+            doc = extracted_texts[0]
+            analysis_prompt = f"""Eres un experto en seguros y fianzas colombiano. Analiza este documento del ramo "{request.line}" y genera una cotización estructurada.
+
+{'='*60}
+DOCUMENTO: {doc['name']}
+{'='*60}
+{doc['content']}
+
+INSTRUCCIONES:
+1. Extrae toda la información relevante del documento (contrato, solicitud, etc.)
+2. Identifica: partes involucradas, montos, plazos, objeto del contrato
+3. Genera una estructura de cotización basada en la información extraída
+
+RESPONDE SOLO CON JSON VÁLIDO:
+{{
+  "tipo_documento": "Contrato/Solicitud/Otro",
+  "datos_extraidos": {{
+    "contratante": "Nombre del contratante",
+    "beneficiario": "Nombre del beneficiario (si aplica)",
+    "objeto": "Descripción del objeto o servicio",
+    "valor_contrato": "$X,XXX,XXX",
+    "plazo": "X meses/años",
+    "ubicacion": "Ciudad/Departamento",
+    "fecha_inicio": "DD/MM/AAAA",
+    "fecha_fin": "DD/MM/AAAA"
+  }},
+  "cotizacion_sugerida": {{
+    "tipo_fianza": "Cumplimiento/Anticipo/Calidad/etc.",
+    "valor_asegurado": "$X,XXX,XXX",
+    "vigencia": "X meses",
+    "tasa_estimada": "X.X%",
+    "prima_estimada": "$X,XXX,XXX",
+    "requisitos": ["Requisito 1", "Requisito 2"],
+    "observaciones": "Notas adicionales"
+  }}
+}}"""
+        else:
+            # PROMPT PARA COMPARATIVO (2+ archivos - cotizaciones)
+            files_content = ""
+            for i, doc in enumerate(extracted_texts, 1):
+                files_content += f"\n\n{'='*60}\nCOTIZACIÓN {i}: {doc['name']}\n{'='*60}\n{doc['content']}\n"
+            
+            analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza estas {len(extracted_texts)} cotizaciones del ramo "{request.line}" y crea UN cuadro comparativo CONSOLIDADO.
 
 {files_content}
 
@@ -497,13 +540,21 @@ Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
             logger.error(f"Failed to parse AI response: {response_text[:500]}")
             raise HTTPException(status_code=500, detail=f"Error al parsear respuesta de IA: {str(e)}")
         
-        # Construir tabla comparativa con nueva estructura
-        comparison_table = {
-            "line": request.line,
-            "insurers": comparison_data.get("insurers", [])
-        }
+        # Construir tabla según el tipo de operación
+        if is_quotation:
+            comparison_table = {
+                "line": request.line,
+                "type": "quotation",
+                "quotation": comparison_data
+            }
+        else:
+            comparison_table = {
+                "line": request.line,
+                "type": "comparison",
+                "insurers": comparison_data.get("insurers", [])
+            }
         
-        # Retornar solo la tabla comparativa (sin recomendación de IA)
+        # Retornar resultado
         return CompareResponse(
             success=True,
             comparison_table=comparison_table,

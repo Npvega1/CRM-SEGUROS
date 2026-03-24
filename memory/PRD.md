@@ -173,8 +173,7 @@
 - Tipos Supabase: actualizar manualmente al agregar columnas
 
 ## Próximos Pasos
-1. Probar Fase 4: Verificar que solo aparecen grupos con has_ai_prompt = true
-2. Configurar prompts de IA en Super Admin para los grupos deseados
-3. Desplegar en Vercel con credenciales reales
-4. Crear usuario superadmin en Supabase Auth
-5. Integrar Claude API real con Emergent LLM Key
+1. Probar tipo "Cotización" con FIANZAS (1 archivo)
+2. Probar tipo "Comparativo" con otros ramos (2+ archivos)
+3. Integrar Claude real para test de prompts
+4. Desplegar backend actualizado

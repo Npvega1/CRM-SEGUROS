@@ -77,6 +77,7 @@ interface NewComparisonWizardProps {
     prospectName?: string;
     line: PolicyLine;
     files: Array<{ name: string; type: string; size: number; base64: string }>;
+    operationType?: 'comparison' | 'quotation';
   }) => Promise<void>;
   isProcessing?: boolean;
   processingProgress?: number;
@@ -264,8 +265,12 @@ export function NewComparisonWizard({
   };
 
   const handleSubmit = async () => {
-    if (files.length < 2) {
-      setErrors(['Se requieren al menos 2 cotizaciones para comparar']);
+    const minFilesRequired = getMinFiles();
+    if (files.length < minFilesRequired) {
+      const msg = isQuotationType() 
+        ? 'Se requiere al menos 1 documento' 
+        : `Se requieren al menos ${minFilesRequired} cotizaciones para comparar`;
+      setErrors([msg]);
       return;
     }
 
@@ -274,11 +279,13 @@ export function NewComparisonWizard({
     
     try {
       const filesWithBase64 = await convertFilesToBase64();
+      const selectedGroup = getSelectedGroup();
       await onSubmit({
         clientId: clientMode === 'existing' ? clientId : undefined,
         prospectName: clientMode === 'prospect' ? prospectName : undefined,
         line,
-        files: filesWithBase64
+        files: filesWithBase64,
+        operationType: selectedGroup?.operation_type || 'comparison'
       });
       // El onSubmit debería cerrar el wizard, pero por si acaso:
       resetForm();

@@ -150,9 +150,10 @@ export default function AIComparePage() {
     comparisonId: string,
     tenantId: string,
     line: PolicyLine,
-    files: Array<{ name: string; type: string; size: number; base64: string }>
+    files: Array<{ name: string; type: string; size: number; base64: string }>,
+    operationType: 'comparison' | 'quotation' = 'comparison'
   ) => {
-    console.log('🚀 Starting background processing for:', comparisonId);
+    console.log('🚀 Starting background processing for:', comparisonId, 'type:', operationType);
     
     try {
       // Obtener criterios
@@ -189,6 +190,7 @@ export default function AIComparePage() {
           line,
           files: filesForAI,
           criteria: criteriaNames,
+          operation_type: operationType,
           // Credenciales para que el backend actualice Supabase directamente
           supabaseUrl,
           supabaseKey
@@ -281,6 +283,7 @@ export default function AIComparePage() {
     prospectName?: string;
     line: PolicyLine;
     files: Array<{ name: string; type: string; size: number; base64: string }>;
+    operationType?: 'comparison' | 'quotation';
   }) => {
     if (!tenantId || !userId) return;
 
@@ -303,8 +306,9 @@ export default function AIComparePage() {
       setShowWizard(false);
 
       // 3. Mostrar notificación
+      const isQuotation = data.operationType === 'quotation';
       toast({
-        title: 'Comparativo en proceso',
+        title: isQuotation ? 'Cotización en proceso' : 'Comparativo en proceso',
         description: 'Se está generando en segundo plano. Puedes seguir trabajando.'
       });
 
@@ -317,7 +321,8 @@ export default function AIComparePage() {
         result.comparisonId,
         tenantId,
         data.line,
-        data.files
+        data.files,
+        data.operationType || 'comparison'
       );
 
     } catch (error) {
