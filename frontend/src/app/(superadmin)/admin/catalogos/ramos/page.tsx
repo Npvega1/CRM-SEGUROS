@@ -1,8 +1,8 @@
 'use client';
 
 // =====================================================
-// PAGE: Super Admin - Ramos de Seguro
-// Gestión del catálogo de ramos con asignación a compañías
+// PAGE: Super Admin - Grupos de Seguro
+// Gestión del catálogo de grupos (antes llamado ramos)
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -301,8 +301,8 @@ export default function RamosPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-white">Ramos de Seguro</h1>
-          <p className="text-zinc-400 mt-1">Configura los ramos y asigna compañías</p>
+          <h1 className="text-2xl font-bold text-white">Grupos de Seguro</h1>
+          <p className="text-zinc-400 mt-1">Configura los grupos y asigna compañías</p>
         </div>
         <Button
           onClick={() => openModal()}
@@ -310,7 +310,7 @@ export default function RamosPage() {
           data-testid="add-line-btn"
         >
           <Plus className="h-4 w-4 mr-2" />
-          Nuevo Ramo
+          Nuevo Grupo
         </Button>
       </div>
 
@@ -319,7 +319,7 @@ export default function RamosPage() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
           <Input
-            placeholder="Buscar ramo..."
+            placeholder="Buscar grupo..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-500"
@@ -350,9 +350,9 @@ export default function RamosPage() {
           <Table>
             <TableHeader>
               <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-400">Ramo</TableHead>
+                <TableHead className="text-zinc-400">Grupo</TableHead>
                 <TableHead className="text-zinc-400">Unidad</TableHead>
-                <TableHead className="text-zinc-400 text-center">Grupos</TableHead>
+                <TableHead className="text-zinc-400 text-center">Ramos</TableHead>
                 <TableHead className="text-zinc-400 text-center">Compañías</TableHead>
                 <TableHead className="text-zinc-400 text-center">IA</TableHead>
                 <TableHead className="text-zinc-400">Estado</TableHead>
@@ -363,7 +363,7 @@ export default function RamosPage() {
               {filteredLines.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-zinc-500">
-                    No se encontraron ramos
+                    No se encontraron grupos
                   </TableCell>
                 </TableRow>
               ) : (
@@ -468,7 +468,7 @@ export default function RamosPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Layers className="h-5 w-5 text-purple-500" />
-              {editingLine ? 'Editar Ramo' : 'Nuevo Ramo'}
+              {editingLine ? 'Editar Grupo' : 'Nuevo Grupo'}
             </DialogTitle>
           </DialogHeader>
 

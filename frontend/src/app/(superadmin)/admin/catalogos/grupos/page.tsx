@@ -1,8 +1,8 @@
 'use client';
 
 // =====================================================
-// PAGE: Super Admin - Grupos de Seguro
-// Gestión del catálogo de grupos/productos por ramo
+// PAGE: Super Admin - Ramos de Seguro
+// Gestión del catálogo de ramos/productos por grupo
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -260,8 +260,8 @@ export default function GruposPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-white">Grupos de Seguro</h1>
-          <p className="text-zinc-400 mt-1">Productos específicos dentro de cada ramo</p>
+          <h1 className="text-2xl font-bold text-white">Ramos de Seguro</h1>
+          <p className="text-zinc-400 mt-1">Productos específicos dentro de cada grupo</p>
         </div>
         <Button
           onClick={() => openModal()}
@@ -269,7 +269,7 @@ export default function GruposPage() {
           data-testid="add-group-btn"
         >
           <Plus className="h-4 w-4 mr-2" />
-          Nuevo Grupo
+          Nuevo Ramo
         </Button>
       </div>
 
@@ -278,7 +278,7 @@ export default function GruposPage() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
           <Input
-            placeholder="Buscar grupo..."
+            placeholder="Buscar ramo..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-500"
@@ -286,10 +286,10 @@ export default function GruposPage() {
         </div>
         <Select value={lineFilter} onValueChange={setLineFilter}>
           <SelectTrigger className="w-[200px] bg-zinc-900 border-zinc-800 text-white">
-            <SelectValue placeholder="Filtrar por ramo" />
+            <SelectValue placeholder="Filtrar por grupo" />
           </SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-800">
-            <SelectItem value="all" className="text-white">Todos los ramos</SelectItem>
+            <SelectItem value="all" className="text-white">Todos los grupos</SelectItem>
             {lines.map((line) => (
               <SelectItem key={line.id} value={line.id} className="text-white">
                 {line.name}
@@ -310,7 +310,7 @@ export default function GruposPage() {
       {Object.entries(groupedByLine).length === 0 ? (
         <Card className="bg-zinc-900 border-zinc-800">
           <CardContent className="py-8 text-center text-zinc-500">
-            No se encontraron grupos
+            No se encontraron ramos
           </CardContent>
         </Card>
       ) : (
@@ -322,7 +322,7 @@ export default function GruposPage() {
               </div>
               <div className="flex-1">
                 <h3 className="text-white font-medium">{line_name}</h3>
-                <p className="text-xs text-zinc-500">{lineGroups.length} grupos</p>
+                <p className="text-xs text-zinc-500">{lineGroups.length} ramos</p>
               </div>
               <Badge
                 className={line_unit === 'generales' 
@@ -406,19 +406,19 @@ export default function GruposPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FolderTree className="h-5 w-5 text-green-500" />
-              {editingGroup ? 'Editar Grupo' : 'Nuevo Grupo'}
+              {editingGroup ? 'Editar Ramo' : 'Nuevo Ramo'}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div>
-              <Label className="text-zinc-300">Ramo</Label>
+              <Label className="text-zinc-300">Grupo</Label>
               <Select
                 value={formData.line_id}
                 onValueChange={(v) => setFormData({ ...formData, line_id: v })}
               >
                 <SelectTrigger className="mt-1.5 bg-zinc-800 border-zinc-700 text-white">
-                  <SelectValue placeholder="Selecciona un ramo" />
+                  <SelectValue placeholder="Selecciona un grupo" />
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-800 border-zinc-700">
                   {lines.map((line) => (

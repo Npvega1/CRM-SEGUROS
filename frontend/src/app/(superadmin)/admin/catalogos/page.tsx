@@ -70,8 +70,8 @@ export default function CatalogosPage() {
       bgColor: 'bg-blue-500/10',
     },
     {
-      title: 'Ramos',
-      description: 'Configura los ramos de seguro (Automóviles, Vida, etc.)',
+      title: 'Grupos',
+      description: 'Configura los grupos de seguro (Automóviles, Vida, etc.)',
       icon: Layers,
       href: '/admin/catalogos/ramos',
       count: stats?.lines || 0,
@@ -79,8 +79,8 @@ export default function CatalogosPage() {
       bgColor: 'bg-purple-500/10',
     },
     {
-      title: 'Grupos',
-      description: 'Define los grupos/productos dentro de cada ramo',
+      title: 'Ramos',
+      description: 'Define los ramos/productos dentro de cada grupo',
       icon: FolderTree,
       href: '/admin/catalogos/grupos',
       count: stats?.groups || 0,
@@ -133,18 +133,18 @@ export default function CatalogosPage() {
         <CardContent className="space-y-3 text-sm text-zinc-400">
           <p>
             <strong className="text-white">1. Compañías:</strong> Son las aseguradoras (Sura, Bolívar, etc.). 
-            Cada compañía puede tener múltiples ramos.
+            Cada compañía puede tener múltiples grupos.
           </p>
           <p>
-            <strong className="text-white">2. Ramos:</strong> Son las líneas de negocio (Automóviles, Vida, Fianzas). 
-            Cada ramo pertenece a una unidad (Generales o Vida).
+            <strong className="text-white">2. Grupos:</strong> Son las líneas de negocio (Automóviles, Vida, Fianzas). 
+            Cada grupo pertenece a una unidad (Generales o Vida).
           </p>
           <p>
-            <strong className="text-white">3. Grupos:</strong> Son los productos específicos dentro de cada ramo 
+            <strong className="text-white">3. Ramos:</strong> Son los productos específicos dentro de cada grupo 
             (Auto individual, Hogar, Vida Grupo, etc.).
           </p>
           <p className="pt-2 border-t border-zinc-800">
-            <strong className="text-amber-400">Importante:</strong> Solo los ramos con prompts IA activos 
+            <strong className="text-amber-400">Importante:</strong> Solo los grupos con prompts IA activos 
             aparecerán en el módulo de Comparativos IA de los tenants.
           </p>
         </CardContent>
