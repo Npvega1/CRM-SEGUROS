@@ -199,9 +199,27 @@ export default function AIComparePage() {
       
       console.log('📡 Response status:', aiResponse.status);
       
+      // Si el backend retorna error 400, podría ser porque no soporta el operation_type
+      // En ese caso, marcamos el error pero no rompemos la app
       if (!aiResponse.ok) {
         const errorText = await aiResponse.text();
-        throw new Error(`Error del servidor: ${aiResponse.status} - ${errorText.substring(0, 200)}`);
+        console.error('Backend error:', errorText);
+        
+        // Actualizar estado a error en Supabase
+        const supabase = getBrowserClient();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('comparisons')
+          .update({
+            status: 'error',
+            error_message: operationType === 'quotation' 
+              ? 'El servidor aún no soporta cotizaciones. Contacta al administrador.'
+              : `Error del servidor: ${aiResponse.status}`
+          })
+          .eq('id', comparisonId);
+        
+        await loadData();
+        return;
       }
       
       const aiResult = await aiResponse.json();
