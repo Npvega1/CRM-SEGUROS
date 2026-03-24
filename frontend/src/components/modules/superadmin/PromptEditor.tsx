@@ -39,6 +39,7 @@ import {
   RotateCcw,
   Code,
   FileText,
+  Trash2,
 } from 'lucide-react';
 import {
   CLAUDE_MODELS,
@@ -95,6 +96,16 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
     line_name?: string;
   }>>([]);
   const [loadingGroups, setLoadingGroups] = useState(true);
+  
+  // Estado para ejemplos de estructura
+  const [examples, setExamples] = useState<Array<{
+    id: string;
+    name: string;
+    content: string;
+  }>>([]);
+  const [newExampleName, setNewExampleName] = useState('');
+  const [newExampleContent, setNewExampleContent] = useState('');
+  const [showAddExample, setShowAddExample] = useState(false);
   
   const supabase = getUntypedClient();
   const isEditing = !!prompt;
@@ -292,9 +303,12 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
     try {
       const systemPrompt = watch('prompt_system');
       const recommendationPrompt = watch('prompt_recommendation');
-
-      // Llamar a la API de test (mock por ahora - en producción usar Edge Function)
-      const response = await fetch('/api/ai/test-prompt', {
+      
+      // Obtener la URL del backend
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+      
+      // Llamar al backend Python con Claude real
+      const response = await fetch(`${backendUrl}/api/ai/test-prompt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -302,22 +316,40 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
           recommendation_prompt: recommendationPrompt,
           model_id: watch('model_id'),
           test_input: testInput,
+          examples: examples.map(e => ({ name: e.name, content: e.content })),
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Error al probar el prompt');
+      const data = await response.json();
+      
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Error al probar el prompt');
       }
 
-      const data = await response.json();
-      setTestResult(data.result || '[Mock] Respuesta de prueba generada correctamente. El prompt funciona como se espera.');
+      setTestResult(data.result);
     } catch (error) {
       console.error('Error testing prompt:', error);
-      // Mock response for demo
-      setTestResult('[MOCK] Análisis comparativo generado.\n\nRecomendación: Basado en el análisis de las cotizaciones proporcionadas, la mejor opción para el cliente sería...\n\nFactores considerados:\n- Cobertura\n- Precio\n- Deducibles\n- Reputación de la aseguradora');
+      setTestError(error instanceof Error ? error.message : 'Error al probar el prompt');
     } finally {
       setIsTesting(false);
     }
+  };
+
+  const addExample = () => {
+    if (!newExampleName.trim() || !newExampleContent.trim()) return;
+    
+    setExamples(prev => [...prev, {
+      id: Date.now().toString(),
+      name: newExampleName,
+      content: newExampleContent,
+    }]);
+    setNewExampleName('');
+    setNewExampleContent('');
+    setShowAddExample(false);
+  };
+
+  const removeExample = (id: string) => {
+    setExamples(prev => prev.filter(e => e.id !== id));
   };
 
   const handleRollback = async (version: PromptVersion) => {
@@ -560,10 +592,90 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
           </TabsContent>
 
           <TabsContent value="test" className="mt-4 space-y-4">
+            {/* Sección de Ejemplos de Estructura */}
+            <Card className="bg-zinc-800/50 border-zinc-700">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm text-zinc-300 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Ejemplos de estructura ({examples.length})
+                  </CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAddExample(!showAddExample)}
+                    className="border-zinc-600 text-zinc-300 hover:bg-zinc-700"
+                  >
+                    {showAddExample ? 'Cancelar' : '+ Agregar ejemplo'}
+                  </Button>
+                </div>
+                <p className="text-xs text-zinc-500 mt-1">
+                  Agrega ejemplos de cotizaciones para que la IA aprenda la estructura esperada
+                </p>
+              </CardHeader>
+              <CardContent>
+                {showAddExample && (
+                  <div className="mb-4 p-3 bg-zinc-900 rounded-lg space-y-3">
+                    <Input
+                      value={newExampleName}
+                      onChange={(e) => setNewExampleName(e.target.value)}
+                      placeholder="Nombre del ejemplo (ej: Cotización SURA Hogar)"
+                      className="bg-zinc-800 border-zinc-700 text-white"
+                    />
+                    <Textarea
+                      value={newExampleContent}
+                      onChange={(e) => setNewExampleContent(e.target.value)}
+                      placeholder="Pega aquí el contenido de la cotización de ejemplo..."
+                      className="bg-zinc-800 border-zinc-700 text-white min-h-[100px]"
+                    />
+                    <Button
+                      onClick={addExample}
+                      disabled={!newExampleName.trim() || !newExampleContent.trim()}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      Agregar ejemplo
+                    </Button>
+                  </div>
+                )}
+                
+                {examples.length === 0 ? (
+                  <p className="text-sm text-zinc-500 text-center py-4">
+                    No hay ejemplos agregados. Los ejemplos ayudan a la IA a entender la estructura.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {examples.map((example) => (
+                      <div 
+                        key={example.id}
+                        className="flex items-center justify-between p-2 bg-zinc-900 rounded-lg"
+                      >
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-blue-400" />
+                          <span className="text-sm text-white">{example.name}</span>
+                          <span className="text-xs text-zinc-500">
+                            ({example.content.length} caracteres)
+                          </span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeExample(example.id)}
+                          className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Texto de prueba */}
             <Card className="bg-zinc-800/50 border-zinc-700">
               <CardHeader>
                 <CardTitle className="text-sm text-zinc-300 flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
+                  <TestTube className="h-4 w-4" />
                   Texto de prueba
                 </CardTitle>
               </CardHeader>
@@ -583,7 +695,7 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
                   {isTesting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Probando...
+                      Probando con Claude...
                     </>
                   ) : (
                     <>

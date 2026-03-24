@@ -70,6 +70,24 @@ class AsyncCompareResponse(BaseModel):
     message: str
     comparisonId: str
 
+# =====================================================
+# TEST PROMPT MODELS
+# =====================================================
+
+class TestPromptRequest(BaseModel):
+    system_prompt: str
+    recommendation_prompt: str
+    model_id: str
+    test_input: str
+    examples: Optional[List[Dict]] = None  # [{name, content}]
+
+class TestPromptResponse(BaseModel):
+    success: bool
+    result: Optional[str] = None
+    model: str
+    tokens_used: Optional[int] = None
+    error: Optional[str] = None
+
 # Add your routes to the router instead of directly to app
 @api_router.get("/")
 async def root():
@@ -98,6 +116,74 @@ async def get_status_checks():
             check['timestamp'] = datetime.fromisoformat(check['timestamp'])
     
     return status_checks
+
+# =====================================================
+# TEST PROMPT ENDPOINT
+# Prueba prompts de IA con Claude real
+# =====================================================
+
+@api_router.post("/ai/test-prompt", response_model=TestPromptResponse)
+async def test_prompt(request: TestPromptRequest):
+    """
+    Prueba un prompt de IA con texto de ejemplo usando Claude.
+    """
+    try:
+        api_key = os.environ.get('EMERGENT_LLM_KEY')
+        if not api_key:
+            raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY no configurada")
+        
+        # Construir el prompt completo
+        full_system_prompt = request.system_prompt
+        
+        # Agregar ejemplos si existen
+        if request.examples:
+            examples_text = "\n\n=== EJEMPLOS DE ESTRUCTURA ===\n"
+            for i, example in enumerate(request.examples, 1):
+                examples_text += f"\n--- Ejemplo {i}: {example.get('name', 'Sin nombre')} ---\n"
+                examples_text += example.get('content', '')[:3000]  # Limitar tamaño
+                examples_text += "\n"
+            full_system_prompt += examples_text
+        
+        # Agregar prompt de recomendación
+        full_system_prompt += f"\n\n=== INSTRUCCIONES DE RECOMENDACIÓN ===\n{request.recommendation_prompt}"
+        
+        # Determinar modelo
+        model_mapping = {
+            'claude-3-5-sonnet': ('anthropic', 'claude-sonnet-4-5-20250929'),
+            'claude-3-opus': ('anthropic', 'claude-opus-4-5-20251101'),
+            'claude-3-haiku': ('anthropic', 'claude-haiku-4-5-20251001'),
+            'gpt-4-turbo': ('openai', 'gpt-5.2'),
+            'gemini-pro': ('gemini', 'gemini-2.5-pro'),
+        }
+        
+        provider, model = model_mapping.get(request.model_id, ('anthropic', 'claude-sonnet-4-5-20250929'))
+        
+        # Inicializar chat
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"test-prompt-{uuid.uuid4()}",
+            system_message=full_system_prompt
+        ).with_model(provider, model)
+        
+        # Enviar mensaje de prueba
+        logger.info(f"Testing prompt with {provider}/{model}")
+        response_text = await chat.send_message(UserMessage(text=request.test_input))
+        
+        return TestPromptResponse(
+            success=True,
+            result=response_text,
+            model=f"{provider}/{model}",
+            tokens_used=len(response_text) // 4  # Estimación aproximada
+        )
+        
+    except Exception as e:
+        logger.error(f"Error testing prompt: {e}")
+        return TestPromptResponse(
+            success=False,
+            result=None,
+            model=request.model_id,
+            error=str(e)
+        )
 
 # =====================================================
 # AI COMPARISON ENDPOINT - OPTIMIZADO
