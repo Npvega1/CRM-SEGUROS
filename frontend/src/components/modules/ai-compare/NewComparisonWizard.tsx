@@ -160,16 +160,21 @@ export function NewComparisonWizard({
     return aiEnabledGroups.find(g => g.slug === line);
   };
 
-  // Obtener el mínimo de archivos requeridos
-  const getMinFiles = (): number => {
-    const group = getSelectedGroup();
-    return group?.min_files || 2;
-  };
-
   // Verificar si es tipo cotización (1 archivo) o comparativo (2+ archivos)
   const isQuotationType = (): boolean => {
     const group = getSelectedGroup();
+    // Si no hay operation_type definido, asumir 'comparison' (default)
     return group?.operation_type === 'quotation';
+  };
+
+  // Obtener el mínimo de archivos requeridos
+  const getMinFiles = (): number => {
+    const group = getSelectedGroup();
+    // Si no hay min_files definido, usar 2 como default (comparativo)
+    if (!group?.min_files) {
+      return group?.operation_type === 'quotation' ? 1 : 2;
+    }
+    return group.min_files;
   };
 
   const resetForm = () => {
