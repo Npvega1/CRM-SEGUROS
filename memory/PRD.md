@@ -65,8 +65,8 @@
 - Integración Claude API
 - Recomendaciones automatizadas
 
-### ✅ Módulo 11 - Super Admin (NUEVO - Enero 2026)
-**Implementado en esta sesión:**
+### ✅ Módulo 11 - Super Admin (Enero 2026)
+**Implementado:**
 
 #### Componentes creados:
 - `app/(superadmin)/admin/layout.tsx` - Layout oscuro/rojo distintivo
@@ -74,16 +74,17 @@
 - `app/(superadmin)/admin/prompts/page.tsx` - Gestión de prompts IA
 - `app/(superadmin)/admin/analytics/page.tsx` - Analytics de plataforma
 - `app/(superadmin)/admin/security/page.tsx` - Dashboard de seguridad
+- `app/(superadmin)/admin/catalogos/page.tsx` - Dashboard de catálogos
+- `app/(superadmin)/admin/catalogos/companias/page.tsx` - CRUD compañías de seguros
+- `app/(superadmin)/admin/catalogos/ramos/page.tsx` - CRUD ramos con asignación a compañías
+- `app/(superadmin)/admin/catalogos/grupos/page.tsx` - CRUD grupos por ramo
 - `components/modules/superadmin/TenantDetailDrawer.tsx`
 - `components/modules/superadmin/CreateTenantModal.tsx`
 - `components/modules/superadmin/PromptEditor.tsx`
 
-#### Migración SQL:
-- `supabase/migrations/00011_superadmin.sql`
-  - Tabla `ai_prompts` - Prompts configurables
-  - Tabla `ai_prompt_versions` - Historial de versiones
-  - Tabla `platform_analytics` - Métricas de plataforma
-  - Funciones: `get_tenant_stats()`, `calculate_platform_analytics()`
+#### Migraciones SQL:
+- `00011_superadmin.sql` - Tablas ai_prompts, ai_prompt_versions, platform_analytics
+- `00012_insurance_catalogs.sql` - Catálogos de compañías, ramos, grupos, relaciones
 
 #### Funcionalidades:
 - Lista global de tenants con métricas (agentes, clientes, pólizas)

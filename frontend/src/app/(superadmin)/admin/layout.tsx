@@ -22,6 +22,7 @@ import {
   X,
   ChevronRight,
   AlertTriangle,
+  Database,
 } from 'lucide-react';
 
 interface NavItem {
@@ -32,6 +33,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { title: 'Tenants', href: '/admin/tenants', icon: Building2 },
+  { title: 'Catálogos', href: '/admin/catalogos', icon: Database },
   { title: 'Prompts IA', href: '/admin/prompts', icon: Brain },
   { title: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
   { title: 'Seguridad', href: '/admin/security', icon: Shield },
