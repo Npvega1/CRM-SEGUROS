@@ -48,6 +48,16 @@ interface PolicyWithClient extends Policy {
     phone: string | null;
     segment: string;
   };
+  insurance_line?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  insurance_group?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
 }
 
 export default function PolicyDetailPage() {
@@ -85,7 +95,9 @@ export default function PolicyDetailPage() {
         .from('policies')
         .select(`
           *,
-          clients!inner(id, full_name, doc_type, doc_number, email, phone, segment)
+          clients!inner(id, full_name, doc_type, doc_number, email, phone, segment),
+          insurance_line:insurance_lines(id, name, slug),
+          insurance_group:insurance_groups(id, name, slug)
         `)
         .eq('id', policyId)
         .eq('tenant_id', tenantId)
@@ -96,7 +108,9 @@ export default function PolicyDetailPage() {
       } else if (data) {
         setPolicy({
           ...data,
-          client: data.clients
+          client: data.clients,
+          insurance_line: data.insurance_line,
+          insurance_group: data.insurance_group
         } as PolicyWithClient);
       }
     } catch {
@@ -226,10 +240,18 @@ export default function PolicyDetailPage() {
                     <dd className="font-medium">{policy.insurer}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm text-muted-foreground">Ramo</dt>
+                    <dt className="text-sm text-muted-foreground">Grupo</dt>
                     <dd>
                       <Badge variant="outline">
-                        {POLICY_LINE_LABELS[policy.line as PolicyLine]}
+                        {policy.insurance_line?.name || POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line || '-'}
+                      </Badge>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-muted-foreground">Ramo</dt>
+                    <dd>
+                      <Badge variant="secondary">
+                        {policy.insurance_group?.name || '-'}
                       </Badge>
                     </dd>
                   </div>
