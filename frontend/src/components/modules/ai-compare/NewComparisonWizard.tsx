@@ -58,6 +58,15 @@ interface InsuranceLine {
   has_ai_prompt: boolean;
 }
 
+interface InsuranceGroup {
+  id: string;
+  name: string;
+  slug: string;
+  line_id: string;
+  has_ai_prompt: boolean;
+  line_name?: string;
+}
+
 interface NewComparisonWizardProps {
   open: boolean;
   onClose: () => void;
@@ -87,33 +96,43 @@ export function NewComparisonWizard({
   const [errors, setErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Estado para grupos con AI prompt
+  // Estado para ramos con AI prompt
+  const [aiEnabledGroups, setAiEnabledGroups] = useState<InsuranceGroup[]>([]);
   const [aiEnabledLines, setAiEnabledLines] = useState<InsuranceLine[]>([]);
   const [loadingLines, setLoadingLines] = useState(true);
 
-  // Cargar grupos con has_ai_prompt = true
+  // Cargar ramos con has_ai_prompt = true
   useEffect(() => {
-    async function loadAiEnabledLines() {
+    async function loadAiEnabledGroups() {
       if (!open) return;
       setLoadingLines(true);
 
       try {
         const supabase = getBrowserClient();
+        
+        // Cargar ramos (insurance_groups) con has_ai_prompt = true
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
-          .from('insurance_lines')
-          .select('id, name, slug, has_ai_prompt')
+          .from('insurance_groups')
+          .select(`
+            id, name, slug, line_id, has_ai_prompt,
+            line:insurance_lines(id, name, slug)
+          `)
           .eq('has_ai_prompt', true)
           .eq('is_active', true)
           .order('display_order');
 
         if (error) {
-          console.error('Error loading AI-enabled lines:', error);
-          // Fallback a líneas estáticas si hay error
-          setAiEnabledLines([]);
+          console.error('Error loading AI-enabled groups:', error);
+          setAiEnabledGroups([]);
         } else if (data && data.length > 0) {
-          setAiEnabledLines(data);
-          // Seleccionar la primera línea por defecto
+          // Mapear para incluir el nombre del grupo (línea)
+          const groupsWithLineName = data.map((g: any) => ({
+            ...g,
+            line_name: g.line?.name || 'Sin grupo'
+          }));
+          setAiEnabledGroups(groupsWithLineName);
+          // Seleccionar el primer ramo por defecto
           setLine(data[0].slug as PolicyLine);
         }
       } catch (error) {
@@ -123,13 +142,13 @@ export function NewComparisonWizard({
       }
     }
 
-    loadAiEnabledLines();
+    loadAiEnabledGroups();
   }, [open]);
 
-  // Obtener el nombre del grupo seleccionado
+  // Obtener el nombre del ramo seleccionado
   const getLineName = (lineSlug: string): string => {
-    const found = aiEnabledLines.find(l => l.slug === lineSlug);
-    if (found) return found.name;
+    const found = aiEnabledGroups.find(g => g.slug === lineSlug);
+    if (found) return `${found.name} (${found.line_name})`;
     // Fallback a labels estáticos
     return POLICY_LINE_LABELS[lineSlug as PolicyLine] || lineSlug;
   };
@@ -249,7 +268,7 @@ export function NewComparisonWizard({
   const canProceed = () => {
     if (step === 1) {
       const hasClientOrProspect = clientMode === 'existing' ? !!clientId : !!prospectName.trim();
-      const hasValidLine = aiEnabledLines.length > 0 && !!line;
+      const hasValidLine = aiEnabledGroups.length > 0 && !!line;
       return hasClientOrProspect && hasValidLine;
     }
     if (step === 2) return files.length >= 2;
@@ -370,34 +389,35 @@ export function NewComparisonWizard({
                 )}
 
                 <div className="space-y-2">
-                  <Label>Grupo de seguro *</Label>
+                  <Label>Ramo de seguro *</Label>
                   {loadingLines ? (
                     <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Cargando grupos...</span>
+                      <span className="text-sm text-muted-foreground">Cargando ramos...</span>
                     </div>
-                  ) : aiEnabledLines.length === 0 ? (
+                  ) : aiEnabledGroups.length === 0 ? (
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                       <p className="text-sm text-amber-700">
-                        No hay grupos configurados con IA. Contacta al administrador.
+                        No hay ramos configurados con IA. Contacta al administrador.
                       </p>
                     </div>
                   ) : (
                     <Select value={line} onValueChange={(v) => setLine(v as PolicyLine)}>
                       <SelectTrigger data-testid="line-select">
-                        <SelectValue placeholder="Seleccionar grupo" />
+                        <SelectValue placeholder="Seleccionar ramo" />
                       </SelectTrigger>
                       <SelectContent>
-                        {aiEnabledLines.map((aiLine) => (
-                          <SelectItem key={aiLine.id} value={aiLine.slug}>
-                            {aiLine.name}
+                        {aiEnabledGroups.map((group) => (
+                          <SelectItem key={group.id} value={group.slug}>
+                            {group.name}
+                            <span className="text-muted-foreground ml-2">({group.line_name})</span>
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Solo se muestran grupos con prompts de IA configurados
+                    Solo se muestran ramos con prompts de IA configurados
                   </p>
                 </div>
               </div>

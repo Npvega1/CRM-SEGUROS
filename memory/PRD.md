@@ -119,11 +119,14 @@
 - Migración: `00013_policies_catalog_relations.sql` (nuevas columnas en policies)
 - Archivo modificado: `components/modules/policies/PolicyForm.tsx`
 
-### ✅ Fase 4 - Filtrar Comparativos IA (Completada - Marzo 2026)
-- El wizard de nuevo comparativo solo muestra grupos con `has_ai_prompt = true`
-- Carga dinámica de grupos desde `insurance_lines`
-- Mensaje de advertencia si no hay grupos configurados
-- Archivo modificado: `components/modules/ai-compare/NewComparisonWizard.tsx`
+### ✅ Fase 4 - Filtrar Comparativos IA por Ramo (Completada - Marzo 2026)
+- `has_ai_prompt` movido al nivel de Ramo (insurance_groups) para control granular
+- El wizard de nuevo comparativo muestra solo Ramos con `has_ai_prompt = true`
+- En Super Admin → Catálogos → Ramos: toggle de IA por cada ramo
+- Migración: `00014_ramos_ai_prompt.sql`
+- Archivos modificados: 
+  - `components/modules/ai-compare/NewComparisonWizard.tsx`
+  - `app/(superadmin)/admin/catalogos/grupos/page.tsx`
 
 ## Backlog (P0/P1/P2)
 

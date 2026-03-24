@@ -48,6 +48,7 @@ import {
   RefreshCw,
   Loader2,
   Layers,
+  Brain,
 } from 'lucide-react';
 
 interface InsuranceGroup {
@@ -56,6 +57,7 @@ interface InsuranceGroup {
   slug: string;
   line_id: string;
   is_active: boolean;
+  has_ai_prompt: boolean;
   display_order: number;
   line_name?: string;
   line_unit?: string;
@@ -223,6 +225,19 @@ export default function GruposPage() {
     }
   };
 
+  const toggleAiPrompt = async (group: InsuranceGroup) => {
+    try {
+      const { error } = await supabase
+        .from('insurance_groups')
+        .update({ has_ai_prompt: !group.has_ai_prompt })
+        .eq('id', group.id);
+      if (error) throw error;
+      fetchGroups();
+    } catch (error) {
+      console.error('Error toggling AI prompt:', error);
+    }
+  };
+
   const filteredGroups = groups.filter((g) => {
     const matchesSearch = g.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesLine = lineFilter === 'all' || g.line_id === lineFilter;
@@ -337,8 +352,9 @@ export default function GruposPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-zinc-800 hover:bg-transparent">
-                    <TableHead className="text-zinc-400">Grupo</TableHead>
+                    <TableHead className="text-zinc-400">Ramo</TableHead>
                     <TableHead className="text-zinc-400">Slug</TableHead>
+                    <TableHead className="text-zinc-400 text-center">IA</TableHead>
                     <TableHead className="text-zinc-400">Estado</TableHead>
                     <TableHead className="text-zinc-400 text-right">Acciones</TableHead>
                   </TableRow>
@@ -353,6 +369,20 @@ export default function GruposPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-zinc-400 font-mono text-sm">{group.slug}</TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleAiPrompt(group)}
+                          className={group.has_ai_prompt 
+                            ? "text-green-400 hover:text-green-300 hover:bg-green-500/10"
+                            : "text-zinc-500 hover:text-zinc-400 hover:bg-zinc-800"
+                          }
+                          title={group.has_ai_prompt ? 'Tiene prompt IA activo' : 'Sin prompt IA'}
+                        >
+                          <Brain className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                       <TableCell>
                         <Badge
                           className={group.is_active ? 'bg-green-500/20 text-green-400' : 'bg-zinc-500/20 text-zinc-400'}
