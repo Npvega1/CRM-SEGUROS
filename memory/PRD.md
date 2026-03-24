@@ -98,14 +98,38 @@
 - Audit logs con filtros
 - Estado de RLS por tabla
 
+## Catálogos de Seguros (Fase 1-4)
+
+### ✅ Fase 1 - Catálogos Globales (Completada)
+- Tablas: `insurance_companies`, `insurance_lines` (Grupos), `insurance_groups` (Ramos)
+- Migración: `00012_insurance_catalogs.sql`
+- UI en Super Admin: `/admin/catalogos/*` para CRUD de catálogos
+
+### ✅ Fase 2 - Configuración de Compañías por Tenant (Completada - Marzo 2026)
+- Nueva pestaña "Compañías" en Configuración del Tenant (`/settings`)
+- Switch para activar/desactivar compañías de seguros por tenant
+- Campo para código de agente por compañía
+- Tabla: `tenant_companies` con RLS
+
+### 🔲 Fase 3 - Formulario de Nueva Póliza (Pendiente)
+- Selección en cascada: Compañía → Grupo → Ramo
+- Filtrar compañías basándose en las activadas por el tenant
+- Archivo: `app/(tenant)/policies/new/page.tsx`
+
+### 🔲 Fase 4 - Filtrar Comparativos IA (Pendiente)
+- Mostrar solo Grupos con `has_ai_prompt = true`
+- Archivo: `app/(tenant)/comparisons/new/page.tsx`
+
 ## Backlog (P0/P1/P2)
 
 ### P0 - Crítico
-- [ ] Ejecutar migración SQL en Supabase
+- [x] ~~Ejecutar migración SQL en Supabase~~ (migración 00012 creada)
 - [ ] Crear usuario superadmin con role en app_metadata
 - [ ] Configurar credenciales reales de Supabase
 
 ### P1 - Importante
+- [ ] **Fase 3:** Modificar formulario de Nueva Póliza con selección en cascada
+- [ ] **Fase 4:** Filtrar Comparativos IA por grupos con prompt activo
 - [ ] Integrar Claude API real para test de prompts
 - [ ] Implementar email real (Resend/SendGrid)
 - [ ] Magic Link OTP real para portal cliente
@@ -143,8 +167,9 @@
 - Tipos Supabase: actualizar manualmente al agregar columnas
 
 ## Próximos Pasos
-1. Desplegar en Vercel con credenciales reales
-2. Ejecutar migración 00011_superadmin.sql
-3. Crear usuario superadmin en Supabase Auth
-4. Probar flujo completo de Super Admin
-5. Integrar Claude API real con Emergent LLM Key
+1. Probar Fase 2 (pestaña Compañías) con credenciales reales de Supabase
+2. Implementar Fase 3: Formulario de Nueva Póliza con selección en cascada
+3. Implementar Fase 4: Filtrar Comparativos IA
+4. Desplegar en Vercel con credenciales reales
+5. Crear usuario superadmin en Supabase Auth
+6. Integrar Claude API real con Emergent LLM Key
