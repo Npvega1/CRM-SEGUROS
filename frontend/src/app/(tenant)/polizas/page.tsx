@@ -53,6 +53,15 @@ import {
   Clock
 } from 'lucide-react';
 
+interface PolicyWithRelations extends Policy {
+  client_name?: string;
+  insurance_line?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+}
+
 interface ExpiringPolicy {
   id: string;
   policy_number: string;
@@ -79,7 +88,7 @@ interface PolicyStats {
 export default function PoliciesPage() {
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
 
-  const [policies, setPolicies] = useState<Array<Policy & { client_name?: string }>>([]);
+  const [policies, setPolicies] = useState<PolicyWithRelations[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
@@ -102,7 +111,8 @@ export default function PoliciesPage() {
         .from('policies')
         .select(`
           *,
-          clients!inner(full_name)
+          clients!inner(full_name),
+          insurance_line:insurance_lines(id, name, slug)
         `, { count: 'exact' })
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
@@ -123,11 +133,12 @@ export default function PoliciesPage() {
       if (error) {
         console.error('Error loading policies:', error);
       } else {
-        // Map client name
+        // Map client name and insurance line
         const mappedPolicies = (data || []).map((p: Record<string, unknown>) => ({
           ...p,
-          client_name: (p.clients as { full_name: string })?.full_name
-        })) as Array<Policy & { client_name?: string }>;
+          client_name: (p.clients as { full_name: string })?.full_name,
+          insurance_line: p.insurance_line as PolicyWithRelations['insurance_line']
+        })) as PolicyWithRelations[];
         setPolicies(mappedPolicies);
         setTotal(count || 0);
       }
@@ -411,7 +422,9 @@ export default function PoliciesPage() {
                     <TableCell>{policy.client_name || 'N/A'}</TableCell>
                     <TableCell>{policy.insurer}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{POLICY_LINE_LABELS[policy.line as PolicyLine]}</Badge>
+                      <Badge variant="outline">
+                        {policy.insurance_line?.name || POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line || '-'}
+                      </Badge>
                     </TableCell>
                     <TableCell>{formatPremium(policy.premium)}</TableCell>
                     <TableCell>
