@@ -172,8 +172,8 @@
 - Storage privado: usar `createSignedUrl()`, no `.download()`
 - Tipos Supabase: actualizar manualmente al agregar columnas
 
-## Próximos Pasos
-1. Probar tipo "Cotización" con FIANZAS (1 archivo)
-2. Probar tipo "Comparativo" con otros ramos (2+ archivos)
-3. Integrar Claude real para test de prompts
-4. Desplegar backend actualizado
+## Próximos Pasos (Siguiente Sesión)
+1. **PENDIENTE:** Desplegar backend en Railway para que funcionen las cotizaciones (1 archivo)
+2. Configurar `NEXT_PUBLIC_FASTAPI_BACKEND_URL` en Vercel
+3. Probar cotizaciones de FIANZAS
+4. Integrar Claude real para test de prompts
