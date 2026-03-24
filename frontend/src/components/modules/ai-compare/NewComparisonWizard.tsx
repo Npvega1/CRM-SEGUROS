@@ -65,6 +65,8 @@ interface InsuranceGroup {
   line_id: string;
   has_ai_prompt: boolean;
   line_name?: string;
+  operation_type?: 'comparison' | 'quotation';
+  min_files?: number;
 }
 
 interface NewComparisonWizardProps {
@@ -115,7 +117,7 @@ export function NewComparisonWizard({
         const { data, error } = await (supabase as any)
           .from('insurance_groups')
           .select(`
-            id, name, slug, line_id, has_ai_prompt,
+            id, name, slug, line_id, has_ai_prompt, operation_type, min_files,
             line:insurance_lines(id, name, slug)
           `)
           .eq('has_ai_prompt', true)
@@ -151,6 +153,23 @@ export function NewComparisonWizard({
     if (found) return `${found.name} (${found.line_name})`;
     // Fallback a labels estáticos
     return POLICY_LINE_LABELS[lineSlug as PolicyLine] || lineSlug;
+  };
+
+  // Obtener el ramo seleccionado
+  const getSelectedGroup = (): InsuranceGroup | undefined => {
+    return aiEnabledGroups.find(g => g.slug === line);
+  };
+
+  // Obtener el mínimo de archivos requeridos
+  const getMinFiles = (): number => {
+    const group = getSelectedGroup();
+    return group?.min_files || 2;
+  };
+
+  // Verificar si es tipo cotización (1 archivo) o comparativo (2+ archivos)
+  const isQuotationType = (): boolean => {
+    const group = getSelectedGroup();
+    return group?.operation_type === 'quotation';
   };
 
   const resetForm = () => {
@@ -271,7 +290,10 @@ export function NewComparisonWizard({
       const hasValidLine = aiEnabledGroups.length > 0 && !!line;
       return hasClientOrProspect && hasValidLine;
     }
-    if (step === 2) return files.length >= 2;
+    if (step === 2) {
+      const minFiles = getMinFiles();
+      return files.length >= minFiles;
+    }
     return true;
   };
 
@@ -291,7 +313,9 @@ export function NewComparisonWizard({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[600px]" data-testid="new-comparison-wizard">
         <DialogHeader>
-          <DialogTitle>Nuevo Comparativo</DialogTitle>
+          <DialogTitle>
+            {isQuotationType() ? 'Nueva Cotización' : 'Nuevo Comparativo'}
+          </DialogTitle>
         </DialogHeader>
 
         {/* Step Indicator */}
@@ -439,10 +463,15 @@ export function NewComparisonWizard({
                   <p className="text-sm font-medium">
                     {isDragActive
                       ? 'Suelta los archivos aquí...'
-                      : 'Arrastra cotizaciones o haz clic para seleccionar'}
+                      : isQuotationType() 
+                        ? 'Arrastra el contrato o haz clic para seleccionar'
+                        : 'Arrastra cotizaciones o haz clic para seleccionar'}
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
-                    PDF o DOCX, máximo 10MB por archivo (2-8 archivos)
+                    PDF o DOCX, máximo 10MB por archivo 
+                    {isQuotationType() 
+                      ? ' (mínimo 1 archivo)' 
+                      : ` (mínimo ${getMinFiles()} archivos)`}
                   </p>
                 </div>
 

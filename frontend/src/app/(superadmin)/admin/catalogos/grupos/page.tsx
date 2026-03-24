@@ -49,6 +49,8 @@ import {
   Loader2,
   Layers,
   Brain,
+  FileText,
+  Files,
 } from 'lucide-react';
 
 interface InsuranceGroup {
@@ -58,6 +60,8 @@ interface InsuranceGroup {
   line_id: string;
   is_active: boolean;
   has_ai_prompt: boolean;
+  operation_type: 'comparison' | 'quotation';
+  min_files: number;
   display_order: number;
   line_name?: string;
   line_unit?: string;
@@ -238,6 +242,22 @@ export default function GruposPage() {
     }
   };
 
+  const toggleOperationType = async (group: InsuranceGroup) => {
+    try {
+      const newType = group.operation_type === 'comparison' ? 'quotation' : 'comparison';
+      const newMinFiles = newType === 'quotation' ? 1 : 2;
+      
+      const { error } = await supabase
+        .from('insurance_groups')
+        .update({ operation_type: newType, min_files: newMinFiles })
+        .eq('id', group.id);
+      if (error) throw error;
+      fetchGroups();
+    } catch (error) {
+      console.error('Error toggling operation type:', error);
+    }
+  };
+
   const filteredGroups = groups.filter((g) => {
     const matchesSearch = g.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesLine = lineFilter === 'all' || g.line_id === lineFilter;
@@ -355,6 +375,7 @@ export default function GruposPage() {
                     <TableHead className="text-zinc-400">Ramo</TableHead>
                     <TableHead className="text-zinc-400">Slug</TableHead>
                     <TableHead className="text-zinc-400 text-center">IA</TableHead>
+                    <TableHead className="text-zinc-400 text-center">Tipo</TableHead>
                     <TableHead className="text-zinc-400">Estado</TableHead>
                     <TableHead className="text-zinc-400 text-right">Acciones</TableHead>
                   </TableRow>
@@ -381,6 +402,25 @@ export default function GruposPage() {
                           title={group.has_ai_prompt ? 'Tiene prompt IA activo' : 'Sin prompt IA'}
                         >
                           <Brain className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleOperationType(group)}
+                          className={group.operation_type === 'quotation'
+                            ? "text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                            : "text-purple-400 hover:text-purple-300 hover:bg-purple-500/10"
+                          }
+                          title={group.operation_type === 'quotation' 
+                            ? 'Cotización (1 archivo)' 
+                            : 'Comparativo (2+ archivos)'}
+                        >
+                          {group.operation_type === 'quotation' 
+                            ? <FileText className="h-4 w-4" />
+                            : <Files className="h-4 w-4" />
+                          }
                         </Button>
                       </TableCell>
                       <TableCell>
