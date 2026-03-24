@@ -119,9 +119,11 @@
 - Migración: `00013_policies_catalog_relations.sql` (nuevas columnas en policies)
 - Archivo modificado: `components/modules/policies/PolicyForm.tsx`
 
-### 🔲 Fase 4 - Filtrar Comparativos IA (Pendiente)
-- Mostrar solo Grupos con `has_ai_prompt = true`
-- Archivo: `app/(tenant)/comparisons/new/page.tsx`
+### ✅ Fase 4 - Filtrar Comparativos IA (Completada - Marzo 2026)
+- El wizard de nuevo comparativo solo muestra grupos con `has_ai_prompt = true`
+- Carga dinámica de grupos desde `insurance_lines`
+- Mensaje de advertencia si no hay grupos configurados
+- Archivo modificado: `components/modules/ai-compare/NewComparisonWizard.tsx`
 
 ## Backlog (P0/P1/P2)
 
@@ -131,7 +133,6 @@
 - [ ] Configurar credenciales reales de Supabase
 
 ### P1 - Importante
-- [ ] **Fase 4:** Filtrar Comparativos IA por grupos con prompt activo
 - [ ] Integrar Claude API real para test de prompts
 - [ ] Implementar email real (Resend/SendGrid)
 - [ ] Magic Link OTP real para portal cliente
@@ -169,9 +170,8 @@
 - Tipos Supabase: actualizar manualmente al agregar columnas
 
 ## Próximos Pasos
-1. Ejecutar migración `00013_policies_catalog_relations.sql` en Supabase
-2. Probar formulario de Nueva Póliza con selección en cascada
-3. Implementar Fase 4: Filtrar Comparativos IA
-4. Desplegar en Vercel con credenciales reales
-5. Crear usuario superadmin en Supabase Auth
-6. Integrar Claude API real con Emergent LLM Key
+1. Probar Fase 4: Verificar que solo aparecen grupos con has_ai_prompt = true
+2. Configurar prompts de IA en Super Admin para los grupos deseados
+3. Desplegar en Vercel con credenciales reales
+4. Crear usuario superadmin en Supabase Auth
+5. Integrar Claude API real con Emergent LLM Key

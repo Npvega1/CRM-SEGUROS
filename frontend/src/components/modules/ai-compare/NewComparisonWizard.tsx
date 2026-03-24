@@ -3,9 +3,10 @@
 // =====================================================
 // COMPONENTE: NewComparisonWizard
 // Wizard para crear un nuevo comparativo
+// Fase 4: Solo muestra grupos con has_ai_prompt = true
 // =====================================================
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import {
   Dialog,
@@ -30,6 +31,7 @@ import {
   getFileType
 } from '@/lib/validations/comparisons';
 import { POLICY_LINE_LABELS, type PolicyLine } from '@/lib/validations/policies';
+import { getBrowserClient } from '@/lib/supabase/client';
 import { 
   Upload, 
   X, 
@@ -47,6 +49,13 @@ import {
 interface FileWithPreview extends File {
   id: string;
   base64?: string;
+}
+
+interface InsuranceLine {
+  id: string;
+  name: string;
+  slug: string;
+  has_ai_prompt: boolean;
 }
 
 interface NewComparisonWizardProps {
@@ -77,6 +86,53 @@ export function NewComparisonWizard({
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Estado para grupos con AI prompt
+  const [aiEnabledLines, setAiEnabledLines] = useState<InsuranceLine[]>([]);
+  const [loadingLines, setLoadingLines] = useState(true);
+
+  // Cargar grupos con has_ai_prompt = true
+  useEffect(() => {
+    async function loadAiEnabledLines() {
+      if (!open) return;
+      setLoadingLines(true);
+
+      try {
+        const supabase = getBrowserClient();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from('insurance_lines')
+          .select('id, name, slug, has_ai_prompt')
+          .eq('has_ai_prompt', true)
+          .eq('is_active', true)
+          .order('display_order');
+
+        if (error) {
+          console.error('Error loading AI-enabled lines:', error);
+          // Fallback a líneas estáticas si hay error
+          setAiEnabledLines([]);
+        } else if (data && data.length > 0) {
+          setAiEnabledLines(data);
+          // Seleccionar la primera línea por defecto
+          setLine(data[0].slug as PolicyLine);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+      } finally {
+        setLoadingLines(false);
+      }
+    }
+
+    loadAiEnabledLines();
+  }, [open]);
+
+  // Obtener el nombre del grupo seleccionado
+  const getLineName = (lineSlug: string): string => {
+    const found = aiEnabledLines.find(l => l.slug === lineSlug);
+    if (found) return found.name;
+    // Fallback a labels estáticos
+    return POLICY_LINE_LABELS[lineSlug as PolicyLine] || lineSlug;
+  };
 
   const resetForm = () => {
     setStep(1);
@@ -193,7 +249,8 @@ export function NewComparisonWizard({
   const canProceed = () => {
     if (step === 1) {
       const hasClientOrProspect = clientMode === 'existing' ? !!clientId : !!prospectName.trim();
-      return hasClientOrProspect && !!line;
+      const hasValidLine = aiEnabledLines.length > 0 && !!line;
+      return hasClientOrProspect && hasValidLine;
     }
     if (step === 2) return files.length >= 2;
     return true;
@@ -313,21 +370,35 @@ export function NewComparisonWizard({
                 )}
 
                 <div className="space-y-2">
-                  <Label>Ramo de seguro *</Label>
-                  <Select value={line} onValueChange={(v) => setLine(v as PolicyLine)}>
-                    <SelectTrigger data-testid="line-select">
-                      <SelectValue placeholder="Seleccionar ramo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Object.entries(POLICY_LINE_LABELS) as [PolicyLine, string][]).map(
-                        ([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
+                  <Label>Grupo de seguro *</Label>
+                  {loadingLines ? (
+                    <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Cargando grupos...</span>
+                    </div>
+                  ) : aiEnabledLines.length === 0 ? (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-sm text-amber-700">
+                        No hay grupos configurados con IA. Contacta al administrador.
+                      </p>
+                    </div>
+                  ) : (
+                    <Select value={line} onValueChange={(v) => setLine(v as PolicyLine)}>
+                      <SelectTrigger data-testid="line-select">
+                        <SelectValue placeholder="Seleccionar grupo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {aiEnabledLines.map((aiLine) => (
+                          <SelectItem key={aiLine.id} value={aiLine.slug}>
+                            {aiLine.name}
                           </SelectItem>
-                        )
-                      )}
-                    </SelectContent>
-                  </Select>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Solo se muestran grupos con prompts de IA configurados
+                  </p>
                 </div>
               </div>
             )}
@@ -428,8 +499,8 @@ export function NewComparisonWizard({
                       </p>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Ramo:</span>
-                      <p className="font-medium">{POLICY_LINE_LABELS[line]}</p>
+                      <span className="text-muted-foreground">Grupo:</span>
+                      <p className="font-medium">{getLineName(line)}</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">
