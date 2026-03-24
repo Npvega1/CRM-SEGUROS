@@ -61,7 +61,10 @@ export const CreatePolicyInputSchema = z.object({
     .min(1, 'La aseguradora es requerida')
     .max(100, 'Máximo 100 caracteres')
     .transform(val => val.trim()),
-  line: PolicyLineEnum.default('otro'),
+  insurer_id: z.string().uuid().optional().nullable(),
+  line: z.string().min(1, 'La línea es requerida').default('otro'),
+  line_id: z.string().uuid().optional().nullable(),
+  group_id: z.string().uuid().optional().nullable(),
   status: PolicyStatusEnum.default('cotizacion'),
   premium: z.coerce.number()
     .min(0, 'La prima debe ser mayor o igual a 0'),
