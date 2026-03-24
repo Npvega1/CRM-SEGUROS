@@ -537,7 +537,9 @@ export function NewComparisonWizard({
             {step === 3 && (
               <div className="space-y-4 py-4">
                 <div className="bg-slate-50 rounded-lg p-4 space-y-3">
-                  <h4 className="font-medium">Resumen del comparativo</h4>
+                  <h4 className="font-medium">
+                    {isQuotationType() ? 'Resumen de la cotización' : 'Resumen del comparativo'}
+                  </h4>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-muted-foreground">
@@ -548,14 +550,16 @@ export function NewComparisonWizard({
                       </p>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Grupo:</span>
+                      <span className="text-muted-foreground">Ramo:</span>
                       <p className="font-medium">{getLineName(line)}</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-muted-foreground">Archivos:</span>
-                      <p className="font-medium">{files.length} cotizaciones</p>
+                      <p className="font-medium">
+                        {files.length} {isQuotationType() ? 'documento(s)' : 'cotización(es)'}
+                      </p>
                     </div>
                   </div>
                   <div>
@@ -574,8 +578,9 @@ export function NewComparisonWizard({
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-sm text-blue-800">
                     <Sparkles className="h-4 w-4 inline-block mr-1" />
-                    La IA analizará las cotizaciones y extraerá automáticamente la información
-                    para generar un cuadro comparativo.
+                    {isQuotationType() 
+                      ? 'La IA analizará el documento y generará automáticamente una cotización basada en la información extraída.'
+                      : 'La IA analizará las cotizaciones y extraerá automáticamente la información para generar un cuadro comparativo.'}
                   </p>
                 </div>
               </div>
@@ -616,7 +621,7 @@ export function NewComparisonWizard({
                   ) : (
                     <Sparkles className="h-4 w-4 mr-2" />
                   )}
-                  Generar Comparativo
+                  {isQuotationType() ? 'Generar Cotización' : 'Generar Comparativo'}
                 </Button>
               )}
             </div>
