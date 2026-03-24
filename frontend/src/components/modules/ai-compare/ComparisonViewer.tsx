@@ -40,7 +40,13 @@ interface InsurerData {
 
 interface ComparisonTable {
   line?: string;
-  insurers: InsurerData[];
+  type?: 'comparison' | 'quotation';
+  insurers?: InsurerData[];
+  quotation?: {
+    tipo_documento?: string;
+    datos_extraidos?: Record<string, string>;
+    cotizacion_sugerida?: Record<string, unknown>;
+  };
 }
 
 interface ComparisonViewerProps {
@@ -64,6 +70,70 @@ export function ComparisonViewer({
   const prospectName = (comparison as unknown as { prospect_name?: string }).prospect_name;
   const clientName = comparison.client?.full_name || prospectName || 'No especificado';
 
+  // Verificar si es cotización o comparativo
+  const isQuotation = table?.type === 'quotation';
+
+  // Si es cotización, mostrar vista diferente
+  if (isQuotation && table?.quotation) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Cotización Generada
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">Cliente:</span>
+              <p className="font-medium">{clientName}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Ramo:</span>
+              <p className="font-medium">{POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Tipo de documento:</span>
+              <p className="font-medium">{table.quotation.tipo_documento || 'No especificado'}</p>
+            </div>
+          </div>
+
+          {table.quotation.datos_extraidos && (
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm">Datos Extraídos</h4>
+              <div className="bg-slate-50 rounded-lg p-4 grid grid-cols-2 gap-3 text-sm">
+                {Object.entries(table.quotation.datos_extraidos).map(([key, value]) => (
+                  <div key={key}>
+                    <span className="text-muted-foreground capitalize">{key.replace(/_/g, ' ')}:</span>
+                    <p className="font-medium">{String(value)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {table.quotation.cotizacion_sugerida && (
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm">Cotización Sugerida</h4>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 grid grid-cols-2 gap-3 text-sm">
+                {Object.entries(table.quotation.cotizacion_sugerida).map(([key, value]) => (
+                  <div key={key}>
+                    <span className="text-muted-foreground capitalize">{key.replace(/_/g, ' ')}:</span>
+                    <p className="font-medium">
+                      {Array.isArray(value) ? value.join(', ') : String(value)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Vista de comparativo (múltiples aseguradoras)
   if (!table || !table.insurers || table.insurers.length === 0) {
     return (
       <Card>
