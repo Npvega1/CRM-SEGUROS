@@ -304,11 +304,8 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
       const systemPrompt = watch('prompt_system');
       const recommendationPrompt = watch('prompt_recommendation');
       
-      // Obtener la URL del backend
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-      
-      // Llamar al backend Python con Claude real
-      const response = await fetch(`${backendUrl}/api/ai/test-prompt`, {
+      // Llamar a la API de Vercel (Python serverless function)
+      const response = await fetch('/api/test-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
