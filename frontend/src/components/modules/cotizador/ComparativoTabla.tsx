@@ -18,6 +18,7 @@ import {
   DollarSign,
   Loader2,
   CheckCircle,
+  Gift,
 } from 'lucide-react';
 import {
   ResultadoAseguradora,
@@ -27,6 +28,7 @@ import {
   ValoresAsegurados,
   AMPARO_LABELS,
 } from '@/lib/services/cotizador-engine';
+import { getBeneficios, ProductoBeneficio } from '@/lib/data/beneficios-comparativo';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -348,7 +350,41 @@ export function ComparativoTabla({
                 ))}
               </tr>
 
-              {/* FILA 4: Valor a Pagar (Totales) */}
+              {/* FILA 4: Beneficios */}
+              <tr className="border-b border-slate-200">
+                <td className="p-3 font-medium text-slate-700 bg-slate-50">
+                  <div className="flex items-center gap-2">
+                    <Gift className="h-4 w-4 text-slate-500" />
+                    <span>Beneficios</span>
+                  </div>
+                </td>
+                {resultados.map((res) => {
+                  // Mapear nombre_corto a key de beneficios
+                  const nombreCortoKey = res.aseguradora.nombre_corto.toUpperCase();
+                  const beneficios = getBeneficios(nombreCortoKey, producto as ProductoBeneficio);
+                  return (
+                    <td 
+                      key={res.aseguradora.id} 
+                      className="p-3"
+                    >
+                      <ul className="space-y-1 text-xs">
+                        {beneficios.length > 0 ? (
+                          beneficios.slice(0, 6).map((beneficio, idx) => (
+                            <li key={idx} className="flex items-start gap-1">
+                              <CheckCircle className="h-3 w-3 text-blue-500 mt-0.5 flex-shrink-0" />
+                              <span className="text-slate-600">{beneficio}</span>
+                            </li>
+                          ))
+                        ) : (
+                          <li className="text-slate-400 italic">Sin beneficios registrados</li>
+                        )}
+                      </ul>
+                    </td>
+                  );
+                })}
+              </tr>
+
+              {/* FILA 5: Valor a Pagar (Totales) */}
               <tr className="bg-slate-100">
                 <td className="p-3 font-semibold text-slate-800">
                   <div className="flex items-center gap-2">
