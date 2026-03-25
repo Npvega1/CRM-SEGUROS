@@ -70,8 +70,9 @@ interface TenantAseguradora {
 interface CotizacionHistorial {
   id: string;
   producto: Producto;
-  prospect_name: string;
-  datos_cliente: DatosCliente;
+  nombre_cliente: string;
+  ciudad: string;
+  mejor_prima_total: number;
   created_at: string;
   status: string;
 }
@@ -187,10 +188,10 @@ export default function CotizadorPage() {
         .eq('tenant_id', tenantId);
       setTenantAseguradoras(tenantAsegData || []);
 
-      // Cargar historial de cotizaciones del tenant
+      // Cargar historial de cotizaciones deterministas del tenant
       const { data: historialData } = await supabase
-        .from('cotizaciones')
-        .select('id, producto, prospect_name, datos_cliente, created_at, status')
+        .from('cotizaciones_deterministas')
+        .select('id, producto, nombre_cliente, ciudad, mejor_prima_total, created_at, status')
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -254,7 +255,7 @@ export default function CotizadorPage() {
 
   // Calcular cotización
   const handleCalcular = async () => {
-    if (!producto) return;
+    if (!producto || !tenantId) return;
     
     setIsCalculating(true);
     try {
@@ -274,6 +275,53 @@ export default function CotizadorPage() {
         // Solo filtrar si hay al menos una aseguradora activa configurada
         if (activeIds.length > 0) {
           results = results.filter(r => activeIds.includes(r.aseguradora.id));
+        }
+      }
+      
+      // Guardar en historial si hay resultados
+      if (results.length > 0) {
+        const mejorResultado = results[0];
+        
+        // Preparar datos para guardar (sin las tasas por confidencialidad)
+        const resultadosParaGuardar = results.map(r => ({
+          aseguradora_id: r.aseguradora.id,
+          aseguradora_nombre: r.aseguradora.nombre,
+          aseguradora_nombre_corto: r.aseguradora.nombre_corto,
+          prima_total_neta: r.primaTotalNeta,
+          iva: r.iva,
+          prima_total: r.primaTotal,
+          amparos_count: r.primas.length,
+        }));
+        
+        const { error: saveError } = await supabase
+          .from('cotizaciones_deterministas')
+          .insert({
+            tenant_id: tenantId,
+            user_id: userId,
+            nombre_cliente: datosCliente.nombre,
+            nit_cliente: datosCliente.nit,
+            email_cliente: datosCliente.email,
+            telefono_cliente: datosCliente.telefono,
+            direccion_cliente: datosCliente.direccion,
+            ciudad: datosCliente.ciudad,
+            actividad_economica: datosCliente.actividadEconomica,
+            producto,
+            valores_asegurados: valoresAsegurados,
+            resultados: resultadosParaGuardar,
+            mejor_aseguradora_id: mejorResultado.aseguradora.id,
+            mejor_prima_total: mejorResultado.primaTotal,
+            factor_zona: mejorResultado.factorZona,
+            factor_antiguedad: mejorResultado.factorAntiguedad,
+            factor_siniestros: mejorResultado.factorSiniestros,
+            status: 'completada',
+          });
+        
+        if (saveError) {
+          console.error('Error guardando cotización:', saveError);
+          // No bloquear el flujo si falla el guardado
+        } else {
+          // Recargar historial
+          loadData();
         }
       }
       
@@ -408,16 +456,26 @@ export default function CotizadorPage() {
                     <div className="flex items-center gap-3">
                       <Badge variant="outline">{cot.producto}</Badge>
                       <div>
-                        <p className="font-medium text-sm">{cot.prospect_name || 'Sin nombre'}</p>
+                        <p className="font-medium text-sm">{cot.nombre_cliente || 'Sin nombre'}</p>
                         <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {cot.ciudad}
+                          <span className="mx-1">•</span>
                           <Calendar className="h-3 w-3" />
                           {new Date(cot.created_at).toLocaleDateString('es-CO')}
                         </p>
                       </div>
                     </div>
-                    <Badge variant={cot.status === 'ready' ? 'default' : 'secondary'}>
-                      {cot.status === 'ready' ? 'Completada' : cot.status}
-                    </Badge>
+                    <div className="text-right">
+                      {cot.mejor_prima_total && (
+                        <p className="font-semibold text-sm text-emerald-600">
+                          {formatCurrency(cot.mejor_prima_total)}
+                        </p>
+                      )}
+                      <Badge variant={cot.status === 'completada' ? 'default' : 'secondary'} className="mt-1">
+                        {cot.status === 'completada' ? 'Completada' : cot.status}
+                      </Badge>
+                    </div>
                   </div>
                 ))}
               </div>

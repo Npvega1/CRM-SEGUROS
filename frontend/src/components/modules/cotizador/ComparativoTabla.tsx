@@ -1,27 +1,25 @@
 'use client';
 
 // =====================================================
-// COMPONENT: Comparativo en Tabla
-// Muestra resultados como comparativo lado a lado (sin tasas)
+// COMPONENT: Cuadro Comparativo de Cotización
+// Rediseño basado en HTML de referencia "CUADRO BASE"
+// NOTA: Las TASAS son confidenciales - NO se muestran
 // =====================================================
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   Trophy,
   Download,
-  Info,
   Building,
+  Shield,
+  FileText,
+  Gift,
+  DollarSign,
+  Loader2,
+  CheckCircle,
 } from 'lucide-react';
 import {
   ResultadoAseguradora,
@@ -41,6 +39,33 @@ interface ComparativoTablaProps {
   valoresAsegurados: ValoresAsegurados;
 }
 
+// Colores de badge por aseguradora (fallbacks si no hay color_primario)
+const ASEGURADORA_COLORS: Record<string, { bg: string; text: string }> = {
+  'MAPFRE': { bg: '#dc2626', text: 'white' },
+  'BOLIVAR': { bg: '#1e40af', text: 'white' },
+  'SURA': { bg: '#0d9488', text: 'white' },
+  'AXA': { bg: '#2563eb', text: 'white' },
+  'MUNDIAL': { bg: '#7c3aed', text: 'white' },
+  'ESTADO': { bg: '#059669', text: 'white' },
+  'LIBERTY': { bg: '#eab308', text: 'black' },
+  'HDI': { bg: '#f97316', text: 'white' },
+  'SEGUROS GENERALES': { bg: '#64748b', text: 'white' },
+  'ALLIANZ': { bg: '#0284c7', text: 'white' },
+  'PREVISORA': { bg: '#16a34a', text: 'white' },
+  'EQUIDAD': { bg: '#be185d', text: 'white' },
+};
+
+// Obtener color de aseguradora
+function getAseguradoraColor(nombre: string, colorPrimario?: string) {
+  if (colorPrimario) {
+    return { bg: colorPrimario, text: 'white' };
+  }
+  const key = Object.keys(ASEGURADORA_COLORS).find(k => 
+    nombre.toUpperCase().includes(k)
+  );
+  return key ? ASEGURADORA_COLORS[key] : { bg: '#6b7280', text: 'white' };
+}
+
 export function ComparativoTabla({
   resultados,
   producto,
@@ -48,13 +73,14 @@ export function ComparativoTabla({
   valoresAsegurados,
 }: ComparativoTablaProps) {
   const tablaRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   if (resultados.length === 0) {
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <Info className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">No hay resultados</h3>
+          <Shield className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold mb-2">No hay resultados</h3>
           <p className="text-muted-foreground text-sm">
             No se encontraron aseguradoras con tasas disponibles para este producto
             o los valores asegurados son insuficientes.
@@ -71,28 +97,38 @@ export function ComparativoTabla({
 
   // El mejor precio es el primero (viene ordenado)
   const mejorPrecio = resultados[0];
+  const mejorPrecioId = mejorPrecio.aseguradora.id;
 
   // Calcular valor total asegurado
   const valorTotalAsegurado = Object.entries(valoresAsegurados)
     .filter(([key]) => key !== 'anoConstruccion')
     .reduce((sum, [, val]) => sum + (typeof val === 'number' ? val : 0), 0);
 
+  // Fecha actual formateada
+  const fechaActual = new Date().toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+
+  // Vigencia (1 año desde hoy)
+  const fechaInicio = new Date();
+  const fechaFin = new Date();
+  fechaFin.setFullYear(fechaFin.getFullYear() + 1);
+  const vigencia = `${fechaInicio.toLocaleDateString('es-CO')} – ${fechaFin.toLocaleDateString('es-CO')}`;
+
   // Generar PDF
   const handleDownloadPDF = async () => {
     if (!tablaRef.current) return;
+    setIsGeneratingPDF(true);
 
     try {
-      // Mostrar loading
-      const originalBg = tablaRef.current.style.background;
-      tablaRef.current.style.background = 'white';
-      
       const canvas = await html2canvas(tablaRef.current, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
+        logging: false,
       });
-      
-      tablaRef.current.style.background = originalBg;
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
@@ -101,261 +137,340 @@ export function ComparativoTabla({
         format: 'a4',
       });
 
-      // Agregar título
-      pdf.setFontSize(16);
-      pdf.text(`Comparativo de Cotización - ${producto}`, 14, 15);
-      pdf.setFontSize(10);
-      pdf.text(`Cliente: ${datosCliente.nombre}`, 14, 22);
-      pdf.text(`Ciudad: ${datosCliente.ciudad} | Fecha: ${new Date().toLocaleDateString('es-CO')}`, 14, 27);
-      pdf.text(`Valor Total Asegurado: ${formatCurrency(valorTotalAsegurado)}`, 14, 32);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
 
-      // Agregar imagen de la tabla
-      const imgWidth = 270;
+      // Calcular proporciones
+      const imgWidth = pdfWidth - 20;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 14, 38, imgWidth, Math.min(imgHeight, 150));
 
-      // Agregar pie de página
+      // Si la imagen es muy alta, ajustar
+      const maxImgHeight = pdfHeight - 30;
+      const finalImgHeight = Math.min(imgHeight, maxImgHeight);
+      const finalImgWidth = (finalImgHeight / imgHeight) * imgWidth;
+
+      // Centrar horizontalmente
+      const xOffset = (pdfWidth - finalImgWidth) / 2;
+
+      pdf.addImage(imgData, 'PNG', xOffset, 10, finalImgWidth, finalImgHeight);
+
+      // Pie de página
       pdf.setFontSize(8);
-      pdf.text('* Las primas incluyen IVA del 19%. Sujeto a condiciones de aceptación.', 14, 200);
+      pdf.setTextColor(128);
+      pdf.text(
+        '* Las primas incluyen IVA del 19%. Sujeto a condiciones de aceptación de cada aseguradora.',
+        10,
+        pdfHeight - 10
+      );
 
-      pdf.save(`comparativo-${producto}-${datosCliente.nombre.replace(/\s+/g, '-')}.pdf`);
+      const fileName = `Cotizacion-${producto}-${datosCliente.nombre.replace(/\s+/g, '_')}-${fechaActual.replace(/\//g, '-')}.pdf`;
+      pdf.save(fileName);
     } catch (error) {
       console.error('Error generando PDF:', error);
+    } finally {
+      setIsGeneratingPDF(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-green-500 rounded-full">
-                <Trophy className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm text-green-700">Mejor precio</p>
-                <p className="text-xl font-bold text-green-800">
-                  {mejorPrecio.aseguradora.nombre_corto}
-                </p>
-                <p className="text-lg font-semibold text-green-600">
-                  {formatCurrency(mejorPrecio.primaTotal)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-slate-100 rounded-full">
-                <Building className="h-6 w-6 text-slate-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Valor Total Asegurado</p>
-                <p className="text-lg font-semibold">{formatCurrency(valorTotalAsegurado)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {resultados.length} aseguradoras comparadas
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-slate-100 rounded-full">
-                <Info className="h-6 w-6 text-slate-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Factores aplicados</p>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  <Badge variant="outline" className="text-xs">
-                    {datosCliente.ciudad}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {valoresAsegurados.anoConstruccion}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
+    <div className="space-y-4">
       {/* Botón descargar PDF */}
       <div className="flex justify-end">
-        <Button onClick={handleDownloadPDF}>
-          <Download className="h-4 w-4 mr-2" />
-          Descargar PDF
+        <Button 
+          onClick={handleDownloadPDF} 
+          disabled={isGeneratingPDF}
+          className="bg-emerald-600 hover:bg-emerald-700"
+        >
+          {isGeneratingPDF ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Generando PDF...
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4 mr-2" />
+              Descargar PDF
+            </>
+          )}
         </Button>
       </div>
 
-      {/* Tabla Comparativa */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Cuadro Comparativo de Primas</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0 overflow-x-auto" ref={tablaRef}>
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50">
-                <TableHead className="font-bold text-foreground sticky left-0 bg-slate-50 z-10 min-w-[180px]">
-                  Amparo
-                </TableHead>
-                {resultados.map((res, idx) => (
-                  <TableHead 
-                    key={res.aseguradora.id} 
-                    className={`text-center min-w-[140px] ${idx === 0 ? 'bg-green-50' : ''}`}
-                  >
-                    <div className="flex flex-col items-center gap-1">
-                      <div 
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: res.aseguradora.color_primario }}
-                      />
-                      <span className="font-bold text-foreground">
-                        {res.aseguradora.nombre_corto}
-                      </span>
-                      {idx === 0 && (
-                        <Badge className="bg-green-500 text-white text-[10px] py-0">
-                          Mejor
-                        </Badge>
-                      )}
-                    </div>
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {amparosUnicos.map((amparo) => (
-                <TableRow key={amparo}>
-                  <TableCell className="font-medium sticky left-0 bg-white z-10">
-                    {AMPARO_LABELS[amparo] || amparo}
-                  </TableCell>
-                  {resultados.map((res, idx) => {
-                    const prima = res.primas.find(p => p.amparo === amparo);
-                    return (
-                      <TableCell 
-                        key={res.aseguradora.id} 
-                        className={`text-center font-mono ${idx === 0 ? 'bg-green-50/50' : ''}`}
-                      >
-                        {prima ? formatCurrency(prima.primaNeta) : '-'}
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))}
-              
-              {/* Fila de Prima Neta Total */}
-              <TableRow className="border-t-2 bg-slate-50">
-                <TableCell className="font-bold sticky left-0 bg-slate-50 z-10">
-                  Prima Neta
-                </TableCell>
-                {resultados.map((res, idx) => (
-                  <TableCell 
-                    key={res.aseguradora.id} 
-                    className={`text-center font-mono font-bold ${idx === 0 ? 'bg-green-100' : ''}`}
-                  >
-                    {formatCurrency(res.primaTotalNeta)}
-                  </TableCell>
-                ))}
-              </TableRow>
+      {/* Contenedor para captura PDF */}
+      <div ref={tablaRef} className="bg-white rounded-lg shadow-sm" data-testid="comparativo-tabla">
+        {/* Header con datos del cliente */}
+        <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white p-4 rounded-t-lg">
+          <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Cuadro Comparativo – {producto}
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div>
+              <span className="opacity-70">Cliente: </span>
+              <strong>{datosCliente.nombre || 'No especificado'}</strong>
+            </div>
+            <div>
+              <span className="opacity-70">Dirección: </span>
+              <strong>{datosCliente.direccion || datosCliente.ciudad}</strong>
+            </div>
+            <div>
+              <span className="opacity-70">Valor Asegurado: </span>
+              <strong>{formatCurrency(valorTotalAsegurado)}</strong>
+            </div>
+            <div>
+              <span className="opacity-70">Vigencia: </span>
+              <strong>{vigencia}</strong>
+            </div>
+          </div>
+        </div>
 
-              {/* Fila de IVA */}
-              <TableRow className="bg-slate-50">
-                <TableCell className="text-muted-foreground sticky left-0 bg-slate-50 z-10">
-                  IVA (19%)
-                </TableCell>
-                {resultados.map((res, idx) => (
-                  <TableCell 
-                    key={res.aseguradora.id} 
-                    className={`text-center font-mono text-muted-foreground ${idx === 0 ? 'bg-green-100' : ''}`}
-                  >
-                    {formatCurrency(res.iva)}
-                  </TableCell>
-                ))}
-              </TableRow>
+        {/* Tabla principal */}
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            {/* Header de aseguradoras */}
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="text-left p-3 font-semibold text-slate-700 min-w-[180px] border-b border-slate-200">
+                  Criterio
+                </th>
+                {resultados.map((res) => {
+                  const isBest = res.aseguradora.id === mejorPrecioId;
+                  const colors = getAseguradoraColor(
+                    res.aseguradora.nombre_corto,
+                    res.aseguradora.color_primario
+                  );
+                  return (
+                    <th 
+                      key={res.aseguradora.id} 
+                      className={`text-center p-3 min-w-[160px] border-b border-slate-200 ${
+                        isBest ? 'bg-emerald-50' : ''
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-2">
+                        <span
+                          className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide"
+                          style={{ backgroundColor: colors.bg, color: colors.text }}
+                        >
+                          {res.aseguradora.nombre_corto}
+                        </span>
+                        {isBest && (
+                          <Badge className="bg-emerald-500 text-white text-[10px] gap-1">
+                            <Trophy className="h-3 w-3" />
+                            Mejor Precio
+                          </Badge>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
 
-              {/* Fila de Prima Total */}
-              <TableRow className="bg-slate-100">
-                <TableCell className="font-bold text-lg sticky left-0 bg-slate-100 z-10">
-                  PRIMA TOTAL
-                </TableCell>
-                {resultados.map((res, idx) => (
-                  <TableCell 
-                    key={res.aseguradora.id} 
-                    className={`text-center font-mono font-bold text-lg ${
-                      idx === 0 ? 'bg-green-200 text-green-800' : ''
-                    }`}
-                  >
-                    {formatCurrency(res.primaTotal)}
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            <tbody>
+              {/* FILA 1: Valores Asegurados */}
+              <tr className="border-b border-slate-200">
+                <td className="p-3 font-medium text-slate-700 bg-slate-50">
+                  <div className="flex items-center gap-2">
+                    <Building className="h-4 w-4 text-slate-500" />
+                    <span>Valores Asegurados</span>
+                  </div>
+                </td>
+                {resultados.map((res) => {
+                  const isBest = res.aseguradora.id === mejorPrecioId;
+                  return (
+                    <td 
+                      key={res.aseguradora.id} 
+                      className={`p-3 ${isBest ? 'bg-emerald-50/50' : ''}`}
+                    >
+                      <ul className="space-y-1 text-xs">
+                        {valoresAsegurados.edificio > 0 && (
+                          <li>Edificio: <strong>{formatCurrency(valoresAsegurados.edificio)}</strong></li>
+                        )}
+                        {valoresAsegurados.mueblesEnseres > 0 && (
+                          <li>Muebles y Enseres: {formatCurrency(valoresAsegurados.mueblesEnseres)}</li>
+                        )}
+                        {valoresAsegurados.mercancias > 0 && (
+                          <li>Mercancías: {formatCurrency(valoresAsegurados.mercancias)}</li>
+                        )}
+                        {valoresAsegurados.equipoElectronicoFijo > 0 && (
+                          <li>Equipo Electrónico: {formatCurrency(valoresAsegurados.equipoElectronicoFijo)}</li>
+                        )}
+                        {valoresAsegurados.maquinaria > 0 && (
+                          <li>Maquinaria: {formatCurrency(valoresAsegurados.maquinaria)}</li>
+                        )}
+                        {valoresAsegurados.limiteRC > 0 && (
+                          <li>Resp. Civil: {formatCurrency(valoresAsegurados.limiteRC)}</li>
+                        )}
+                      </ul>
+                      <div className="mt-2 pt-2 border-t border-slate-200">
+                        <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                          Total: {formatCurrency(valorTotalAsegurado)}
+                        </span>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
 
-      {/* Deducibles */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Deducibles por Aseguradora</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50">
-                <TableHead className="font-bold text-foreground min-w-[180px]">
-                  Amparo
-                </TableHead>
-                {resultados.slice(0, 4).map((res) => (
-                  <TableHead 
-                    key={res.aseguradora.id} 
-                    className="text-center min-w-[200px]"
-                  >
-                    {res.aseguradora.nombre_corto}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {amparosUnicos.slice(0, 6).map((amparo) => (
-                <TableRow key={amparo}>
-                  <TableCell className="font-medium">
-                    {AMPARO_LABELS[amparo] || amparo}
-                  </TableCell>
-                  {resultados.slice(0, 4).map((res) => {
-                    const prima = res.primas.find(p => p.amparo === amparo);
-                    return (
-                      <TableCell 
-                        key={res.aseguradora.id} 
-                        className="text-center text-xs text-muted-foreground"
-                      >
-                        {prima?.deducible || '-'}
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              {/* FILA 2: Amparos / Coberturas con Primas */}
+              <tr className="border-b border-slate-200">
+                <td className="p-3 font-medium text-slate-700 bg-slate-50">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-slate-500" />
+                    <span>Amparos y Primas</span>
+                  </div>
+                </td>
+                {resultados.map((res) => {
+                  const isBest = res.aseguradora.id === mejorPrecioId;
+                  return (
+                    <td 
+                      key={res.aseguradora.id} 
+                      className={`p-3 ${isBest ? 'bg-emerald-50/50' : ''}`}
+                    >
+                      <ul className="space-y-1 text-xs">
+                        {res.primas.map((prima) => (
+                          <li key={prima.amparo} className="flex items-start gap-1">
+                            <CheckCircle className="h-3 w-3 text-emerald-500 mt-0.5 flex-shrink-0" />
+                            <span>
+                              {AMPARO_LABELS[prima.amparo] || prima.amparo}:{' '}
+                              <strong>{formatCurrency(prima.primaNeta)}</strong>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                  );
+                })}
+              </tr>
 
-      {/* Nota */}
-      <Card className="bg-slate-50 border-slate-200">
-        <CardContent className="py-4">
-          <p className="text-xs text-muted-foreground">
+              {/* FILA 3: Deducibles */}
+              <tr className="border-b border-slate-200">
+                <td className="p-3 font-medium text-slate-700 bg-slate-50">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-slate-500" />
+                    <span>Deducibles</span>
+                  </div>
+                </td>
+                {resultados.map((res) => {
+                  const isBest = res.aseguradora.id === mejorPrecioId;
+                  // Obtener deducibles únicos
+                  const deduciblesUnicos = Array.from(
+                    new Set(res.primas.map(p => p.deducible).filter(Boolean))
+                  );
+                  return (
+                    <td 
+                      key={res.aseguradora.id} 
+                      className={`p-3 ${isBest ? 'bg-emerald-50/50' : ''}`}
+                    >
+                      <ul className="space-y-1 text-xs">
+                        {res.primas.slice(0, 6).map((prima) => (
+                          <li key={prima.amparo}>
+                            {AMPARO_LABELS[prima.amparo] || prima.amparo}:{' '}
+                            <span className={prima.deducible?.toLowerCase().includes('sin deducible') 
+                              ? 'text-emerald-600 font-semibold' 
+                              : 'text-slate-600'
+                            }>
+                              {prima.deducible || 'Según condiciones'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                  );
+                })}
+              </tr>
+
+              {/* FILA 4: Factores Aplicados */}
+              <tr className="border-b border-slate-200">
+                <td className="p-3 font-medium text-slate-700 bg-slate-50">
+                  <div className="flex items-center gap-2">
+                    <Gift className="h-4 w-4 text-slate-500" />
+                    <span>Factores Aplicados</span>
+                  </div>
+                </td>
+                {resultados.map((res) => {
+                  const isBest = res.aseguradora.id === mejorPrecioId;
+                  return (
+                    <td 
+                      key={res.aseguradora.id} 
+                      className={`p-3 ${isBest ? 'bg-emerald-50/50' : ''}`}
+                    >
+                      <ul className="space-y-1 text-xs">
+                        <li>Zona ({datosCliente.ciudad}): <strong>{(res.factorZona * 100).toFixed(0)}%</strong></li>
+                        <li>Antigüedad ({valoresAsegurados.anoConstruccion}): <strong>{(res.factorAntiguedad * 100).toFixed(0)}%</strong></li>
+                        <li>Siniestralidad: <strong>{(res.factorSiniestros * 100).toFixed(0)}%</strong></li>
+                      </ul>
+                    </td>
+                  );
+                })}
+              </tr>
+
+              {/* FILA 5: Valor a Pagar (Totales) */}
+              <tr className="bg-slate-100">
+                <td className="p-3 font-semibold text-slate-800">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-slate-600" />
+                    <span>Valor a Pagar</span>
+                  </div>
+                </td>
+                {resultados.map((res) => {
+                  const isBest = res.aseguradora.id === mejorPrecioId;
+                  return (
+                    <td 
+                      key={res.aseguradora.id} 
+                      className={`p-3 text-center ${
+                        isBest 
+                          ? 'bg-emerald-100' 
+                          : ''
+                      }`}
+                    >
+                      <div className="space-y-1 text-xs">
+                        <p>Prima Neta: {formatCurrency(res.primaTotalNeta)}</p>
+                        <p>IVA 19%: {formatCurrency(res.iva)}</p>
+                      </div>
+                      <div className={`mt-2 text-lg font-bold ${
+                        isBest ? 'text-emerald-700' : 'text-slate-800'
+                      }`}>
+                        {formatCurrency(res.primaTotal)}
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        {isBest ? '⭐ Mejor precio' : 'Pago anual'}
+                      </p>
+                    </td>
+                  );
+                })}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Recomendación del Asesor */}
+        {resultados.length > 0 && (
+          <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-t border-emerald-200">
+            <div className="flex items-center gap-2 mb-2">
+              <Trophy className="h-5 w-5 text-amber-500" />
+              <span className="font-semibold text-slate-800">Recomendación</span>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle className="h-4 w-4 text-emerald-600" />
+              <span className="font-medium text-emerald-800">
+                Mejor opción: {mejorPrecio.aseguradora.nombre} – {formatCurrency(mejorPrecio.primaTotal)}/año
+              </span>
+            </div>
+            <p className="text-xs text-slate-600">
+              Con base en el análisis comparativo, <strong>{mejorPrecio.aseguradora.nombre}</strong> ofrece 
+              la prima más competitiva para la cobertura de {producto}. Esta cotización tiene validez de 30 días.
+            </p>
+          </div>
+        )}
+
+        {/* Disclaimer */}
+        <div className="p-3 bg-slate-50 border-t border-slate-200 rounded-b-lg">
+          <p className="text-[10px] text-slate-500 text-center">
             * Las primas mostradas incluyen IVA del 19%. Los valores están sujetos a condiciones de aceptación 
-            de cada aseguradora y pueden variar según el análisis de riesgo. Esta cotización tiene validez de 
-            30 días a partir de la fecha de generación.
+            de cada aseguradora y pueden variar según el análisis de riesgo. Cotización generada el {fechaActual}.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

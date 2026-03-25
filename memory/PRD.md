@@ -197,11 +197,29 @@
 EMERGENT_LLM_KEY=sk-emergent-c3c4103Ac62B474038
 ```
 
+## Pivot Estructural - Cotizador Determinista (Marzo 2026)
+
+### Arquitectura del Pivot
+- **IA limitada a FIANZAS**: La función serverless de comparativos IA solo procesa el ramo "Fianzas"
+- **Motor de cálculo matemático**: Para PYME, HOGAR, COPROPIEDAD y TRE se usa `cotizador-engine.ts`
+- **Base de datos de tasas**: Tabla `cotizador_tasas` con +530 tasas calibradas para 12 aseguradoras
+- **Regla de confidencialidad**: Las TASAS son solo para cálculo interno, NO se muestran al cliente
+
+### Archivos del Cotizador Determinista
+- `/src/lib/services/cotizador-engine.ts` - Motor de cálculo matemático
+- `/src/components/modules/cotizador/ComparativoTabla.tsx` - Cuadro comparativo visual
+- `/src/app/(tenant)/cotizador/page.tsx` - Página del cotizador
+- `/src/app/(superadmin)/admin/catalogos/tasas/page.tsx` - Admin de tasas
+
+### Migraciones SQL Requeridas
+- `00020_cotizador_tasas.sql` - Estructura de tabla de tasas
+- `00021_cotizador_tasas_seed.sql` - Datos de tasas calibradas
+- `00022_cotizaciones_deterministas.sql` - Historial de cotizaciones
+
 ## Próximos Pasos
-1. **Ejecutar migraciones SQL** en Supabase:
-   - `00018_prompt_example_file.sql` - Campos para archivo de ejemplo en prompts
-   - `00019_tenant_logo.sql` - Campo para logo del tenant
-2. Probar subida de logo en Configuración → Branding
-3. Probar subida de archivo de ejemplo en Super Admin → Prompts
-4. Probar descarga de PDF (cotizaciones) y Word (comparativos)
-5. Integrar Gemini para test de prompts en Super Admin
+1. **Ejecutar migración SQL** en Supabase:
+   - `00022_cotizaciones_deterministas.sql` - Tabla de historial de cotizaciones deterministas
+2. Probar el cotizador completo con un usuario logueado
+3. Verificar que el PDF se genera correctamente
+4. Implementar filtro de aseguradoras inactivas por tenant (P1)
+
