@@ -16,7 +16,6 @@ import {
   Building,
   Shield,
   FileText,
-  Gift,
   DollarSign,
   Loader2,
   CheckCircle,
@@ -379,32 +378,7 @@ export function ComparativoTabla({
                 })}
               </tr>
 
-              {/* FILA 4: Factores Aplicados */}
-              <tr className="border-b border-slate-200">
-                <td className="p-3 font-medium text-slate-700 bg-slate-50">
-                  <div className="flex items-center gap-2">
-                    <Gift className="h-4 w-4 text-slate-500" />
-                    <span>Factores Aplicados</span>
-                  </div>
-                </td>
-                {resultados.map((res) => {
-                  const isBest = res.aseguradora.id === mejorPrecioId;
-                  return (
-                    <td 
-                      key={res.aseguradora.id} 
-                      className={`p-3 ${isBest ? 'bg-emerald-50/50' : ''}`}
-                    >
-                      <ul className="space-y-1 text-xs">
-                        <li>Zona ({datosCliente.ciudad}): <strong>{(res.factorZona * 100).toFixed(0)}%</strong></li>
-                        <li>Antigüedad ({valoresAsegurados.anoConstruccion}): <strong>{(res.factorAntiguedad * 100).toFixed(0)}%</strong></li>
-                        <li>Siniestralidad: <strong>{(res.factorSiniestros * 100).toFixed(0)}%</strong></li>
-                      </ul>
-                    </td>
-                  );
-                })}
-              </tr>
-
-              {/* FILA 5: Valor a Pagar (Totales) */}
+              {/* FILA 4: Valor a Pagar (Totales) */}
               <tr className="bg-slate-100">
                 <td className="p-3 font-semibold text-slate-800">
                   <div className="flex items-center gap-2">

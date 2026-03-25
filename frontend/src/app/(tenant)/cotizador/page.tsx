@@ -181,12 +181,37 @@ export default function CotizadorPage() {
         .eq('activo', true);
       setFactores(factoresData || []);
 
-      // Cargar aseguradoras activas del tenant
-      const { data: tenantAsegData } = await supabase
-        .from('tenant_aseguradoras')
-        .select('aseguradora_id, is_active')
+      // Cargar compañías activas del tenant (desde tenant_companies)
+      // y mapear con aseguradoras por nombre
+      const { data: tenantCompData } = await supabase
+        .from('tenant_companies')
+        .select('company_id, is_active, insurance_companies(name)')
         .eq('tenant_id', tenantId);
-      setTenantAseguradoras(tenantAsegData || []);
+      
+      // Obtener todas las aseguradoras para mapear por nombre
+      const { data: aseguradorasData } = await supabase
+        .from('aseguradoras')
+        .select('id, nombre, nombre_corto');
+      
+      // Crear mapeo de company_name -> aseguradora_id
+      const mappedAseguradoras: TenantAseguradora[] = [];
+      if (tenantCompData && aseguradorasData) {
+        for (const tc of tenantCompData) {
+          const companyName = (tc.insurance_companies as any)?.name || '';
+          // Buscar aseguradora que coincida por nombre (parcial)
+          const aseguradora = aseguradorasData.find(a => 
+            companyName.toLowerCase().includes(a.nombre_corto.toLowerCase()) ||
+            a.nombre.toLowerCase().includes(companyName.toLowerCase().split(' ')[0])
+          );
+          if (aseguradora) {
+            mappedAseguradoras.push({
+              aseguradora_id: aseguradora.id,
+              is_active: tc.is_active
+            });
+          }
+        }
+      }
+      setTenantAseguradoras(mappedAseguradoras);
 
       // Cargar historial de cotizaciones deterministas del tenant
       const { data: historialData } = await supabase
