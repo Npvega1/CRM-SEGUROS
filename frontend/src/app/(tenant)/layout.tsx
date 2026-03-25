@@ -30,7 +30,8 @@ import {
   ChevronRight,
   Zap,
   MessageSquare,
-  Sparkles
+  Sparkles,
+  Calculator
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { UnreadMessagesBadge } from '@/components/ui/UnreadMessagesBadge';
@@ -40,7 +41,7 @@ interface NavItem {
   href: string;
   icon: React.ElementType;
   badge?: string;
-  permissionKey?: 'clientes' | 'polizas' | 'pipeline' | 'siniestros' | 'facturacion' | 'reportes' | 'mensajes' | 'automatizaciones' | 'comparativos';
+  permissionKey?: 'clientes' | 'polizas' | 'pipeline' | 'siniestros' | 'facturacion' | 'reportes' | 'mensajes' | 'automatizaciones' | 'comparativos' | 'cotizador';
   adminOnly?: boolean;
   alwaysShow?: boolean;
 }
@@ -51,7 +52,8 @@ const navItems: NavItem[] = [
   { title: 'Pólizas', href: '/polizas', icon: FileText, permissionKey: 'polizas' },
   { title: 'Pipeline', href: '/pipeline', icon: TrendingUp, permissionKey: 'pipeline' },
   { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle, permissionKey: 'siniestros' },
-  { title: 'Comparativos IA', href: '/ai-compare', icon: Sparkles, permissionKey: 'comparativos', badge: 'Nuevo' },
+  { title: 'Cotizador', href: '/cotizador', icon: Calculator, permissionKey: 'cotizador', badge: 'Nuevo' },
+  { title: 'Cotizaciones IA', href: '/ai-compare', icon: Sparkles, permissionKey: 'comparativos', badge: 'Fianzas' },
   { title: 'Mensajes', href: '/mensajes', icon: MessageSquare, permissionKey: 'mensajes' },
   { title: 'Facturación', href: '/billing', icon: Receipt, permissionKey: 'facturacion' },
   { title: 'Automatizaciones', href: '/automations', icon: Zap, permissionKey: 'automatizaciones' },

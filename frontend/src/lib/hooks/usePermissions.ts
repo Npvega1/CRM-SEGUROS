@@ -21,6 +21,7 @@ export interface UserPermissions {
   mensajes: SectionPermissions;
   automatizaciones: SectionPermissions;
   comparativos: SectionPermissions;
+  cotizador: SectionPermissions;
 }
 
 const DEFAULT_PERMISSIONS: SectionPermissions = {
@@ -39,7 +40,7 @@ const ADMIN_PERMISSIONS: SectionPermissions = {
 
 const ALL_SECTIONS = [
   'clientes', 'polizas', 'pipeline', 'siniestros',
-  'facturacion', 'reportes', 'mensajes', 'automatizaciones', 'comparativos'
+  'facturacion', 'reportes', 'mensajes', 'automatizaciones', 'comparativos', 'cotizador'
 ] as const;
 
 export function usePermissions() {
@@ -66,6 +67,7 @@ export function usePermissions() {
         mensajes: ADMIN_PERMISSIONS,
         automatizaciones: ADMIN_PERMISSIONS,
         comparativos: ADMIN_PERMISSIONS,
+        cotizador: ADMIN_PERMISSIONS,
       };
       setPermissions(adminPerms);
       setLoading(false);
@@ -88,6 +90,7 @@ export function usePermissions() {
         mensajes: { ...DEFAULT_PERMISSIONS },
         automatizaciones: { ...DEFAULT_PERMISSIONS },
         comparativos: { ...DEFAULT_PERMISSIONS },
+        cotizador: { ...DEFAULT_PERMISSIONS },
       };
 
       // Aplicar permisos de la base de datos
@@ -118,6 +121,7 @@ export function usePermissions() {
         mensajes: { ...DEFAULT_PERMISSIONS },
         automatizaciones: { ...DEFAULT_PERMISSIONS },
         comparativos: { ...DEFAULT_PERMISSIONS },
+        cotizador: { ...DEFAULT_PERMISSIONS },
       };
       setPermissions(defaultPerms);
     } finally {

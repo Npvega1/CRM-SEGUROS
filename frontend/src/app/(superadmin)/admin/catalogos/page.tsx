@@ -17,6 +17,7 @@ import {
   FolderTree,
   ChevronRight,
   Plus,
+  Percent,
 } from 'lucide-react';
 
 interface CatalogStats {
@@ -87,6 +88,16 @@ export default function CatalogosPage() {
       color: 'text-green-500',
       bgColor: 'bg-green-500/10',
     },
+    {
+      title: 'Tasas Cotizador',
+      description: 'Configura tasas y factores para el cotizador determinista',
+      icon: Percent,
+      href: '/admin/catalogos/tasas',
+      count: 0,
+      color: 'text-amber-500',
+      bgColor: 'bg-amber-500/10',
+      badge: 'Nuevo',
+    },
   ];
 
   return (
@@ -100,7 +111,7 @@ export default function CatalogosPage() {
       </div>
 
       {/* Catalog Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {catalogItems.map((item) => (
           <Link key={item.href} href={item.href}>
             <Card className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer h-full">
@@ -109,16 +120,25 @@ export default function CatalogosPage() {
                   <div className={`p-3 rounded-lg ${item.bgColor}`}>
                     <item.icon className={`h-6 w-6 ${item.color}`} />
                   </div>
-                  <ChevronRight className="h-5 w-5 text-zinc-600" />
+                  <div className="flex items-center gap-2">
+                    {'badge' in item && item.badge && (
+                      <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                    <ChevronRight className="h-5 w-5 text-zinc-600" />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
                 <CardTitle className="text-white text-lg mb-2">{item.title}</CardTitle>
                 <p className="text-zinc-500 text-sm mb-4">{item.description}</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl font-bold text-white">{item.count}</span>
-                  <span className="text-xs text-zinc-500">registros</span>
-                </div>
+                {item.count > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-bold text-white">{item.count}</span>
+                    <span className="text-xs text-zinc-500">registros</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </Link>
@@ -143,9 +163,13 @@ export default function CatalogosPage() {
             <strong className="text-white">3. Ramos:</strong> Son los productos específicos dentro de cada grupo 
             (Auto individual, Hogar, Vida Grupo, etc.).
           </p>
+          <p>
+            <strong className="text-white">4. Tasas:</strong> Configura las tasas del cotizador determinista 
+            para PYME, Hogar, Copropiedad y TRE. Incluye factores de ajuste por zona, antigüedad, etc.
+          </p>
           <p className="pt-2 border-t border-zinc-800">
             <strong className="text-amber-400">Importante:</strong> Solo los grupos con prompts IA activos 
-            aparecerán en el módulo de Comparativos IA de los tenants.
+            aparecerán en Cotizaciones IA (Fianzas). Los demás productos usan el cotizador con tasas.
           </p>
         </CardContent>
       </Card>
