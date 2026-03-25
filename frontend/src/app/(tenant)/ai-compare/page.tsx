@@ -161,6 +161,27 @@ export default function AIComparePage() {
       const criteriaNames = criteria.map(c => c.criteria_name);
       console.log('📋 Criteria:', criteriaNames);
 
+      // Obtener el prompt configurado para este ramo con su archivo de ejemplo
+      const supabase = getBrowserClient();
+      let exampleStructure = '';
+      let customPrompt = '';
+      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: promptData } = await (supabase as any)
+        .from('ai_prompts')
+        .select('prompt_system, prompt_recommendation, example_file_content')
+        .eq('line', line)
+        .eq('status', 'active')
+        .maybeSingle();
+      
+      if (promptData) {
+        exampleStructure = promptData.example_file_content || '';
+        customPrompt = promptData.prompt_system || '';
+        console.log('📝 Found prompt for line:', line, 'Has example:', !!exampleStructure);
+      } else {
+        console.log('📝 No specific prompt found for line:', line);
+      }
+
       // Preparar archivos para la IA
       const filesForAI = files.map(f => ({
         name: f.name,
@@ -186,6 +207,8 @@ export default function AIComparePage() {
           files: filesForAI,
           criteria: criteriaNames,
           operation_type: operationType,
+          example_structure: exampleStructure,
+          custom_prompt: customPrompt,
           supabaseUrl,
           supabaseKey
         })
@@ -224,7 +247,7 @@ export default function AIComparePage() {
       }
 
       // Si no hay credenciales de Supabase o hubo error, manejar el resultado aquí
-      const supabase = getBrowserClient();
+      // Reusar la variable supabase ya definida arriba
 
       if (aiResult.success) {
         // Actualizar con resultados exitosos

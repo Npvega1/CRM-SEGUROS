@@ -3,9 +3,10 @@
 // =====================================================
 // COMPONENT: Prompt Editor
 // Editor completo para prompts de IA con test integrado
+// Incluye subida de archivo de ejemplo para estructura
 // =====================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { getUntypedClient } from '@/lib/supabase/untyped-client';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,9 @@ import {
   Code,
   FileText,
   Trash2,
+  Upload,
+  File,
+  X,
 } from 'lucide-react';
 import {
   CLAUDE_MODELS,
@@ -60,6 +64,9 @@ interface AiPrompt {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  example_file_url?: string | null;
+  example_file_name?: string | null;
+  example_file_content?: string | null;
 }
 
 interface PromptVersion {
@@ -88,6 +95,14 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
   const [activeTab, setActiveTab] = useState('editor');
   const [testInput, setTestInput] = useState('');
   
+  // Estado para archivo de ejemplo
+  const [exampleFile, setExampleFile] = useState<File | null>(null);
+  const [exampleFileName, setExampleFileName] = useState<string | null>(null);
+  const [exampleFileContent, setExampleFileContent] = useState<string | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [isExtractingText, setIsExtractingText] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   // Estado para ramos desde la base de datos
   const [insuranceGroups, setInsuranceGroups] = useState<Array<{
     id: string;
@@ -97,7 +112,7 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
   }>>([]);
   const [loadingGroups, setLoadingGroups] = useState(true);
   
-  // Estado para ejemplos de estructura
+  // Estado para ejemplos de estructura (legacy - mantener compatibilidad)
   const [examples, setExamples] = useState<Array<{
     id: string;
     name: string;
@@ -187,6 +202,16 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
         status: prompt.status,
       });
       fetchVersions(prompt.id);
+      
+      // Cargar archivo de ejemplo existente
+      if (prompt.example_file_name) {
+        setExampleFileName(prompt.example_file_name);
+        setExampleFileContent(prompt.example_file_content || null);
+      } else {
+        setExampleFileName(null);
+        setExampleFileContent(null);
+      }
+      setExampleFile(null);
     } else {
       reset({
         name: '',
@@ -197,6 +222,9 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
         status: 'draft',
       });
       setVersions([]);
+      setExampleFile(null);
+      setExampleFileName(null);
+      setExampleFileContent(null);
     }
     setTestResult(null);
     setTestError(null);
@@ -212,11 +240,95 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
     status: 'active' | 'draft' | 'deprecated';
   }
 
+  // Función para manejar la selección de archivo
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validar tipo de archivo
+    const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowedTypes.includes(file.type)) {
+      setTestError('Solo se permiten archivos PDF o DOCX');
+      return;
+    }
+
+    // Validar tamaño (máx 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setTestError('El archivo no puede superar 10MB');
+      return;
+    }
+
+    setExampleFile(file);
+    setExampleFileName(file.name);
+    setIsExtractingText(true);
+    setTestError(null);
+
+    try {
+      // Convertir a base64 y extraer texto
+      const base64 = await fileToBase64(file);
+      const fileType = file.name.split('.').pop()?.toLowerCase() || 'pdf';
+      
+      // Llamar a un endpoint para extraer texto del archivo
+      const response = await fetch('/api/ai/extract-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file_name: file.name,
+          file_type: fileType,
+          base64_content: base64
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.text) {
+          setExampleFileContent(data.text);
+        } else {
+          // Si no se puede extraer, al menos guardamos el nombre
+          setExampleFileContent('[Archivo adjunto - texto no extraído]');
+        }
+      } else {
+        setExampleFileContent('[Archivo adjunto - texto no extraído]');
+      }
+    } catch (error) {
+      console.error('Error extracting text:', error);
+      setExampleFileContent('[Archivo adjunto - texto no extraído]');
+    } finally {
+      setIsExtractingText(false);
+    }
+  };
+
+  // Función para convertir archivo a base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Función para eliminar archivo
+  const handleRemoveFile = () => {
+    setExampleFile(null);
+    setExampleFileName(null);
+    setExampleFileContent(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const onSubmit = async (data: PromptFormData) => {
     setIsSubmitting(true);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
+
+      // Preparar datos del archivo de ejemplo
+      const exampleData = {
+        example_file_name: exampleFileName,
+        example_file_content: exampleFileContent,
+      };
 
       if (isEditing && prompt) {
         // Guardar versión anterior
@@ -229,7 +341,7 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
           created_by: session?.user?.id,
         });
 
-        // Actualizar prompt
+        // Actualizar prompt con archivo de ejemplo
         const { error } = await supabase
           .from('ai_prompts')
           .update({
@@ -240,6 +352,7 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
             model_id: data.model_id,
             version: prompt.version + 1,
             updated_at: new Date().toISOString(),
+            ...exampleData,
           })
           .eq('id', prompt.id);
 
@@ -250,11 +363,11 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
           action: 'prompt.updated',
           entity_type: 'ai_prompt',
           entity_id: prompt.id,
-          new_values: { name: data.name, version: prompt.version + 1 },
+          new_values: { name: data.name, version: prompt.version + 1, has_example: !!exampleFileName },
           user_id: session?.user?.id,
         });
       } else {
-        // Crear nuevo prompt
+        // Crear nuevo prompt con archivo de ejemplo
         const { data: newPrompt, error } = await supabase
           .from('ai_prompts')
           .insert({
@@ -266,6 +379,7 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
             status: 'draft',
             version: 1,
             created_by: session?.user?.id,
+            ...exampleData,
           })
           .select()
           .single();
@@ -277,7 +391,7 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
           action: 'prompt.created',
           entity_type: 'ai_prompt',
           entity_id: newPrompt.id,
-          new_values: { name: data.name },
+          new_values: { name: data.name, has_example: !!exampleFileName },
           user_id: session?.user?.id,
         });
       }
@@ -555,6 +669,87 @@ export function PromptEditor({ prompt, isOpen, onClose, onSuccess }: PromptEdito
                   <p className="text-red-400 text-xs mt-1">{errors.prompt_recommendation.message}</p>
                 )}
               </div>
+
+              {/* Archivo de Ejemplo de Estructura */}
+              <Card className="bg-zinc-800/50 border-zinc-700">
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm text-zinc-300 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Archivo de Ejemplo de Estructura
+                  </CardTitle>
+                  <p className="text-xs text-zinc-500">
+                    Sube un PDF o DOCX que muestre el formato deseado para cotizaciones/comparativos
+                  </p>
+                </CardHeader>
+                <CardContent className="py-3">
+                  {exampleFileName ? (
+                    <div className="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border border-zinc-700">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-500/20 rounded">
+                          <File className="h-5 w-5 text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-white font-medium">{exampleFileName}</p>
+                          {isExtractingText ? (
+                            <p className="text-xs text-zinc-500 flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Extrayendo texto...
+                            </p>
+                          ) : exampleFileContent ? (
+                            <p className="text-xs text-green-400 flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" />
+                              Texto extraído ({exampleFileContent.length} caracteres)
+                            </p>
+                          ) : (
+                            <p className="text-xs text-zinc-500">Archivo adjunto</p>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveFile}
+                        className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div
+                      className="border-2 border-dashed border-zinc-700 rounded-lg p-6 text-center cursor-pointer hover:border-zinc-500 transition-colors"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="h-8 w-8 text-zinc-500 mx-auto mb-2" />
+                      <p className="text-sm text-zinc-400">
+                        Click para subir archivo
+                      </p>
+                      <p className="text-xs text-zinc-600 mt-1">
+                        PDF o DOCX (máx. 10MB)
+                      </p>
+                    </div>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    data-testid="example-file-input"
+                  />
+                  
+                  {/* Preview del texto extraído */}
+                  {exampleFileContent && exampleFileContent !== '[Archivo adjunto - texto no extraído]' && (
+                    <div className="mt-3">
+                      <Label className="text-xs text-zinc-400">Vista previa del texto extraído:</Label>
+                      <pre className="mt-1 p-2 bg-zinc-900 rounded text-xs text-zinc-400 max-h-32 overflow-y-auto whitespace-pre-wrap">
+                        {exampleFileContent.substring(0, 500)}
+                        {exampleFileContent.length > 500 && '...'}
+                      </pre>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">

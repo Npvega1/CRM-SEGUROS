@@ -181,9 +181,16 @@
 - **Sin dependencias externas**: Todo en Vercel
 
 ### Archivos Creados:
-- `/api/ai/compare.py` - Función Python serverless
+- `/api/ai/compare.py` - Función Python serverless (procesa comparativos)
+- `/api/ai/extract-text.py` - Función para extraer texto de PDFs
 - `/requirements.txt` - Dependencias Python (emergentintegrations, PyMuPDF)
 - `/vercel.json` - Configuración de funciones Python
+
+### ✅ Archivo de Ejemplo de Estructura (Diciembre 2025)
+- **Nueva funcionalidad**: Super Admin puede subir un PDF de ejemplo por cada prompt
+- **Campos nuevos en `ai_prompts`**: `example_file_name`, `example_file_content`
+- **Flujo**: El texto extraído del PDF se envía a la IA como referencia de formato
+- **Migración requerida**: `00018_prompt_example_file.sql`
 
 ### Variable de Entorno Requerida en Vercel:
 ```
@@ -191,7 +198,7 @@ EMERGENT_LLM_KEY=sk-emergent-c3c4103Ac62B474038
 ```
 
 ## Próximos Pasos
-1. ✅ ~~Guardar en GitHub y redesplegar en Vercel~~ COMPLETADO
-2. **PENDIENTE:** Modificar el formato/estructura de la COTIZACIÓN (el usuario no quedó satisfecho con el resultado actual)
-3. Integrar Gemini para test de prompts en Super Admin
-4. Implementar módulo de email real
+1. **Ejecutar migración SQL** en Supabase para agregar campos de ejemplo
+2. Probar la subida de archivos de ejemplo en Super Admin
+3. Verificar que la IA use el formato del ejemplo
+4. Integrar Gemini para test de prompts en Super Admin

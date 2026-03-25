@@ -42,9 +42,13 @@ async def process_comparison(body: dict) -> dict:
     line = body.get('line', '')
     files = body.get('files', [])
     operation_type = body.get('operation_type', 'comparison')
+    example_structure = body.get('example_structure', '')  # Ejemplo de estructura del prompt
+    custom_prompt = body.get('custom_prompt', '')  # Prompt personalizado del ramo
     
     print(f"[AI Compare] Processing {operation_type} for {comparison_id}")
     print(f"[AI Compare] Line: {line}, Files: {len(files)}")
+    print(f"[AI Compare] Has example structure: {bool(example_structure)}")
+    print(f"[AI Compare] Has custom prompt: {bool(custom_prompt)}")
     
     # Extraer texto de cada archivo
     extracted_texts = []
@@ -89,13 +93,35 @@ async def process_comparison(body: dict) -> dict:
     # Determinar si es cotización o comparativo
     is_quotation = operation_type == 'quotation'
     
+    # Construir sección de ejemplo de estructura si existe
+    example_section = ""
+    if example_structure and example_structure.strip():
+        example_section = f"""
+
+IMPORTANTE - USA ESTE FORMATO DE ESTRUCTURA COMO REFERENCIA:
+{'='*60}
+{example_structure[:6000]}
+{'='*60}
+
+Tu respuesta DEBE seguir el mismo formato y estructura del ejemplo anterior.
+"""
+    
+    # Construir sección de instrucciones personalizadas si existe
+    custom_instructions = ""
+    if custom_prompt and custom_prompt.strip():
+        custom_instructions = f"""
+
+INSTRUCCIONES ADICIONALES DEL ADMINISTRADOR:
+{custom_prompt}
+"""
+    
     # Construir prompt
     if is_quotation:
         doc = extracted_texts[0]
         analysis_prompt = f"""Eres un experto en seguros y fianzas colombiano. Analiza este documento del ramo "{line}" y genera una cotización estructurada.
-
+{example_section}
 {'='*60}
-DOCUMENTO: {doc['name']}
+DOCUMENTO A ANALIZAR: {doc['name']}
 {'='*60}
 {doc['content']}
 
@@ -103,8 +129,9 @@ INSTRUCCIONES:
 1. Extrae toda la información relevante del documento
 2. Identifica: partes involucradas, montos, plazos, objeto del contrato
 3. Genera una estructura de cotización basada en la información extraída
-
-RESPONDE SOLO CON JSON VÁLIDO (sin markdown):
+{custom_instructions}
+RESPONDE SOLO CON JSON VÁLIDO (sin markdown). Si hay un ejemplo de estructura arriba, sigue ese formato exacto.
+Si no hay ejemplo, usa este formato por defecto:
 {{
   "tipo_documento": "Contrato/Solicitud/Otro",
   "datos_extraidos": {{
@@ -131,10 +158,11 @@ RESPONDE SOLO CON JSON VÁLIDO (sin markdown):
             files_content += f"\n\n{'='*60}\nCOTIZACIÓN {i}: {doc['name']}\n{'='*60}\n{doc['content']}\n"
         
         analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza estas {len(extracted_texts)} cotizaciones del ramo "{line}" y crea un cuadro comparativo.
-
+{example_section}
 {files_content}
-
-RESPONDE SOLO CON JSON VÁLIDO (sin markdown):
+{custom_instructions}
+RESPONDE SOLO CON JSON VÁLIDO (sin markdown). Si hay un ejemplo de estructura arriba, sigue ese formato exacto.
+Si no hay ejemplo, usa este formato por defecto:
 {{
   "insurers": [
     {{
