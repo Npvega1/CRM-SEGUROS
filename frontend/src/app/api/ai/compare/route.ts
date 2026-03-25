@@ -36,7 +36,8 @@ async function extractTextFromPDF(base64Content: string): Promise<string> {
     const buffer = Buffer.from(base64Data, 'base64');
     
     // Usar pdf-parse para extraer texto
-    const pdfParse = (await import('pdf-parse')).default;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require('pdf-parse');
     const data = await pdfParse(buffer);
     
     return data.text || '';
