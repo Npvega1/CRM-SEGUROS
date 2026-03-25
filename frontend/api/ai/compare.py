@@ -272,28 +272,73 @@ Si no hay ejemplo, usa este formato por defecto:
   ]
 }}"""
 
+    response_text = ""  # Initialize for error handling
     try:
         # Inicializar chat con Gemini via emergentintegrations
         chat = LlmChat(
             api_key=api_key,
             session_id=f"comparison-{comparison_id}",
-            system_message="Eres un experto analista de seguros colombiano. Responde SOLO con JSON válido."
+            system_message="Eres un experto analista de seguros colombiano. Responde SOLO con JSON válido, sin explicaciones adicionales."
         ).with_model("gemini", "gemini-2.5-flash")
         
         print("[AI Compare] Calling Gemini API...")
         response_text = await chat.send_message(UserMessage(text=analysis_prompt))
         print(f"[AI Compare] Response length: {len(response_text)}")
+        print(f"[AI Compare] Response preview: {response_text[:500]}")
         
-        # Parsear respuesta JSON
+        # Parsear respuesta JSON con mejor manejo
         clean_response = response_text.strip()
-        if clean_response.startswith('```'):
-            clean_response = clean_response.split('```')[1]
-            if clean_response.startswith('json'):
-                clean_response = clean_response[4:]
-        if clean_response.endswith('```'):
-            clean_response = clean_response[:-3]
         
-        comparison_data = json.loads(clean_response.strip())
+        # Remover markdown code blocks de varias formas
+        if '```json' in clean_response:
+            start = clean_response.find('```json') + 7
+            end = clean_response.rfind('```')
+            if end > start:
+                clean_response = clean_response[start:end].strip()
+        elif '```' in clean_response:
+            parts = clean_response.split('```')
+            for part in parts:
+                part = part.strip()
+                if part.startswith('json'):
+                    part = part[4:].strip()
+                if part.startswith('{') or part.startswith('['):
+                    clean_response = part
+                    break
+        
+        # Asegurar que empieza con { o [
+        if not (clean_response.startswith('{') or clean_response.startswith('[')):
+            # Buscar el primer { o [
+            json_start = -1
+            for i, char in enumerate(clean_response):
+                if char in '{[':
+                    json_start = i
+                    break
+            if json_start >= 0:
+                clean_response = clean_response[json_start:]
+        
+        # Encontrar el final del JSON
+        if clean_response.startswith('{'):
+            depth = 0
+            json_end = -1
+            for i, char in enumerate(clean_response):
+                if char == '{':
+                    depth += 1
+                elif char == '}':
+                    depth -= 1
+                    if depth == 0:
+                        json_end = i + 1
+                        break
+            if json_end > 0:
+                clean_response = clean_response[:json_end]
+        
+        print(f"[AI Compare] Clean JSON preview: {clean_response[:300]}")
+        
+        try:
+            comparison_data = json.loads(clean_response)
+        except json.JSONDecodeError as je:
+            print(f"[AI Compare] JSON parse error at position {je.pos}: {je.msg}")
+            print(f"[AI Compare] Problematic area: {clean_response[max(0, je.pos-50):je.pos+50]}")
+            raise
         
         # Construir resultado
         if is_quotation:
@@ -326,10 +371,13 @@ Si no hay ejemplo, usa este formato por defecto:
         
     except json.JSONDecodeError as e:
         print(f"[AI Compare] JSON parse error: {e}")
-        return {"success": False, "error": "La IA no devolvió un JSON válido. Intenta de nuevo."}
+        print(f"[AI Compare] Response was: {response_text[:1000] if 'response_text' in dir() else 'N/A'}")
+        return {"success": False, "error": f"La IA no devolvió un JSON válido. Error: {str(e)[:100]}"}
     except Exception as e:
         print(f"[AI Compare] Error: {e}")
-        return {"success": False, "error": str(e)}
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": f"Error procesando: {str(e)[:200]}"}
 
 
 class handler(BaseHTTPRequestHandler):
