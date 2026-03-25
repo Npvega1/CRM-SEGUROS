@@ -191,7 +191,7 @@ EMERGENT_LLM_KEY=sk-emergent-c3c4103Ac62B474038
 ```
 
 ## Próximos Pasos
-1. ✅ Guardar en GitHub y redesplegar en Vercel
-2. Verificar que la integración funcione correctamente
+1. ✅ ~~Guardar en GitHub y redesplegar en Vercel~~ COMPLETADO
+2. **PENDIENTE:** Modificar el formato/estructura de la COTIZACIÓN (el usuario no quedó satisfecho con el resultado actual)
 3. Integrar Gemini para test de prompts en Super Admin
 4. Implementar módulo de email real
