@@ -169,19 +169,14 @@ export default function AIComparePage() {
       }));
       console.log('📁 Files to send:', filesForAI.map(f => f.name));
 
-      // Usar URL relativa para pasar por el proxy de Next.js
-      const apiUrl = '/api/ai/compare';
-      console.log('🌐 Calling AI backend with async processing...');
-
-      // Obtener credenciales de Supabase para que el backend actualice directamente
+      // Obtener credenciales de Supabase para que la API Route actualice directamente
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
       
-      const backendUrl = process.env.NEXT_PUBLIC_FASTAPI_BACKEND_URL || 'https://quote-ai-2.preview.emergentagent.com';
+      console.log('🌐 Calling local API Route...');
       
-      // Enviar solicitud al backend con credenciales de Supabase
-      // El backend procesará en background y actualizará Supabase directamente
-      const aiResponse = await fetch(`${backendUrl}/api/ai/compare`, {
+      // Usar la API Route local (funciona en Vercel sin backend externo)
+      const aiResponse = await fetch('/api/ai/compare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -191,7 +186,6 @@ export default function AIComparePage() {
           files: filesForAI,
           criteria: criteriaNames,
           operation_type: operationType,
-          // Credenciales para que el backend actualice Supabase directamente
           supabaseUrl,
           supabaseKey
         })
