@@ -1,5 +1,12 @@
 # Python dependencies for Vercel serverless functions
-# emergentintegrations se instala desde el índice privado
+# Dependencias de emergentintegrations con URLs directas
 --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
+
+# litellm debe ir primero (dependencia de emergentintegrations)
+litellm @ https://customer-assets.emergentagent.com/internal-asset/library/litellm-1.80.0-py3-none-any.whl
+
+# emergentintegrations
 emergentintegrations
+
+# Para extraer texto de PDFs
 PyMuPDF>=1.24.0
