@@ -174,24 +174,24 @@
 
 ## Integración IA - Comparativos y Cotizaciones (Marzo 2026)
 
-### ✅ Arquitectura Final
-- **API Route de Next.js**: `/app/api/ai/compare/route.ts`
-- **LLM**: Google Gemini 1.5 Flash (multimodal - procesa PDFs directamente)
-- **Sin dependencias externas**: No requiere Railway ni backend separado
+### ✅ Arquitectura Final (Actualizada)
+- **Función Serverless Python en Vercel**: `/api/ai/compare.py`
+- **LLM**: Gemini 2.5 Flash via `emergentintegrations`
+- **API Key**: `EMERGENT_LLM_KEY` (Universal Key de Emergent)
+- **Sin dependencias externas**: Todo en Vercel
 
-### Cambios Realizados (Diciembre 2025):
-1. **Eliminado `pdf-parse`**: Gemini procesa PDFs directamente vía inline_data
-2. **Corregido bug de doble `.json()`**: El frontend ahora solo parsea la respuesta una vez
-3. **Logging mejorado**: La API Route tiene logs detallados para depuración
-4. **Soporte multimodal**: Envía archivos como base64 directamente a Gemini
+### Archivos Creados:
+- `/api/ai/compare.py` - Función Python serverless
+- `/requirements.txt` - Dependencias Python (emergentintegrations, PyMuPDF)
+- `/vercel.json` - Configuración de funciones Python
 
 ### Variable de Entorno Requerida en Vercel:
 ```
-GOOGLE_GEMINI_API_KEY=tu-api-key-de-gemini
+EMERGENT_LLM_KEY=sk-emergent-c3c4103Ac62B474038
 ```
 
 ## Próximos Pasos
-1. **Guardar en GitHub** y redesplegar en Vercel
+1. ✅ Guardar en GitHub y redesplegar en Vercel
 2. Verificar que la integración funcione correctamente
-3. Integrar Gemini real para test de prompts en Super Admin
+3. Integrar Gemini para test de prompts en Super Admin
 4. Implementar módulo de email real
