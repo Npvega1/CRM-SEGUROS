@@ -27,56 +27,30 @@ import {
   Building,
   User,
   MapPin,
-  Calendar,
   Shield,
   ChevronRight,
   ChevronLeft,
   FileText,
   CheckCircle,
   RefreshCw,
+  Loader2,
 } from 'lucide-react';
+import {
+  calcularCotizacion,
+  formatCurrency,
+  Producto,
+  DatosCliente,
+  ValoresAsegurados,
+  ResultadoAseguradora,
+} from '@/lib/services/cotizador-engine';
+import { ResultadosComparativos } from '@/components/modules/cotizador/ResultadosComparativos';
 
 // Tipos
-interface Aseguradora {
-  id: string;
-  nombre: string;
-  nombre_corto: string;
-  color_primario: string;
-  activa_sistema: boolean;
-}
-
 interface Factor {
   id: string;
   tipo: string;
   clave: string;
   factor: number;
-}
-
-type Producto = 'PYME' | 'HOGAR' | 'COPROPIEDAD' | 'TRE';
-
-interface DatosCliente {
-  nombre: string;
-  nit: string;
-  email: string;
-  telefono: string;
-  direccion: string;
-  ciudad: string;
-  actividadEconomica: string;
-  historialSiniestros: string;
-}
-
-interface ValoresAsegurados {
-  edificio: number;
-  anoConstruccion: string;
-  mejorasLocativas: number;
-  mueblesEnseres: number;
-  mercancias: number;
-  dineroEfectivo: number;
-  equipoElectronicoFijo: number;
-  equipoMovil: number;
-  maquinaria: number;
-  transporteValores: number;
-  limiteRC: number;
 }
 
 // Configuración de campos por producto
@@ -105,6 +79,13 @@ const LABELS_CAMPOS: Record<keyof ValoresAsegurados, string> = {
   limiteRC: 'Límite Responsabilidad Civil',
 };
 
+const PRODUCTO_DESCRIPTIONS: Record<Producto, string> = {
+  PYME: 'Pequeñas y medianas empresas, locales comerciales',
+  HOGAR: 'Viviendas, apartamentos, casas',
+  COPROPIEDAD: 'Edificios residenciales, conjuntos cerrados',
+  TRE: 'Todo Riesgo Empresarial, grandes empresas',
+};
+
 export default function CotizadorPage() {
   const { tenantId, userId, isLoading: tenantLoading } = useTenant();
   const { toast } = useToast();
@@ -112,9 +93,10 @@ export default function CotizadorPage() {
 
   // Estados
   const [isLoading, setIsLoading] = useState(true);
+  const [isCalculating, setIsCalculating] = useState(false);
   const [step, setStep] = useState(1);
-  const [aseguradoras, setAseguradoras] = useState<Aseguradora[]>([]);
   const [factores, setFactores] = useState<Factor[]>([]);
+  const [resultados, setResultados] = useState<ResultadoAseguradora[]>([]);
   
   // Datos del formulario
   const [producto, setProducto] = useState<Producto>('PYME');
@@ -146,16 +128,6 @@ export default function CotizadorPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Cargar aseguradoras activas
-      const { data: asegData, error: asegError } = await supabase
-        .from('aseguradoras')
-        .select('*')
-        .eq('activa_sistema', true)
-        .order('orden');
-      
-      if (asegError) throw asegError;
-      setAseguradoras(asegData || []);
-
       // Cargar factores
       const { data: factoresData, error: factoresError } = await supabase
         .from('cotizador_factores')
@@ -188,16 +160,6 @@ export default function CotizadorPage() {
     return factores.filter(f => f.tipo === tipo);
   };
 
-  // Formatear moneda
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
   // Parsear valor de moneda
   const parseCurrency = (value: string): number => {
     const cleaned = value.replace(/[^0-9]/g, '');
@@ -219,15 +181,40 @@ export default function CotizadorPage() {
       return datosCliente.nombre.trim() !== '' && datosCliente.ciudad !== '';
     }
     if (step === 2) {
-      // Al menos edificio debe tener valor
       return valoresAsegurados.edificio > 0;
     }
     return true;
   };
 
+  // Calcular cotización
+  const handleCalcular = async () => {
+    setIsCalculating(true);
+    try {
+      const results = await calcularCotizacion(
+        supabase,
+        producto,
+        valoresAsegurados,
+        datosCliente
+      );
+      setResultados(results);
+      setStep(3);
+    } catch (error) {
+      console.error('Error calculando cotización:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo calcular la cotización',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
   // Navegar entre pasos
   const nextStep = () => {
-    if (canProceed() && step < 3) {
+    if (step === 2) {
+      handleCalcular();
+    } else if (canProceed() && step < 3) {
       setStep(step + 1);
     }
   };
@@ -235,7 +222,38 @@ export default function CotizadorPage() {
   const prevStep = () => {
     if (step > 1) {
       setStep(step - 1);
+      if (step === 3) {
+        setResultados([]);
+      }
     }
+  };
+
+  const resetCotizacion = () => {
+    setStep(1);
+    setResultados([]);
+    setDatosCliente({
+      nombre: '',
+      nit: '',
+      email: '',
+      telefono: '',
+      direccion: '',
+      ciudad: 'Bogotá D.C.',
+      actividadEconomica: '',
+      historialSiniestros: 'Sin siniestros',
+    });
+    setValoresAsegurados({
+      edificio: 0,
+      anoConstruccion: '11 a 20 años',
+      mejorasLocativas: 0,
+      mueblesEnseres: 0,
+      mercancias: 0,
+      dineroEfectivo: 0,
+      equipoElectronicoFijo: 0,
+      equipoMovil: 0,
+      maquinaria: 0,
+      transporteValores: 0,
+      limiteRC: 0,
+    });
   };
 
   if (tenantLoading || isLoading) {
@@ -255,10 +273,12 @@ export default function CotizadorPage() {
             Genera cotizaciones comparativas para PYME, Hogar, Copropiedad y TRE
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={loadData}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Actualizar
-        </Button>
+        {step === 3 && (
+          <Button variant="outline" size="sm" onClick={resetCotizacion}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Nueva Cotización
+          </Button>
+        )}
       </div>
 
       {/* Step Indicator */}
@@ -271,12 +291,12 @@ export default function CotizadorPage() {
           <div key={s.num} className="flex items-center">
             <div className="flex flex-col items-center">
               <div
-                className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium ${
+                className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
                   s.num < step
-                    ? 'bg-green-100 text-green-600'
+                    ? 'bg-green-500 text-white'
                     : s.num === step
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-slate-100 text-slate-400'
+                    : 'bg-slate-200 text-slate-500'
                 }`}
               >
                 {s.num < step ? <CheckCircle className="h-5 w-5" /> : s.num}
@@ -287,8 +307,8 @@ export default function CotizadorPage() {
             </div>
             {idx < 2 && (
               <div
-                className={`w-16 h-0.5 mx-2 ${
-                  s.num < step ? 'bg-green-400' : 'bg-slate-200'
+                className={`w-12 sm:w-20 h-0.5 mx-2 transition-colors ${
+                  s.num < step ? 'bg-green-500' : 'bg-slate-200'
                 }`}
               />
             )}
@@ -315,15 +335,18 @@ export default function CotizadorPage() {
                     key={p}
                     type="button"
                     onClick={() => setProducto(p)}
-                    className={`p-4 rounded-lg border-2 transition-all text-center ${
+                    className={`p-4 rounded-lg border-2 transition-all text-left ${
                       producto === p
                         ? 'border-primary bg-primary/5'
                         : 'border-slate-200 hover:border-slate-300'
                     }`}
                   >
-                    <Building className={`h-6 w-6 mx-auto mb-2 ${producto === p ? 'text-primary' : 'text-slate-400'}`} />
-                    <span className={`text-sm font-medium ${producto === p ? 'text-primary' : ''}`}>
+                    <Building className={`h-6 w-6 mb-2 ${producto === p ? 'text-primary' : 'text-slate-400'}`} />
+                    <span className={`text-sm font-medium block ${producto === p ? 'text-primary' : ''}`}>
                       {p}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {PRODUCTO_DESCRIPTIONS[p]}
                     </span>
                   </button>
                 ))}
@@ -389,7 +412,7 @@ export default function CotizadorPage() {
                   <SelectContent>
                     {getFactoresPorTipo('ZONA').map((f) => (
                       <SelectItem key={f.id} value={f.clave}>
-                        {f.clave} ({f.factor.toFixed(2)}x)
+                        {f.clave} ({f.factor > 1 ? '+' : ''}{((f.factor - 1) * 100).toFixed(0)}%)
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -439,6 +462,10 @@ export default function CotizadorPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            <p className="text-sm text-muted-foreground">
+              Ingresa los valores en pesos colombianos (COP). Solo se cotizarán los amparos con valores mayores a cero.
+            </p>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {CAMPOS_POR_PRODUCTO[producto].map((campo) => (
                 <div key={campo} className="space-y-2">
@@ -473,7 +500,7 @@ export default function CotizadorPage() {
             </div>
 
             {/* Resumen de valores */}
-            <Card className="bg-slate-50">
+            <Card className="bg-slate-50 border-slate-200">
               <CardContent className="py-4">
                 <div className="flex justify-between items-center">
                   <span className="font-medium">Total Valor Asegurado:</span>
@@ -491,67 +518,53 @@ export default function CotizadorPage() {
         </Card>
       )}
 
-      {/* Step 3: Resultados (placeholder) */}
+      {/* Step 3: Resultados */}
       {step === 3 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calculator className="h-5 w-5" />
-              Resultados de Cotización
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-12 text-muted-foreground">
-              <Calculator className="h-16 w-16 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">Calculando cotizaciones...</p>
-              <p className="text-sm mt-2">
-                El motor de cálculo está en desarrollo.
-                Pronto verás aquí el cuadro comparativo de todas las aseguradoras.
-              </p>
-              <div className="mt-6 flex flex-wrap justify-center gap-2">
-                {aseguradoras.map(a => (
-                  <div 
-                    key={a.id}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm"
-                    style={{ backgroundColor: `${a.color_primario}20`, color: a.color_primario }}
-                  >
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: a.color_primario }} />
-                    {a.nombre_corto}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <ResultadosComparativos
+          resultados={resultados}
+          producto={producto}
+          datosCliente={datosCliente}
+          valoresAsegurados={valoresAsegurados}
+          onNuevaCotizacion={resetCotizacion}
+        />
       )}
 
       {/* Navigation Buttons */}
-      <div className="flex justify-between">
-        <Button
-          variant="outline"
-          onClick={prevStep}
-          disabled={step === 1}
-        >
-          <ChevronLeft className="h-4 w-4 mr-1" />
-          Anterior
-        </Button>
+      {step < 3 && (
+        <div className="flex justify-between">
+          <Button
+            variant="outline"
+            onClick={prevStep}
+            disabled={step === 1}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Anterior
+          </Button>
 
-        {step < 3 ? (
           <Button
             onClick={nextStep}
-            disabled={!canProceed()}
+            disabled={!canProceed() || isCalculating}
             data-testid="cotizador-next"
           >
-            Siguiente
-            <ChevronRight className="h-4 w-4 ml-1" />
+            {isCalculating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Calculando...
+              </>
+            ) : step === 2 ? (
+              <>
+                <Calculator className="h-4 w-4 mr-2" />
+                Calcular Cotización
+              </>
+            ) : (
+              <>
+                Siguiente
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </>
+            )}
           </Button>
-        ) : (
-          <Button disabled>
-            <FileText className="h-4 w-4 mr-2" />
-            Generar PDF (próximamente)
-          </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
