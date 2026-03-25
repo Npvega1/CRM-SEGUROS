@@ -278,39 +278,68 @@ export function NewComparisonWizard({
   const convertFilesToBase64 = async (): Promise<Array<{ name: string; type: string; size: number; base64: string; extractedText?: string }>> => {
     const results: Array<{ name: string; type: string; size: number; base64: string; extractedText?: string }> = [];
     
+    // Calcular límite de texto por archivo basado en cantidad de archivos
+    // Para evitar exceder el límite de 4.5MB de Vercel
+    const maxCharsPerFile = Math.min(30000, Math.floor(100000 / files.length));
+    console.log(`[FileConvert] Processing ${files.length} files, max ${maxCharsPerFile} chars each`);
+    
     for (const file of files) {
+      console.log(`[FileConvert] Processing: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+      
       // Para PDFs, extraer texto primero
       let extractedText = '';
       if (file.type === 'application/pdf') {
+        console.log(`[FileConvert] Extracting text from PDF...`);
         extractedText = await extractTextFromPDF(file);
+        console.log(`[FileConvert] Extracted ${extractedText.length} characters`);
       }
       
-      // Si tenemos texto extraído y es suficientemente largo, no enviamos base64 completo
-      // Solo enviamos una versión reducida para referencia
+      // Si tenemos texto extraído, usarlo (NO enviar base64)
       if (extractedText && extractedText.length > 100) {
-        results.push({
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          base64: '', // No enviar base64 si tenemos texto
-          extractedText: extractedText.substring(0, 50000) // Limitar a 50k caracteres por archivo
-        });
-      } else {
-        // Para otros archivos o PDFs sin texto, usar base64
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
+        const truncatedText = extractedText.substring(0, maxCharsPerFile);
+        console.log(`[FileConvert] Using extracted text (${truncatedText.length} chars, truncated from ${extractedText.length})`);
         
         results.push({
           name: file.name,
           type: file.type,
           size: file.size,
-          base64
+          base64: '', // NO enviar base64
+          extractedText: truncatedText
         });
+      } else {
+        // Solo para archivos NO-PDF o PDFs sin texto (escaneados)
+        // Limitar base64 para archivos pequeños solamente
+        if (file.size > 2 * 1024 * 1024) {
+          console.warn(`[FileConvert] File ${file.name} is too large and has no extractable text. Skipping base64.`);
+          results.push({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            base64: '',
+            extractedText: `[Archivo: ${file.name} - No se pudo extraer texto. El PDF puede ser una imagen escaneada.]`
+          });
+        } else {
+          const base64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+          
+          console.log(`[FileConvert] Using base64 for ${file.name} (${(base64.length / 1024).toFixed(0)}KB)`);
+          
+          results.push({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            base64
+          });
+        }
       }
     }
+    
+    // Log total payload size estimate
+    const totalSize = results.reduce((sum, r) => sum + (r.base64?.length || 0) + (r.extractedText?.length || 0), 0);
+    console.log(`[FileConvert] Total payload size estimate: ${(totalSize / 1024).toFixed(0)}KB`);
     
     return results;
   };

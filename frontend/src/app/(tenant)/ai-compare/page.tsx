@@ -217,8 +217,42 @@ export default function AIComparePage() {
       
       console.log('📡 Response status:', aiResponse.status);
       
+      // Manejar error 413 (payload too large) de forma especial
+      if (aiResponse.status === 413) {
+        console.error('API error: Payload too large (413)');
+        const supabase = getBrowserClient();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('comparisons')
+          .update({
+            status: 'error',
+            error_message: 'Los archivos son demasiado grandes. Intenta con PDFs más pequeños o con menos archivos (máximo 3-4 archivos de tamaño moderado).'
+          })
+          .eq('id', comparisonId);
+        
+        await loadData();
+        return;
+      }
+      
       // Parsear respuesta UNA sola vez
-      const aiResult = await aiResponse.json();
+      let aiResult;
+      try {
+        aiResult = await aiResponse.json();
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        const supabase = getBrowserClient();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('comparisons')
+          .update({
+            status: 'error',
+            error_message: `Error de comunicación con el servidor (${aiResponse.status}). Por favor intenta de nuevo.`
+          })
+          .eq('id', comparisonId);
+        
+        await loadData();
+        return;
+      }
       console.log('📦 AI Result:', aiResult.success ? 'SUCCESS' : 'FAILED', aiResult.error || '');
       
       // Si hay error, actualizar el estado y salir
