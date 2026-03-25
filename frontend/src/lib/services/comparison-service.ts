@@ -459,8 +459,9 @@ export async function getComparisonCriteria(
     .order('order_index');
   
   if (error || !data || data.length === 0) {
-    // Retornar criterios por defecto
-    return DEFAULT_COMPARISON_CRITERIA[line].map((name, index) => ({
+    // Retornar criterios por defecto (usar 'otro' como fallback para slugs dinámicos)
+    const defaultCriteria = DEFAULT_COMPARISON_CRITERIA[line] || DEFAULT_COMPARISON_CRITERIA['otro'] || [];
+    return defaultCriteria.map((name, index) => ({
       id: `default-${index}`,
       tenant_id: tenantId,
       line,

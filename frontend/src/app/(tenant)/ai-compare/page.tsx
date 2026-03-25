@@ -156,8 +156,8 @@ export default function AIComparePage() {
     console.log('🚀 Starting background processing for:', comparisonId, 'type:', operationType);
     
     try {
-      // Obtener criterios
-      const criteria = await getComparisonCriteria(tenantId, line);
+      // Obtener criterios (con fallback seguro)
+      const criteria = await getComparisonCriteria(tenantId, line) || [];
       const criteriaNames = criteria.map(c => c.criteria_name);
       console.log('📋 Criteria:', criteriaNames);
 
