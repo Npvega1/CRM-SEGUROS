@@ -235,7 +235,7 @@ export function NewComparisonWizard({
       'application/pdf': ['.pdf'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
     },
-    maxSize: 10 * 1024 * 1024, // 10MB
+    maxSize: 15 * 1024 * 1024, // 15MB por archivo
     multiple: true
   });
 
@@ -243,22 +243,73 @@ export function NewComparisonWizard({
     setFiles(prev => prev.filter(f => f.id !== fileId));
   };
 
-  const convertFilesToBase64 = async (): Promise<Array<{ name: string; type: string; size: number; base64: string }>> => {
-    const results: Array<{ name: string; type: string; size: number; base64: string }> = [];
+  // Función para extraer texto de PDF usando pdfjs-dist
+  const extractTextFromPDF = async (file: File): Promise<string> => {
+    try {
+      const pdfjsLib = await import('pdfjs-dist');
+      
+      // Configurar worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pageText = (textContent.items as any[])
+          .filter(item => item && typeof item.str === 'string')
+          .map(item => item.str)
+          .join(' ');
+        fullText += pageText + '\n';
+      }
+      
+      console.log(`Extracted ${fullText.length} characters from ${file.name}`);
+      return fullText;
+    } catch (error) {
+      console.error('Error extracting PDF text:', error);
+      return '';
+    }
+  };
+
+  // Convertir archivos: extraer texto de PDFs, mantener base64 solo para otros tipos
+  const convertFilesToBase64 = async (): Promise<Array<{ name: string; type: string; size: number; base64: string; extractedText?: string }>> => {
+    const results: Array<{ name: string; type: string; size: number; base64: string; extractedText?: string }> = [];
     
     for (const file of files) {
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
+      // Para PDFs, extraer texto primero
+      let extractedText = '';
+      if (file.type === 'application/pdf') {
+        extractedText = await extractTextFromPDF(file);
+      }
       
-      results.push({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        base64
-      });
+      // Si tenemos texto extraído y es suficientemente largo, no enviamos base64 completo
+      // Solo enviamos una versión reducida para referencia
+      if (extractedText && extractedText.length > 100) {
+        results.push({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          base64: '', // No enviar base64 si tenemos texto
+          extractedText: extractedText.substring(0, 50000) // Limitar a 50k caracteres por archivo
+        });
+      } else {
+        // Para otros archivos o PDFs sin texto, usar base64
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        
+        results.push({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          base64
+        });
+      }
     }
     
     return results;
@@ -480,7 +531,7 @@ export function NewComparisonWizard({
                         : 'Arrastra cotizaciones o haz clic para seleccionar'}
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
-                    PDF o DOCX, máximo 10MB por archivo 
+                    PDF o DOCX, máximo 15MB por archivo (hasta 8 archivos) 
                     {isQuotationType() 
                       ? ' (mínimo 1 archivo)' 
                       : ` (mínimo ${getMinFiles()} archivos)`}

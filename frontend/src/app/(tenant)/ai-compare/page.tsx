@@ -186,9 +186,10 @@ export default function AIComparePage() {
       const filesForAI = files.map(f => ({
         name: f.name,
         file_type: f.name.split('.').pop()?.toLowerCase() || 'pdf',
-        base64_content: f.base64
+        base64_content: f.base64 || '',
+        extracted_text: (f as { extractedText?: string }).extractedText || ''
       }));
-      console.log('📁 Files to send:', filesForAI.map(f => f.name));
+      console.log('📁 Files to send:', filesForAI.map(f => `${f.name} (extracted: ${f.extracted_text.length} chars)`));
 
       // Obtener credenciales de Supabase para que la API Route actualice directamente
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

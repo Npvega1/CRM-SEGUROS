@@ -56,29 +56,46 @@ async def process_comparison(body: dict) -> dict:
     for file_data in files:
         try:
             file_name = file_data.get('name', 'archivo')
-            base64_content = file_data.get('base64_content', '')
             
-            # Limpiar base64
-            if ',' in base64_content:
-                base64_content = base64_content.split(',')[1]
+            # Verificar si ya tenemos texto extraído del frontend
+            extracted_text = file_data.get('extracted_text', '')
             
-            binary_data = base64.b64decode(base64_content)
-            file_type = file_data.get('file_type', 'pdf')
-            
-            # Extraer texto
-            if file_type == 'pdf':
-                text = extract_text_from_pdf(binary_data)
-            else:
-                text = ""
-            
-            if text.strip():
+            if extracted_text and len(extracted_text) > 100:
+                # Usar texto extraído del frontend
                 extracted_texts.append({
                     "name": file_name,
-                    "content": text[:8000]  # Limitar tamaño
+                    "content": extracted_text[:50000]  # Ya está limitado en frontend
                 })
-                print(f"[AI Compare] Extracted {len(text)} chars from {file_name}")
+                print(f"[AI Compare] Using pre-extracted text: {len(extracted_text)} chars from {file_name}")
             else:
-                print(f"[AI Compare] No text extracted from {file_name}")
+                # Extraer texto del base64
+                base64_content = file_data.get('base64_content', '')
+                
+                if not base64_content:
+                    print(f"[AI Compare] No content for {file_name}, skipping")
+                    continue
+                
+                # Limpiar base64
+                if ',' in base64_content:
+                    base64_content = base64_content.split(',')[1]
+                
+                binary_data = base64.b64decode(base64_content)
+                file_type = file_data.get('file_type', 'pdf')
+                
+                # Extraer texto
+                if file_type == 'pdf':
+                    text = extract_text_from_pdf(binary_data)
+                else:
+                    text = ""
+                
+                if text.strip():
+                    extracted_texts.append({
+                        "name": file_name,
+                        "content": text[:50000]
+                    })
+                    print(f"[AI Compare] Extracted {len(text)} chars from {file_name}")
+                else:
+                    print(f"[AI Compare] No text extracted from {file_name}")
                 
         except Exception as e:
             print(f"[AI Compare] Error processing file: {e}")
