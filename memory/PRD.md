@@ -198,7 +198,10 @@ EMERGENT_LLM_KEY=sk-emergent-c3c4103Ac62B474038
 ```
 
 ## Próximos Pasos
-1. **Ejecutar migración SQL** en Supabase para agregar campos de ejemplo
-2. Probar la subida de archivos de ejemplo en Super Admin
-3. Verificar que la IA use el formato del ejemplo
-4. Integrar Gemini para test de prompts en Super Admin
+1. **Ejecutar migraciones SQL** en Supabase:
+   - `00018_prompt_example_file.sql` - Campos para archivo de ejemplo en prompts
+   - `00019_tenant_logo.sql` - Campo para logo del tenant
+2. Probar subida de logo en Configuración → Branding
+3. Probar subida de archivo de ejemplo en Super Admin → Prompts
+4. Probar descarga de PDF (cotizaciones) y Word (comparativos)
+5. Integrar Gemini para test de prompts en Super Admin

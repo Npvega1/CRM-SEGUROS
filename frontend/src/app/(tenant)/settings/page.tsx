@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Settings, Palette, Users, Building2, Save, Loader2, UserPlus, Mail, Clock, X, Shield, ChevronRight, Building } from 'lucide-react';
+import { Settings, Palette, Users, Building2, Save, Loader2, UserPlus, Mail, Clock, X, Shield, ChevronRight, Building, Upload, Image } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -74,6 +74,8 @@ export default function SettingsPage() {
   // Branding
   const [primaryColor, setPrimaryColor] = useState('#3b82f6');
   const [secondaryColor, setSecondaryColor] = useState('#1e40af');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -109,6 +111,7 @@ export default function SettingsPage() {
         if (data) {
           setPrimaryColor(data.primary_color || '#3b82f6');
           setSecondaryColor(data.secondary_color || '#1e40af');
+          setLogoUrl(data.logo_url || null);
         }
       } catch (error) {
         console.log('No settings found');
@@ -265,15 +268,59 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       const { error } = await (supabase.from('tenant_settings') as any)
-        .upsert({ tenant_id: tenantId, primary_color: primaryColor, secondary_color: secondaryColor, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' });
+        .upsert({ 
+          tenant_id: tenantId, 
+          primary_color: primaryColor, 
+          secondary_color: secondaryColor, 
+          logo_url: logoUrl,
+          updated_at: new Date().toISOString() 
+        }, { onConflict: 'tenant_id' });
       if (error) throw error;
-      toast({ title: 'Configuración guardada', description: 'Los colores se han actualizado. Recargando...' });
+      toast({ title: 'Configuración guardada', description: 'Los colores y logo se han actualizado. Recargando...' });
       // Recargar la página después de 1 segundo para aplicar los nuevos colores
       setTimeout(() => { window.location.reload(); }, 1000);
     } catch (error) {
       toast({ title: 'Error', description: 'No se pudo guardar', variant: 'destructive' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Función para subir logo
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !tenantId) return;
+
+    // Validar tipo
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Error', description: 'Solo se permiten imágenes', variant: 'destructive' });
+      return;
+    }
+
+    // Validar tamaño (máx 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: 'Error', description: 'La imagen no puede superar 2MB', variant: 'destructive' });
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      // Convertir a base64 para guardar directamente (evita problemas de Storage)
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setLogoUrl(base64);
+        setUploadingLogo(false);
+        toast({ title: 'Logo cargado', description: 'Guarda los cambios para aplicar' });
+      };
+      reader.onerror = () => {
+        toast({ title: 'Error', description: 'No se pudo cargar el logo', variant: 'destructive' });
+        setUploadingLogo(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      toast({ title: 'Error', description: 'No se pudo subir el logo', variant: 'destructive' });
+      setUploadingLogo(false);
     }
   };
 
@@ -507,6 +554,50 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
               ) : (
                 <>
+                  {/* Logo de la Agencia */}
+                  <div className="space-y-3">
+                    <Label>Logo de la Agencia</Label>
+                    <p className="text-xs text-muted-foreground">Este logo aparecerá en las cotizaciones y documentos PDF</p>
+                    <div className="flex items-center gap-4">
+                      {logoUrl ? (
+                        <div className="relative">
+                          <img 
+                            src={logoUrl} 
+                            alt="Logo" 
+                            className="h-20 w-auto max-w-[200px] object-contain border rounded-lg p-2 bg-white"
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full"
+                            onClick={() => setLogoUrl(null)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center w-48 h-24 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary transition-colors">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleLogoUpload}
+                            className="hidden"
+                          />
+                          {uploadingLogo ? (
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                          ) : (
+                            <>
+                              <Upload className="h-6 w-6 text-muted-foreground mb-1" />
+                              <span className="text-xs text-muted-foreground">Subir logo</span>
+                              <span className="text-xs text-muted-foreground">(máx 2MB)</span>
+                            </>
+                          )}
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="grid gap-6 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Color Primario</Label>

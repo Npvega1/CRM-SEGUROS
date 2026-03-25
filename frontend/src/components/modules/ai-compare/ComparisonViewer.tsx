@@ -5,7 +5,7 @@
 // Visualizador de cuadro comparativo - TABLA LADO A LADO
 // =====================================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,10 +18,13 @@ import {
   User,
   Calendar,
   Loader2,
-  FileText
+  FileText,
+  FileDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { generateQuotationPDF, generateComparisonDOCX } from '@/lib/services/document-generator';
+import { createClient } from '@/lib/supabase/client';
 
 // Tipos para la estructura
 interface InsurerData {
@@ -65,13 +68,135 @@ export function ComparisonViewer({
   branding
 }: ComparisonViewerProps) {
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [tenantSettings, setTenantSettings] = useState<{
+    logo_url?: string | null;
+    primary_color?: string;
+    tenant_name?: string;
+  }>({});
 
   const table = comparison.comparison_table as ComparisonTable | null;
   const prospectName = (comparison as unknown as { prospect_name?: string }).prospect_name;
   const clientName = comparison.client?.full_name || prospectName || 'No especificado';
 
+  // Cargar configuración del tenant (logo, colores)
+  useEffect(() => {
+    async function loadTenantSettings() {
+      if (!comparison.tenant_id) return;
+      const supabase = createClient();
+      const { data } = await (supabase.from('tenant_settings') as unknown as { 
+        select: (cols: string) => { eq: (col: string, val: string) => { single: () => Promise<{ data: { logo_url?: string; primary_color?: string } | null }> } } 
+      })
+        .select('logo_url, primary_color')
+        .eq('tenant_id', comparison.tenant_id)
+        .single();
+      if (data) {
+        setTenantSettings(data);
+      }
+    }
+    loadTenantSettings();
+  }, [comparison.tenant_id]);
+
   // Verificar si es cotización o comparativo
   const isQuotation = table?.type === 'quotation';
+
+  // Función para descargar PDF de cotización
+  const handleDownloadPDF = async () => {
+    setIsExportingPDF(true);
+    try {
+      // Obtener datos adicionales del cliente si existen
+      const clientData = comparison.client ? {
+        name: comparison.client.full_name,
+        document_number: (comparison.client as { document_number?: string }).document_number || undefined,
+        email: comparison.client.email || undefined,
+        phone: (comparison.client as { phone?: string }).phone || undefined,
+      } : undefined;
+
+      await generateQuotationPDF(
+        {
+          id: comparison.id,
+          line: comparison.line,
+          created_at: comparison.created_at,
+          comparison_table: {
+            type: table?.type || 'quotation',
+            quotation: table?.quotation as {
+              tipo_documento?: string;
+              datos_extraidos?: {
+                contratante?: string;
+                beneficiario?: string;
+                objeto?: string;
+                valor_contrato?: string;
+                plazo?: string;
+                ubicacion?: string;
+              };
+              cotizacion_sugerida?: {
+                tipo_fianza?: string;
+                valor_asegurado?: string;
+                vigencia?: string;
+                tasa_estimada?: string;
+                prima_estimada?: string;
+                requisitos?: string[];
+                observaciones?: string;
+              };
+            }
+          },
+          client: clientData,
+        },
+        {
+          logo_url: tenantSettings.logo_url || branding?.logoUrl,
+          primary_color: tenantSettings.primary_color || branding?.primaryColor || '#3b82f6',
+          tenant_name: branding?.agencyName,
+        }
+      );
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
+  // Función para descargar DOCX de comparativo
+  const handleDownloadDOCX = async () => {
+    setIsExporting(true);
+    try {
+      const clientData = comparison.client ? {
+        name: comparison.client.full_name,
+        document_number: (comparison.client as { document_number?: string }).document_number || undefined,
+      } : undefined;
+
+      // Mapear insurers para asegurar tipos correctos
+      const mappedInsurers = table?.insurers?.map(ins => ({
+        name: ins.name,
+        valores_asegurados: ins.valores_asegurados,
+        amparos: ins.amparos?.map(a => ({ amparo: a.amparo, limite: a.limite || '' })),
+        deducibles: ins.deducibles,
+        beneficios: ins.beneficios,
+        prima: ins.prima,
+      }));
+
+      await generateComparisonDOCX(
+        {
+          id: comparison.id,
+          line: comparison.line,
+          created_at: comparison.created_at,
+          comparison_table: {
+            type: table?.type || 'comparison',
+            insurers: mappedInsurers
+          },
+          client: clientData,
+        },
+        {
+          logo_url: tenantSettings.logo_url || branding?.logoUrl,
+          primary_color: tenantSettings.primary_color || branding?.primaryColor || '#3b82f6',
+          tenant_name: branding?.agencyName,
+        }
+      );
+    } catch (error) {
+      console.error('Error generating DOCX:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Si es cotización, mostrar vista diferente
   if (isQuotation && table?.quotation) {
@@ -128,6 +253,27 @@ export function ComparisonViewer({
               </div>
             </div>
           )}
+
+          {/* Botón de descarga PDF */}
+          <div className="pt-4 border-t">
+            <Button 
+              onClick={handleDownloadPDF} 
+              disabled={isExportingPDF}
+              className="w-full sm:w-auto"
+            >
+              {isExportingPDF ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generando PDF...
+                </>
+              ) : (
+                <>
+                  <FileDown className="mr-2 h-4 w-4" />
+                  Descargar Cotización (PDF)
+                </>
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
@@ -471,7 +617,7 @@ export function ComparisonViewer({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line}</Badge>
-              <Button variant="default" size="sm" onClick={exportToWord} disabled={isExporting}>
+              <Button variant="default" size="sm" onClick={handleDownloadDOCX} disabled={isExporting}>
                 {isExporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
                 Descargar Word
               </Button>
