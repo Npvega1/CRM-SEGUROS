@@ -172,8 +172,26 @@
 - Storage privado: usar `createSignedUrl()`, no `.download()`
 - Tipos Supabase: actualizar manualmente al agregar columnas
 
-## Próximos Pasos (Siguiente Sesión)
-1. **PENDIENTE:** Desplegar backend en Railway para que funcionen las cotizaciones (1 archivo)
-2. Configurar `NEXT_PUBLIC_FASTAPI_BACKEND_URL` en Vercel
-3. Probar cotizaciones de FIANZAS
-4. Integrar Claude real para test de prompts
+## Integración IA - Comparativos y Cotizaciones (Marzo 2026)
+
+### ✅ Arquitectura Final
+- **API Route de Next.js**: `/app/api/ai/compare/route.ts`
+- **LLM**: Google Gemini 1.5 Flash (multimodal - procesa PDFs directamente)
+- **Sin dependencias externas**: No requiere Railway ni backend separado
+
+### Cambios Realizados (Diciembre 2025):
+1. **Eliminado `pdf-parse`**: Gemini procesa PDFs directamente vía inline_data
+2. **Corregido bug de doble `.json()`**: El frontend ahora solo parsea la respuesta una vez
+3. **Logging mejorado**: La API Route tiene logs detallados para depuración
+4. **Soporte multimodal**: Envía archivos como base64 directamente a Gemini
+
+### Variable de Entorno Requerida en Vercel:
+```
+GOOGLE_GEMINI_API_KEY=tu-api-key-de-gemini
+```
+
+## Próximos Pasos
+1. **Guardar en GitHub** y redesplegar en Vercel
+2. Verificar que la integración funcione correctamente
+3. Integrar Gemini real para test de prompts en Super Admin
+4. Implementar módulo de email real

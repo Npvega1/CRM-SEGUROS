@@ -193,10 +193,13 @@ export default function AIComparePage() {
       
       console.log('📡 Response status:', aiResponse.status);
       
+      // Parsear respuesta UNA sola vez
+      const aiResult = await aiResponse.json();
+      console.log('📦 AI Result:', aiResult.success ? 'SUCCESS' : 'FAILED', aiResult.error || '');
+      
       // Si hay error, actualizar el estado y salir
-      if (!aiResponse.ok) {
-        const errorText = await aiResponse.text();
-        console.error('API error:', errorText);
+      if (!aiResponse.ok || !aiResult.success) {
+        console.error('API error:', aiResult.error);
         
         // Actualizar estado a error en Supabase
         const supabase = getBrowserClient();
@@ -205,20 +208,13 @@ export default function AIComparePage() {
           .from('comparisons')
           .update({
             status: 'error',
-            error_message: `Error del servidor: ${aiResponse.status}. Verifica la configuración de la API key.`
+            error_message: aiResult.error || `Error del servidor: ${aiResponse.status}`
           })
           .eq('id', comparisonId);
         
         await loadData();
         return;
       }
-      
-      // Parsear respuesta exitosa
-      const responseData = await aiResponse.json();
-      console.log('✅ AI Response received:', responseData.success);
-      
-      const aiResult = await aiResponse.json();
-      console.log('📦 AI Result:', aiResult.success ? 'ACCEPTED' : 'FAILED', aiResult.error || '');
 
       // Si el backend aceptó la solicitud con credenciales de Supabase,
       // el procesamiento continúa en background y el polling detectará cuando termine
