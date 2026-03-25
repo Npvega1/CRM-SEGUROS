@@ -75,9 +75,10 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
           identification: formData.identification,
           phone: formData.phone,
           email: formData.email,
-          address: formData.address,
+          address: formData.address || null,
           commission_percentage: Number(formData.commission_percentage),
           password: formData.password,
+          is_active: true,
         };
         await createAlliedAgent(createData, tenantId);
         toast.success('Aliado creado exitosamente');
