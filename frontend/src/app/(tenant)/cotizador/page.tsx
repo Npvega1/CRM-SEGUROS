@@ -75,6 +75,8 @@ interface CotizacionHistorial {
   mejor_prima_total: number;
   created_at: string;
   status: string;
+  valores_asegurados?: ValoresAsegurados;
+  resultados?: any[];
 }
 
 // Configuración de campos por producto
@@ -213,14 +215,26 @@ export default function CotizadorPage() {
       }
       setTenantAseguradoras(mappedAseguradoras);
 
-      // Cargar historial de cotizaciones deterministas del tenant
+      // Calcular fecha límite (35 días atrás)
+      const fechaLimite = new Date();
+      fechaLimite.setDate(fechaLimite.getDate() - 35);
+      
+      // Cargar historial de cotizaciones deterministas del tenant (últimos 35 días)
       const { data: historialData } = await supabase
         .from('cotizaciones_deterministas')
-        .select('id, producto, nombre_cliente, ciudad, mejor_prima_total, created_at, status')
+        .select('id, producto, nombre_cliente, ciudad, mejor_prima_total, created_at, status, valores_asegurados, resultados')
         .eq('tenant_id', tenantId)
+        .gte('created_at', fechaLimite.toISOString())
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(20);
       setHistorial(historialData || []);
+
+      // Eliminar cotizaciones antiguas (más de 35 días) - limpieza automática
+      await supabase
+        .from('cotizaciones_deterministas')
+        .delete()
+        .eq('tenant_id', tenantId)
+        .lt('created_at', fechaLimite.toISOString());
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -270,7 +284,9 @@ export default function CotizadorPage() {
   // Validar paso actual del formulario
   const canProceed = () => {
     if (step === 1) {
-      return datosCliente.nombre.trim() !== '' && datosCliente.ciudad !== '';
+      return datosCliente.nombre.trim() !== '' && 
+             datosCliente.ciudad !== '' && 
+             datosCliente.actividadEconomica.trim() !== '';
     }
     if (step === 2) {
       return valoresAsegurados.edificio > 0;
@@ -414,6 +430,65 @@ export default function CotizadorPage() {
     });
   };
 
+  // Cargar una cotización guardada del historial
+  const handleLoadCotizacion = async (cotizacion: CotizacionHistorial) => {
+    if (!cotizacion.valores_asegurados || !cotizacion.resultados) {
+      toast({
+        title: 'Error',
+        description: 'Esta cotización no tiene datos completos para visualizar',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Restaurar el producto
+    setProducto(cotizacion.producto);
+    
+    // Restaurar valores asegurados
+    setValoresAsegurados(cotizacion.valores_asegurados);
+    
+    // Restaurar datos del cliente desde el nombre y ciudad
+    setDatosCliente(prev => ({
+      ...prev,
+      nombre: cotizacion.nombre_cliente,
+      ciudad: cotizacion.ciudad,
+    }));
+
+    // Recalcular la cotización con los valores guardados para obtener resultados actualizados
+    setIsCalculating(true);
+    try {
+      let results = await calcularCotizacion(
+        supabase,
+        cotizacion.producto,
+        cotizacion.valores_asegurados,
+        { ...datosCliente, nombre: cotizacion.nombre_cliente, ciudad: cotizacion.ciudad }
+      );
+      
+      // Filtrar por aseguradoras activas del tenant
+      if (tenantAseguradoras.length > 0) {
+        const activeIds = tenantAseguradoras
+          .filter(ta => ta.is_active)
+          .map(ta => ta.aseguradora_id);
+        
+        if (activeIds.length > 0) {
+          results = results.filter(r => activeIds.includes(r.aseguradora.id));
+        }
+      }
+      
+      setResultados(results);
+      setVista('results');
+    } catch (error) {
+      console.error('Error recalculando cotización:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo cargar la cotización',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
   if (tenantLoading || isLoading) {
     return <LoadingScreen message="Cargando cotizador..." />;
   }
@@ -472,12 +547,20 @@ export default function CotizadorPage() {
               <CardTitle className="text-base flex items-center gap-2">
                 <History className="h-4 w-4" />
                 Cotizaciones Recientes
+                <span className="text-xs font-normal text-muted-foreground ml-2">
+                  (últimos 35 días)
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="divide-y">
                 {historial.map((cot) => (
-                  <div key={cot.id} className="flex items-center justify-between py-3">
+                  <div 
+                    key={cot.id} 
+                    className="flex items-center justify-between py-3 cursor-pointer hover:bg-slate-50 -mx-4 px-4 rounded transition-colors"
+                    onClick={() => handleLoadCotizacion(cot)}
+                    data-testid={`historial-item-${cot.id}`}
+                  >
                     <div className="flex items-center gap-3">
                       <Badge variant="outline">{cot.producto}</Badge>
                       <div>
@@ -491,15 +574,18 @@ export default function CotizadorPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      {cot.mejor_prima_total && (
-                        <p className="font-semibold text-sm text-emerald-600">
-                          {formatCurrency(cot.mejor_prima_total)}
-                        </p>
-                      )}
-                      <Badge variant={cot.status === 'completada' ? 'default' : 'secondary'} className="mt-1">
-                        {cot.status === 'completada' ? 'Completada' : cot.status}
-                      </Badge>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        {cot.mejor_prima_total && (
+                          <p className="font-semibold text-sm text-emerald-600">
+                            {formatCurrency(cot.mejor_prima_total)}
+                          </p>
+                        )}
+                        <Badge variant={cot.status === 'completada' ? 'default' : 'secondary'} className="mt-1">
+                          {cot.status === 'completada' ? 'Completada' : cot.status}
+                        </Badge>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </div>
                 ))}
@@ -615,11 +701,12 @@ export default function CotizadorPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Actividad Económica</Label>
+                  <Label>Actividad Económica *</Label>
                   <Input
                     placeholder="Ej: Comercio al por menor"
                     value={datosCliente.actividadEconomica}
                     onChange={(e) => setDatosCliente(prev => ({ ...prev, actividadEconomica: e.target.value }))}
+                    data-testid="actividad-economica"
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">

@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Trophy,
   Download,
   Building,
   Shield,
@@ -93,10 +92,6 @@ export function ComparativoTabla({
   const amparosUnicos = Array.from(
     new Set(resultados.flatMap(r => r.primas.map(p => p.amparo)))
   );
-
-  // El mejor precio es el primero (viene ordenado)
-  const mejorPrecio = resultados[0];
-  const mejorPrecioId = mejorPrecio.aseguradora.id;
 
   // Calcular valor total asegurado
   const valorTotalAsegurado = Object.entries(valoresAsegurados)
@@ -232,7 +227,6 @@ export function ComparativoTabla({
                   Criterio
                 </th>
                 {resultados.map((res) => {
-                  const isBest = res.aseguradora.id === mejorPrecioId;
                   const colors = getAseguradoraColor(
                     res.aseguradora.nombre_corto,
                     res.aseguradora.color_primario
@@ -240,9 +234,7 @@ export function ComparativoTabla({
                   return (
                     <th 
                       key={res.aseguradora.id} 
-                      className={`text-center p-3 min-w-[160px] border-b border-slate-200 ${
-                        isBest ? 'bg-emerald-50' : ''
-                      }`}
+                      className="text-center p-3 min-w-[160px] border-b border-slate-200"
                     >
                       <div className="flex flex-col items-center gap-2">
                         <span
@@ -251,12 +243,6 @@ export function ComparativoTabla({
                         >
                           {res.aseguradora.nombre_corto}
                         </span>
-                        {isBest && (
-                          <Badge className="bg-emerald-500 text-white text-[10px] gap-1">
-                            <Trophy className="h-3 w-3" />
-                            Mejor Precio
-                          </Badge>
-                        )}
                       </div>
                     </th>
                   );
@@ -273,72 +259,63 @@ export function ComparativoTabla({
                     <span>Valores Asegurados</span>
                   </div>
                 </td>
-                {resultados.map((res) => {
-                  const isBest = res.aseguradora.id === mejorPrecioId;
-                  return (
-                    <td 
-                      key={res.aseguradora.id} 
-                      className={`p-3 ${isBest ? 'bg-emerald-50/50' : ''}`}
-                    >
-                      <ul className="space-y-1 text-xs">
-                        {valoresAsegurados.edificio > 0 && (
-                          <li>Edificio: <strong>{formatCurrency(valoresAsegurados.edificio)}</strong></li>
-                        )}
-                        {valoresAsegurados.mueblesEnseres > 0 && (
-                          <li>Muebles y Enseres: {formatCurrency(valoresAsegurados.mueblesEnseres)}</li>
-                        )}
-                        {valoresAsegurados.mercancias > 0 && (
-                          <li>Mercancías: {formatCurrency(valoresAsegurados.mercancias)}</li>
-                        )}
-                        {valoresAsegurados.equipoElectronicoFijo > 0 && (
-                          <li>Equipo Electrónico: {formatCurrency(valoresAsegurados.equipoElectronicoFijo)}</li>
-                        )}
-                        {valoresAsegurados.maquinaria > 0 && (
-                          <li>Maquinaria: {formatCurrency(valoresAsegurados.maquinaria)}</li>
-                        )}
-                        {valoresAsegurados.limiteRC > 0 && (
-                          <li>Resp. Civil: {formatCurrency(valoresAsegurados.limiteRC)}</li>
-                        )}
-                      </ul>
-                      <div className="mt-2 pt-2 border-t border-slate-200">
-                        <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                          Total: {formatCurrency(valorTotalAsegurado)}
-                        </span>
-                      </div>
-                    </td>
-                  );
-                })}
+                {resultados.map((res) => (
+                  <td 
+                    key={res.aseguradora.id} 
+                    className="p-3"
+                  >
+                    <ul className="space-y-1 text-xs">
+                      {valoresAsegurados.edificio > 0 && (
+                        <li>Edificio: <strong>{formatCurrency(valoresAsegurados.edificio)}</strong></li>
+                      )}
+                      {valoresAsegurados.mueblesEnseres > 0 && (
+                        <li>Muebles y Enseres: {formatCurrency(valoresAsegurados.mueblesEnseres)}</li>
+                      )}
+                      {valoresAsegurados.mercancias > 0 && (
+                        <li>Mercancías: {formatCurrency(valoresAsegurados.mercancias)}</li>
+                      )}
+                      {valoresAsegurados.equipoElectronicoFijo > 0 && (
+                        <li>Equipo Electrónico: {formatCurrency(valoresAsegurados.equipoElectronicoFijo)}</li>
+                      )}
+                      {valoresAsegurados.maquinaria > 0 && (
+                        <li>Maquinaria: {formatCurrency(valoresAsegurados.maquinaria)}</li>
+                      )}
+                      {valoresAsegurados.limiteRC > 0 && (
+                        <li>Resp. Civil: {formatCurrency(valoresAsegurados.limiteRC)}</li>
+                      )}
+                    </ul>
+                    <div className="mt-2 pt-2 border-t border-slate-200">
+                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                        Total: {formatCurrency(valorTotalAsegurado)}
+                      </span>
+                    </div>
+                  </td>
+                ))}
               </tr>
 
-              {/* FILA 2: Amparos / Coberturas con Primas */}
+              {/* FILA 2: Amparos / Coberturas (sin mostrar primas - confidencial) */}
               <tr className="border-b border-slate-200">
                 <td className="p-3 font-medium text-slate-700 bg-slate-50">
                   <div className="flex items-center gap-2">
                     <Shield className="h-4 w-4 text-slate-500" />
-                    <span>Amparos y Primas</span>
+                    <span>Amparos</span>
                   </div>
                 </td>
-                {resultados.map((res) => {
-                  const isBest = res.aseguradora.id === mejorPrecioId;
-                  return (
-                    <td 
-                      key={res.aseguradora.id} 
-                      className={`p-3 ${isBest ? 'bg-emerald-50/50' : ''}`}
-                    >
-                      <ul className="space-y-1 text-xs">
-                        {res.primas.map((prima) => (
-                          <li key={prima.amparo} className="flex items-start gap-1">
-                            <CheckCircle className="h-3 w-3 text-emerald-500 mt-0.5 flex-shrink-0" />
-                            <span>
-                              {AMPARO_LABELS[prima.amparo] || prima.amparo}:{' '}
-                              <strong>{formatCurrency(prima.primaNeta)}</strong>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </td>
-                  );
-                })}
+                {resultados.map((res) => (
+                  <td 
+                    key={res.aseguradora.id} 
+                    className="p-3"
+                  >
+                    <ul className="space-y-1 text-xs">
+                      {res.primas.map((prima) => (
+                        <li key={prima.amparo} className="flex items-start gap-1">
+                          <CheckCircle className="h-3 w-3 text-emerald-500 mt-0.5 flex-shrink-0" />
+                          <span>{AMPARO_LABELS[prima.amparo] || prima.amparo}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </td>
+                ))}
               </tr>
 
               {/* FILA 3: Deducibles */}
@@ -349,33 +326,26 @@ export function ComparativoTabla({
                     <span>Deducibles</span>
                   </div>
                 </td>
-                {resultados.map((res) => {
-                  const isBest = res.aseguradora.id === mejorPrecioId;
-                  // Obtener deducibles únicos
-                  const deduciblesUnicos = Array.from(
-                    new Set(res.primas.map(p => p.deducible).filter(Boolean))
-                  );
-                  return (
-                    <td 
-                      key={res.aseguradora.id} 
-                      className={`p-3 ${isBest ? 'bg-emerald-50/50' : ''}`}
-                    >
-                      <ul className="space-y-1 text-xs">
-                        {res.primas.slice(0, 6).map((prima) => (
-                          <li key={prima.amparo}>
-                            {AMPARO_LABELS[prima.amparo] || prima.amparo}:{' '}
-                            <span className={prima.deducible?.toLowerCase().includes('sin deducible') 
-                              ? 'text-emerald-600 font-semibold' 
-                              : 'text-slate-600'
-                            }>
-                              {prima.deducible || 'Según condiciones'}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </td>
-                  );
-                })}
+                {resultados.map((res) => (
+                  <td 
+                    key={res.aseguradora.id} 
+                    className="p-3"
+                  >
+                    <ul className="space-y-1 text-xs">
+                      {res.primas.slice(0, 6).map((prima) => (
+                        <li key={prima.amparo}>
+                          {AMPARO_LABELS[prima.amparo] || prima.amparo}:{' '}
+                          <span className={prima.deducible?.toLowerCase().includes('sin deducible') 
+                            ? 'text-emerald-600 font-semibold' 
+                            : 'text-slate-600'
+                          }>
+                            {prima.deducible || 'Según condiciones'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </td>
+                ))}
               </tr>
 
               {/* FILA 4: Valor a Pagar (Totales) */}
@@ -386,56 +356,27 @@ export function ComparativoTabla({
                     <span>Valor a Pagar</span>
                   </div>
                 </td>
-                {resultados.map((res) => {
-                  const isBest = res.aseguradora.id === mejorPrecioId;
-                  return (
-                    <td 
-                      key={res.aseguradora.id} 
-                      className={`p-3 text-center ${
-                        isBest 
-                          ? 'bg-emerald-100' 
-                          : ''
-                      }`}
-                    >
-                      <div className="space-y-1 text-xs">
-                        <p>Prima Neta: {formatCurrency(res.primaTotalNeta)}</p>
-                        <p>IVA 19%: {formatCurrency(res.iva)}</p>
-                      </div>
-                      <div className={`mt-2 text-lg font-bold ${
-                        isBest ? 'text-emerald-700' : 'text-slate-800'
-                      }`}>
-                        {formatCurrency(res.primaTotal)}
-                      </div>
-                      <p className="text-[10px] text-slate-500 mt-1">
-                        {isBest ? '⭐ Mejor precio' : 'Pago anual'}
-                      </p>
-                    </td>
-                  );
-                })}
+                {resultados.map((res) => (
+                  <td 
+                    key={res.aseguradora.id} 
+                    className="p-3 text-center"
+                  >
+                    <div className="space-y-1 text-xs">
+                      <p>Prima Neta: {formatCurrency(res.primaTotalNeta)}</p>
+                      <p>IVA 19%: {formatCurrency(res.iva)}</p>
+                    </div>
+                    <div className="mt-2 text-lg font-bold text-slate-800">
+                      {formatCurrency(res.primaTotal)}
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Pago anual
+                    </p>
+                  </td>
+                ))}
               </tr>
             </tbody>
           </table>
         </div>
-
-        {/* Recomendación del Asesor */}
-        {resultados.length > 0 && (
-          <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-t border-emerald-200">
-            <div className="flex items-center gap-2 mb-2">
-              <Trophy className="h-5 w-5 text-amber-500" />
-              <span className="font-semibold text-slate-800">Recomendación</span>
-            </div>
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="h-4 w-4 text-emerald-600" />
-              <span className="font-medium text-emerald-800">
-                Mejor opción: {mejorPrecio.aseguradora.nombre} – {formatCurrency(mejorPrecio.primaTotal)}/año
-              </span>
-            </div>
-            <p className="text-xs text-slate-600">
-              Con base en el análisis comparativo, <strong>{mejorPrecio.aseguradora.nombre}</strong> ofrece 
-              la prima más competitiva para la cobertura de {producto}. Esta cotización tiene validez de 30 días.
-            </p>
-          </div>
-        )}
 
         {/* Disclaimer */}
         <div className="p-3 bg-slate-50 border-t border-slate-200 rounded-b-lg">
