@@ -103,15 +103,16 @@ export async function POST(request: NextRequest) {
     console.log('[AI Compare] Operation type:', body.operation_type);
     console.log('[AI Compare] Files count:', body.files?.length || 0);
     
-    // Verificar API key
-    const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
+    // Verificar API key - Soporta tanto EMERGENT_LLM_KEY como GOOGLE_GEMINI_API_KEY
+    const apiKey = process.env.EMERGENT_LLM_KEY || process.env.GOOGLE_GEMINI_API_KEY;
     
     if (!apiKey) {
-      console.error('[AI Compare] ERROR: GOOGLE_GEMINI_API_KEY not configured');
-      throw new Error('GOOGLE_GEMINI_API_KEY no está configurada en las variables de entorno');
+      console.error('[AI Compare] ERROR: No API key configured');
+      throw new Error('No hay API key configurada. Agrega EMERGENT_LLM_KEY o GOOGLE_GEMINI_API_KEY en las variables de entorno.');
     }
     
     console.log('[AI Compare] API Key found (length):', apiKey.length);
+    console.log('[AI Compare] Using key type:', process.env.EMERGENT_LLM_KEY ? 'EMERGENT_LLM_KEY' : 'GOOGLE_GEMINI_API_KEY');
     
     // Verificar archivos
     if (!body.files || body.files.length === 0) {
@@ -223,9 +224,9 @@ COTIZACIONES A COMPARAR:`
     console.log('[AI Compare] Initializing Gemini...');
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Usar gemini-2.0-flash (el modelo 1.5 fue descontinuado en abril 2025)
+    // Usar gemini-2.5-flash (modelo recomendado con Emergent Universal Key)
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       generationConfig: {
         temperature: 0.2, // Respuestas más consistentes
         maxOutputTokens: 4096
