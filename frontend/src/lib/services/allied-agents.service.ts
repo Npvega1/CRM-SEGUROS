@@ -60,12 +60,12 @@ export async function createAlliedAgent(
     .insert({
       ...agentData,
       tenant_id: tenantId,
-    })
+    } as any)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as AlliedAgent;
 }
 
 export async function updateAlliedAgent(
@@ -75,20 +75,20 @@ export async function updateAlliedAgent(
   const supabase = getBrowserClient();
   const { data, error } = await supabase
     .from('allied_agents')
-    .update(input)
+    .update(input as any)
     .eq('id', id)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as AlliedAgent;
 }
 
 export async function deleteAlliedAgent(id: string): Promise<void> {
   const supabase = getBrowserClient();
   const { error } = await supabase
     .from('allied_agents')
-    .update({ is_active: false })
+    .update({ is_active: false } as any)
     .eq('id', id);
 
   if (error) throw error;
@@ -127,7 +127,7 @@ export async function uploadAlliedAgentDocument(
   const columnName = `document_${documentType}`;
   const { error: updateError } = await supabase
     .from('allied_agents')
-    .update({ [columnName]: fileName })
+    .update({ [columnName]: fileName } as any)
     .eq('id', alliedAgentId);
 
   if (updateError) throw updateError;
@@ -161,7 +161,7 @@ export async function deleteAlliedAgentDocument(
   const columnName = `document_${documentType}`;
   const { error: updateError } = await supabase
     .from('allied_agents')
-    .update({ [columnName]: null })
+    .update({ [columnName]: null } as any)
     .eq('id', alliedAgentId);
 
   if (updateError) throw updateError;
@@ -188,7 +188,7 @@ export async function getAlliedAgentCommissions(): Promise<AlliedAgentCommission
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as AlliedAgentCommissionWithPolicy[];
 }
 
 export async function getCommissionsByAlliedAgent(
@@ -212,7 +212,7 @@ export async function getCommissionsByAlliedAgent(
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as AlliedAgentCommissionWithPolicy[];
 }
 
 export async function updateCommissionStatus(
@@ -220,20 +220,20 @@ export async function updateCommissionStatus(
   status: 'pending' | 'paid'
 ): Promise<AlliedAgentCommission> {
   const supabase = getBrowserClient();
-  const updateData: Record<string, unknown> = {
+  const updateData = {
     status,
     paid_at: status === 'paid' ? new Date().toISOString() : null,
   };
 
   const { data, error } = await supabase
     .from('allied_agent_commissions')
-    .update(updateData)
+    .update(updateData as any)
     .eq('id', commissionId)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as AlliedAgentCommission;
 }
 
 // PORTAL DEL ALIADO
@@ -272,15 +272,15 @@ export async function getAlliedAgentPolicies(
 
   if (policiesError) throw policiesError;
 
-  const policyIds = (policies || []).map(p => p.id);
+  const policyIds = (policies || []).map((p: any) => p.id);
   const { data: commissions } = await supabase
     .from('allied_agent_commissions')
     .select('id, policy_id, commission_amount, status, paid_at')
     .in('policy_id', policyIds);
 
-  return (policies || []).map(policy => ({
+  return (policies || []).map((policy: any) => ({
     ...policy,
-    commission: commissions?.find(c => c.policy_id === policy.id),
+    commission: commissions?.find((c: any) => c.policy_id === policy.id),
   })) as AlliedAgentPolicy[];
 }
 
@@ -328,7 +328,7 @@ export async function updateClientAlliedAgent(
   const supabase = getBrowserClient();
   const { error } = await supabase
     .from('clients')
-    .update({ allied_agent_id: alliedAgentId })
+    .update({ allied_agent_id: alliedAgentId } as any)
     .eq('id', clientId);
 
   if (error) throw error;
