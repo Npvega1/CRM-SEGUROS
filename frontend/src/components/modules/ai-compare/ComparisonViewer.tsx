@@ -23,8 +23,9 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { generateQuotationPDF, generateComparisonDOCX } from '@/lib/services/document-generator';
+import { generateQuotationPDF, generateComparisonDOCX, generateFianzaPDF } from '@/lib/services/document-generator';
 import { createClient } from '@/lib/supabase/client';
+import { CotizacionFianza } from './CotizacionFianza';
 
 // Tipos para la estructura
 interface InsurerData {
@@ -262,7 +263,82 @@ export function ComparisonViewer({
       .trim();
   };
 
-  // Si es cotización, mostrar vista diferente
+  // Detectar si es una cotización de Fianzas (cumplimiento, anticipo, calidad, etc.)
+  const isFianzaQuotation = isQuotation && (
+    comparison.line.toLowerCase().includes('cumplimiento') ||
+    comparison.line.toLowerCase().includes('fianza') ||
+    comparison.line.toLowerCase().includes('anticipo') ||
+    comparison.line.toLowerCase().includes('calidad') ||
+    comparison.line.toLowerCase().includes('garantia') ||
+    comparison.line.toLowerCase().includes('particular')
+  );
+
+  // Función para descargar PDF de Fianza
+  const handleDownloadFianzaPDF = async () => {
+    setIsExportingPDF(true);
+    try {
+      await generateFianzaPDF(
+        {
+          quotation: table?.quotation as Record<string, unknown>,
+          clientName,
+          ramoName: POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line,
+          createdAt: comparison.created_at,
+        },
+        {
+          logo_url: tenantSettings.logo_url || branding?.logoUrl,
+          primary_color: tenantSettings.primary_color || branding?.primaryColor || '#3b82f6',
+          tenant_name: branding?.agencyName || 'Agencia de Seguros',
+        }
+      );
+    } catch (error) {
+      console.error('Error generating Fianza PDF:', error);
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
+  // Si es cotización de FIANZAS, usar el componente especializado
+  if (isFianzaQuotation && table?.quotation) {
+    return (
+      <CotizacionFianza
+        quotation={table.quotation as {
+          notas?: string;
+          polizas?: Array<{
+            tipo?: string;
+            objeto?: string;
+            amparos?: Array<{
+              nombre?: string;
+              porcentaje?: number;
+              valorAsegurado?: number;
+              vigenciaDesde?: string;
+              vigenciaFinal?: string;
+              dias?: number;
+              prima?: number;
+            }>;
+            iva?: number;
+            gastos?: number;
+            totalPrima?: number;
+          }>;
+          tomador?: { nombre?: string; identificacion?: string };
+          beneficiario?: { nombre?: string; identificacion?: string };
+          noContrato?: string;
+          valorContrato?: number;
+          vigenciaDesde?: string;
+          vigenciaHasta?: string;
+          vigenciaMasLarga?: string;
+        }}
+        clientName={clientName}
+        ramoName={POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line}
+        tenantName={branding?.agencyName || 'Agencia de Seguros'}
+        primaryColor={tenantSettings.primary_color || branding?.primaryColor || '#3b82f6'}
+        logoUrl={tenantSettings.logo_url || branding?.logoUrl}
+        onDownloadPDF={handleDownloadFianzaPDF}
+        isExporting={isExportingPDF}
+      />
+    );
+  }
+
+  // Si es cotización genérica (no Fianzas), mostrar vista genérica
   if (isQuotation && table?.quotation) {
     const quotation = table.quotation as Record<string, unknown>;
     

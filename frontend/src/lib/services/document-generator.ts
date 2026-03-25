@@ -440,3 +440,315 @@ export async function generateComparisonDOCX(
   const blob = await Packer.toBlob(doc);
   saveAs(blob, `comparativo_${data.line}_${new Date().toISOString().split('T')[0]}.docx`);
 }
+
+
+// =====================================================
+// Función para generar PDF de cotización de FIANZAS
+// Formato profesional con tablas estructuradas
+// =====================================================
+
+interface FianzaAmparoData {
+  nombre?: string;
+  porcentaje?: number;
+  valorAsegurado?: number;
+  vigenciaDesde?: string;
+  vigenciaFinal?: string;
+  dias?: number;
+  prima?: number;
+}
+
+interface FianzaPolizaData {
+  tipo?: string;
+  objeto?: string;
+  amparos?: FianzaAmparoData[];
+  iva?: number;
+  gastos?: number;
+  totalPrima?: number;
+}
+
+interface FianzaQuotationData {
+  notas?: string;
+  polizas?: FianzaPolizaData[];
+  tomador?: { nombre?: string; identificacion?: string };
+  beneficiario?: { nombre?: string; identificacion?: string };
+  noContrato?: string;
+  valorContrato?: number;
+  vigenciaDesde?: string;
+  vigenciaHasta?: string;
+  vigenciaMasLarga?: string;
+}
+
+interface FianzaPDFData {
+  quotation: Record<string, unknown>;
+  clientName: string;
+  ramoName: string;
+  createdAt: string;
+}
+
+export async function generateFianzaPDF(
+  data: FianzaPDFData,
+  tenantSettings: TenantSettings
+): Promise<void> {
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 15;
+  const contentWidth = pageWidth - 2 * margin;
+  let y = 15;
+
+  // Colores
+  const primaryColor = tenantSettings.primary_color || '#3b82f6';
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 59, g: 130, b: 246 };
+  };
+  const rgb = hexToRgb(primaryColor);
+
+  // Formatear moneda
+  const formatCurrency = (value: number | undefined) => {
+    if (value === undefined || value === null) return '-';
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  // Formatear fecha
+  const formatDate = (dateStr: string | undefined) => {
+    if (!dateStr) return '-';
+    if (dateStr.includes('/')) return dateStr;
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('es-CO');
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const quotation = data.quotation as FianzaQuotationData;
+  const poliza = quotation.polizas?.[0];
+  const amparos = poliza?.amparos || [];
+  
+  // Calcular totales
+  const totalValorAsegurado = amparos.reduce((sum, a) => sum + (a.valorAsegurado || 0), 0);
+  const totalPrima = amparos.reduce((sum, a) => sum + (a.prima || 0), 0);
+  const gastos = poliza?.gastos || 0;
+  const iva = poliza?.iva || Math.round(totalPrima * 0.19);
+  const totalFinal = poliza?.totalPrima || (totalPrima + gastos + iva);
+
+  // Logo
+  if (tenantSettings.logo_url) {
+    try {
+      pdf.addImage(tenantSettings.logo_url, 'PNG', margin, y, 35, 18);
+    } catch (e) {
+      console.log('Error adding logo:', e);
+    }
+  }
+
+  // Header con nombre de la agencia
+  pdf.setTextColor(rgb.r, rgb.g, rgb.b);
+  pdf.setFontSize(16);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text(tenantSettings.tenant_name?.toUpperCase() || 'AGENCIA DE SEGUROS', margin + 45, y + 8);
+  
+  pdf.setTextColor(100, 100, 100);
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text('COTIZACIÓN DE PÓLIZA DE GARANTÍA', margin + 45, y + 14);
+  y += 25;
+
+  // Banner con tipo de garantía
+  pdf.setFillColor(rgb.r, rgb.g, rgb.b);
+  pdf.rect(margin, y, contentWidth, 10, 'F');
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text(poliza?.tipo || 'GARANTÍA DE CUMPLIMIENTO', pageWidth / 2, y + 7, { align: 'center' });
+  y += 15;
+
+  // Tabla de Tomador y Beneficiario
+  pdf.setFontSize(8);
+  
+  // Fila 1: Tomador
+  pdf.setFillColor(245, 245, 245);
+  pdf.rect(margin, y, 30, 8, 'F');
+  pdf.setTextColor(50, 50, 50);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('TOMADOR', margin + 2, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(quotation.tomador?.nombre || data.clientName, margin + 32, y + 5);
+  
+  pdf.setFillColor(245, 245, 245);
+  pdf.rect(margin + 100, y, 30, 8, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('IDENTIFICACIÓN', margin + 102, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(quotation.tomador?.identificacion || '-', margin + 132, y + 5);
+  
+  pdf.setDrawColor(200, 200, 200);
+  pdf.rect(margin, y, contentWidth, 8, 'S');
+  y += 8;
+
+  // Fila 2: Beneficiario
+  pdf.setFillColor(245, 245, 245);
+  pdf.rect(margin, y, 30, 8, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('BENEFICIARIO', margin + 2, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  const beneficiarioText = quotation.beneficiario?.nombre || '-';
+  const truncatedBeneficiario = beneficiarioText.length > 40 ? beneficiarioText.substring(0, 37) + '...' : beneficiarioText;
+  pdf.text(truncatedBeneficiario, margin + 32, y + 5);
+  
+  pdf.setFillColor(245, 245, 245);
+  pdf.rect(margin + 100, y, 30, 8, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('IDENTIFICACIÓN', margin + 102, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(quotation.beneficiario?.identificacion || '-', margin + 132, y + 5);
+  
+  pdf.rect(margin, y, contentWidth, 8, 'S');
+  y += 12;
+
+  // Objeto del contrato
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('OBJETO:', margin, y);
+  pdf.setFont('helvetica', 'normal');
+  const objetoText = poliza?.objeto || '-';
+  const objetoLines = pdf.splitTextToSize(objetoText, contentWidth - 15);
+  pdf.text(objetoLines, margin + 15, y);
+  y += objetoLines.length * 4 + 8;
+
+  // Vigencia y valor contrato
+  pdf.setDrawColor(200, 200, 200);
+  pdf.rect(margin, y, contentWidth, 8, 'S');
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('VIGENCIA DESDE', margin + 2, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(formatDate(quotation.vigenciaDesde || amparos[0]?.vigenciaDesde), margin + 32, y + 5);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('HASTA', margin + 55, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(formatDate(quotation.vigenciaHasta || amparos[0]?.vigenciaFinal), margin + 68, y + 5);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('VIGENCIA MÁS LARGA', margin + 100, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(formatDate(quotation.vigenciaMasLarga || amparos[0]?.vigenciaFinal), margin + 140, y + 5);
+  y += 8;
+
+  pdf.rect(margin, y, contentWidth, 8, 'S');
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('VALOR CONTRATO', margin + 2, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(formatCurrency(quotation.valorContrato), margin + 35, y + 5);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('# CONTRATO', margin + 100, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(quotation.noContrato || '-', margin + 125, y + 5);
+  y += 12;
+
+  // Tabla de Amparos
+  const colWidths = [40, 15, 30, 25, 25, 15, 25];
+  const headers = ['AMPAROS', '%', 'VL ASEGURADO', 'VIG. DESDE', 'VIG. FINAL', 'DÍAS', 'PRIMA'];
+  
+  // Header de la tabla
+  pdf.setFillColor(rgb.r, rgb.g, rgb.b);
+  pdf.rect(margin, y, contentWidth, 8, 'F');
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(7);
+  
+  let xPos = margin;
+  headers.forEach((header, i) => {
+    pdf.text(header, xPos + 2, y + 5);
+    xPos += colWidths[i];
+  });
+  y += 8;
+
+  // Filas de amparos
+  pdf.setTextColor(50, 50, 50);
+  pdf.setFont('helvetica', 'normal');
+  
+  amparos.forEach((amparo) => {
+    pdf.setDrawColor(220, 220, 220);
+    pdf.rect(margin, y, contentWidth, 7, 'S');
+    
+    xPos = margin;
+    pdf.text(amparo.nombre || '-', xPos + 2, y + 5);
+    xPos += colWidths[0];
+    pdf.text(amparo.porcentaje ? `${amparo.porcentaje}%` : '-', xPos + 2, y + 5);
+    xPos += colWidths[1];
+    pdf.text(formatCurrency(amparo.valorAsegurado), xPos + 2, y + 5);
+    xPos += colWidths[2];
+    pdf.text(formatDate(amparo.vigenciaDesde), xPos + 2, y + 5);
+    xPos += colWidths[3];
+    pdf.text(formatDate(amparo.vigenciaFinal), xPos + 2, y + 5);
+    xPos += colWidths[4];
+    pdf.text(String(amparo.dias || '-'), xPos + 2, y + 5);
+    xPos += colWidths[5];
+    pdf.text(formatCurrency(amparo.prima), xPos + 2, y + 5);
+    
+    y += 7;
+  });
+
+  y += 3;
+
+  // Totales
+  pdf.setFillColor(245, 245, 245);
+  pdf.rect(margin, y, contentWidth, 7, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('VALOR ASEGURADO TOTAL', margin + 2, y + 5);
+  pdf.text(formatCurrency(totalValorAsegurado), margin + 72, y + 5);
+  pdf.text('GASTOS', margin + 115, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(formatCurrency(gastos), margin + 145, y + 5);
+  y += 7;
+
+  pdf.rect(margin, y, contentWidth, 7, 'S');
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('IVA 19%', margin + 115, y + 5);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(formatCurrency(iva), margin + 145, y + 5);
+  y += 7;
+
+  // Total final
+  pdf.setFillColor(rgb.r, rgb.g, rgb.b);
+  pdf.rect(margin, y, contentWidth, 10, 'F');
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('TOTAL PRIMA', margin + 115, y + 7);
+  pdf.text(formatCurrency(totalFinal), margin + 145, y + 7);
+  y += 15;
+
+  // Notas
+  if (quotation.notas) {
+    pdf.setTextColor(100, 100, 100);
+    pdf.setFontSize(7);
+    pdf.setFont('helvetica', 'italic');
+    const notasLines = pdf.splitTextToSize(`* ${quotation.notas}`, contentWidth);
+    pdf.text(notasLines, margin, y);
+  }
+
+  // Pie de página legal
+  const footerY = pageHeight - 15;
+  pdf.setDrawColor(200, 200, 200);
+  pdf.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
+  
+  pdf.setTextColor(120, 120, 120);
+  pdf.setFontSize(6);
+  pdf.setFont('helvetica', 'italic');
+  const legalText = 'NOTA: Este documento es una cotización preliminar y está sujeto a aprobación por parte de la compañía de seguros. Las condiciones, tasas y valores aquí presentados pueden variar según la evaluación del riesgo y las políticas de suscripción vigentes.';
+  const legalLines = pdf.splitTextToSize(legalText, contentWidth);
+  legalLines.forEach((line: string, index: number) => {
+    pdf.text(line, margin, footerY + (index * 3));
+  });
+
+  // Descargar
+  pdf.save(`cotizacion_fianza_${new Date().toISOString().split('T')[0]}.pdf`);
+}
