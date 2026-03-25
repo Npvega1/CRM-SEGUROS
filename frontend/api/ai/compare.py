@@ -178,64 +178,28 @@ Si no hay ejemplo, usa este formato por defecto:
         is_poliza_comparison = any(x in line.lower() for x in ['pyme', 'hogar', 'copropiedad', 'multiriesgo', 'empresarial'])
         
         if is_poliza_comparison:
-            # Estructura especializada para PYME/Hogar/Copropiedades
-            analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza estas {len(extracted_texts)} cotizaciones del ramo "{line}" y crea un cuadro comparativo detallado.
-{example_section}
+            # Estructura simplificada para PYME/Hogar/Copropiedades - OPTIMIZADO para velocidad
+            analysis_prompt = f"""Analiza estas cotizaciones de seguros y devuelve un JSON comparativo.
+
+COTIZACIONES:
 {files_content}
-{custom_instructions}
-RESPONDE SOLO CON JSON VÁLIDO (sin markdown). Si hay un ejemplo de estructura arriba, sigue ese formato exacto.
-Si no hay ejemplo, usa este formato para PYME/Hogar/Copropiedades:
+
+RESPONDE SOLO JSON (sin markdown, sin explicaciones):
 {{
   "aseguradoras": [
     {{
-      "nombre": "NOMBRE DE LA ASEGURADORA",
-      "producto": "Nombre del producto",
-      "recomendada": false,
-      "valoresAsegurados": {{
-        "edificio": 500000000,
-        "mueblesEnseres": 50000000,
-        "maquinaria": 100000000,
-        "mercancias": 30000000,
-        "dineroEfectivo": 5000000,
-        "totalDanoMaterial": 685000000
-      }},
-      "amparos": [
-        {{"nombre": "Incendio y Rayo", "valorAsegurado": 500000000, "deducible": "10% mín 1 SMMLV"}},
-        {{"nombre": "Terremoto", "valorAsegurado": 500000000, "deducible": "3% valor asegurado"}},
-        {{"nombre": "AMIT (Actos Mal Intencionados)", "valorAsegurado": 100000000, "deducible": "10%"}},
-        {{"nombre": "Hurto Calificado", "valorAsegurado": 50000000, "deducible": "10%"}},
-        {{"nombre": "Anegación", "valorAsegurado": 30000000, "deducible": "10%"}},
-        {{"nombre": "Rotura de Vidrios", "valorAsegurado": 5000000, "deducible": "0"}},
-        {{"nombre": "Responsabilidad Civil", "valorAsegurado": 100000000, "deducible": "10%"}}
-      ],
-      "beneficiosAdicionales": {{
-        "asistencias": [
-          {{"nombre": "Asistencia domiciliaria", "limite": "4 eventos/año"}},
-          {{"nombre": "Cerrajería", "limite": "$200,000/evento"}}
-        ],
-        "amparoAutomaticoNuevosBienes": "10% del valor asegurado",
-        "gastosExtincionSiniestro": "Incluido hasta 10%",
-        "gastosRemocionEscombros": "Incluido hasta 10%",
-        "restablecimientoAutomatico": "Sí",
-        "otrosBeneficios": ["Cobertura de bienes a la intemperie", "Daño interno de maquinaria"]
-      }},
-      "prima": {{
-        "netaAnteIva": 1500000,
-        "asistencia": 50000,
-        "iva": 294500,
-        "total": 1844500
-      }}
+      "nombre": "ASEGURADORA",
+      "producto": "Producto",
+      "recomendada": true/false,
+      "valoresAsegurados": {{"edificio": 0, "contenidos": 0, "total": 0}},
+      "amparos": [{{"nombre": "Amparo", "valorAsegurado": 0, "deducible": "X%"}}],
+      "prima": {{"netaAnteIva": 0, "iva": 0, "total": 0}}
     }}
   ],
-  "resumen_recomendacion": "Se recomienda la póliza de [ASEGURADORA] porque ofrece la mejor relación costo-beneficio con una prima de $X y coberturas completas."
+  "resumen_recomendacion": "Breve recomendación"
 }}
 
-IMPORTANTE:
-- Marca "recomendada": true en la aseguradora que consideres mejor opción
-- Incluye TODOS los amparos que encuentres en cada cotización
-- Si un amparo no está incluido, NO lo agregues en ese aseguradora
-- Los valores numéricos deben ser números, no strings con formato
-- Extrae los deducibles exactamente como aparecen en cada cotización"""
+Extrae los valores numéricos sin formato (solo números). Marca recomendada=true la mejor opción."""
         else:
             # Estructura genérica para otros ramos
             analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza estas {len(extracted_texts)} cotizaciones del ramo "{line}" y crea un cuadro comparativo.

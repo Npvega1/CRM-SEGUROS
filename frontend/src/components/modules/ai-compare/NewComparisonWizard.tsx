@@ -279,8 +279,8 @@ export function NewComparisonWizard({
     const results: Array<{ name: string; type: string; size: number; base64: string; extractedText?: string }> = [];
     
     // Calcular límite de texto por archivo basado en cantidad de archivos
-    // Para evitar exceder el límite de 4.5MB de Vercel
-    const maxCharsPerFile = Math.min(30000, Math.floor(100000 / files.length));
+    // REDUCIDO para evitar timeout de 60s en Vercel
+    const maxCharsPerFile = Math.min(15000, Math.floor(45000 / files.length));
     console.log(`[FileConvert] Processing ${files.length} files, max ${maxCharsPerFile} chars each`);
     
     for (const file of files) {
