@@ -210,10 +210,29 @@ export function ComparativoPolizas({
   };
 
   if (!comparativo || !comparativo.aseguradoras || comparativo.aseguradoras.length === 0) {
+    // Intentar mostrar datos aunque no vengan en el formato esperado
+    console.log('[ComparativoPolizas] Data received:', JSON.stringify(comparativo, null, 2).substring(0, 500));
+    
+    // Si tiene insurers en lugar de aseguradoras, mostrar mensaje
+    const hasInsurers = comparativo && 'insurers' in comparativo;
+    
     return (
       <Card>
-        <CardContent className="p-8 text-center text-muted-foreground">
-          No hay datos de comparativo disponibles
+        <CardContent className="p-8 text-center">
+          <p className="text-muted-foreground mb-4">
+            {hasInsurers 
+              ? 'El comparativo se generó con un formato diferente. Por favor, ve a la lista de comparativos para verlo.'
+              : 'No hay datos de comparativo disponibles en el formato esperado.'
+            }
+          </p>
+          {comparativo && (
+            <details className="text-left mt-4">
+              <summary className="cursor-pointer text-sm text-blue-600">Ver datos recibidos (debug)</summary>
+              <pre className="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto max-h-60">
+                {JSON.stringify(comparativo, null, 2)}
+              </pre>
+            </details>
+          )}
         </CardContent>
       </Card>
     );

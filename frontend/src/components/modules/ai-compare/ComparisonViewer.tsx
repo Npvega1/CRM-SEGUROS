@@ -362,33 +362,83 @@ export function ComparisonViewer({
     comparison.line.toLowerCase().includes('empresarial')
   );
 
-  // Si es un comparativo de PYME/Hogar/Copropiedades con estructura de aseguradoras
-  if (isPolizaComparison && table?.aseguradoras) {
+  // Si es un comparativo de PYME/Hogar/Copropiedades
+  if (isPolizaComparison) {
+    // Verificar si tiene estructura de aseguradoras
+    if (table?.aseguradoras && Array.isArray(table.aseguradoras) && table.aseguradoras.length > 0) {
+      return (
+        <ComparativoPolizas
+          comparativo={{
+            cliente: {
+              nombre: clientName,
+              vigenciaDesde: comparison.created_at ? format(new Date(comparison.created_at), 'dd/MM/yyyy', { locale: es }) : undefined,
+              vigenciaHasta: undefined,
+            },
+            aseguradoras: table.aseguradoras as Array<{
+              nombre: string;
+              producto?: string;
+              recomendada?: boolean;
+              valoresAsegurados?: Record<string, number>;
+              amparos?: Array<{ nombre: string; valorAsegurado?: number | string; deducible?: string; nota_comparativa?: string }>;
+              beneficiosAdicionales?: Record<string, unknown>;
+              prima?: { netaAnteIva?: number; asistencia?: number; iva?: number; total?: number };
+            }>,
+            resumen_recomendacion: (table as { resumen_recomendacion?: string }).resumen_recomendacion,
+          }}
+          tenantName={branding?.agencyName || 'Agencia de Seguros'}
+          primaryColor={tenantSettings.primary_color || branding?.primaryColor || '#3b82f6'}
+          logoUrl={tenantSettings.logo_url || branding?.logoUrl}
+          onDownloadWord={handleDownloadDOCX}
+          isExporting={isExporting}
+        />
+      );
+    }
+    
+    // Si NO tiene aseguradoras pero es PYME/Hogar, mostrar datos raw con aviso
+    console.log('[ComparisonViewer] PYME/Hogar comparison without aseguradoras format:', table);
     return (
-      <ComparativoPolizas
-        comparativo={{
-          cliente: {
-            nombre: clientName,
-            vigenciaDesde: comparison.created_at ? format(new Date(comparison.created_at), 'dd/MM/yyyy', { locale: es }) : undefined,
-            vigenciaHasta: undefined,
-          },
-          aseguradoras: table.aseguradoras as Array<{
-            nombre: string;
-            producto?: string;
-            recomendada?: boolean;
-            valoresAsegurados?: Record<string, number>;
-            amparos?: Array<{ nombre: string; valorAsegurado?: number | string; deducible?: string; nota_comparativa?: string }>;
-            beneficiosAdicionales?: Record<string, unknown>;
-            prima?: { netaAnteIva?: number; asistencia?: number; iva?: number; total?: number };
-          }>,
-          resumen_recomendacion: (table as { resumen_recomendacion?: string }).resumen_recomendacion,
-        }}
-        tenantName={branding?.agencyName || 'Agencia de Seguros'}
-        primaryColor={tenantSettings.primary_color || branding?.primaryColor || '#3b82f6'}
-        logoUrl={tenantSettings.logo_url || branding?.logoUrl}
-        onDownloadWord={handleDownloadDOCX}
-        isExporting={isExporting}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Comparativo - {POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line}
+          </CardTitle>
+          <p className="text-sm text-amber-600">
+            El comparativo se generó pero en un formato diferente al esperado. 
+            Mostrando datos disponibles:
+          </p>
+        </CardHeader>
+        <CardContent>
+          {table && (
+            <div className="space-y-4">
+              {/* Si tiene insurers (formato anterior) */}
+              {table.insurers && table.insurers.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2">Aseguradoras encontradas:</h4>
+                  {table.insurers.map((insurer, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded mb-2">
+                      <p className="font-medium">{insurer.name}</p>
+                      {insurer.prima && (
+                        <p className="text-sm text-muted-foreground">
+                          Prima: {insurer.prima.total_anual || insurer.prima.prima_neta || 'No especificada'}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Mostrar datos raw para debug */}
+              <details className="mt-4">
+                <summary className="cursor-pointer text-sm text-blue-600">Ver datos completos (debug)</summary>
+                <pre className="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto max-h-96">
+                  {JSON.stringify(table, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     );
   }
 
