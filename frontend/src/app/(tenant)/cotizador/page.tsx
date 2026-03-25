@@ -4,13 +4,14 @@
 // PÁGINA: Cotizador de Seguros
 // /cotizador
 // Cotizador determinista basado en tasas configuradas
+// Rediseño: Selección de producto -> Formulario -> Resultados
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { getUntypedClient } from '@/lib/supabase/untyped-client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -21,10 +22,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { LoadingScreen } from '@/components/ui/spinner';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
   Calculator,
   Building,
+  Home,
+  Building2,
+  Briefcase,
   User,
   MapPin,
   Shield,
@@ -34,6 +39,10 @@ import {
   CheckCircle,
   RefreshCw,
   Loader2,
+  ArrowLeft,
+  History,
+  Calendar,
+  Download,
 } from 'lucide-react';
 import {
   calcularCotizacion,
@@ -43,7 +52,7 @@ import {
   ValoresAsegurados,
   ResultadoAseguradora,
 } from '@/lib/services/cotizador-engine';
-import { ResultadosComparativos } from '@/components/modules/cotizador/ResultadosComparativos';
+import { ComparativoTabla } from '@/components/modules/cotizador/ComparativoTabla';
 
 // Tipos
 interface Factor {
@@ -51,6 +60,20 @@ interface Factor {
   tipo: string;
   clave: string;
   factor: number;
+}
+
+interface TenantAseguradora {
+  aseguradora_id: string;
+  is_active: boolean;
+}
+
+interface CotizacionHistorial {
+  id: string;
+  producto: Producto;
+  prospect_name: string;
+  datos_cliente: DatosCliente;
+  created_at: string;
+  status: string;
 }
 
 // Configuración de campos por producto
@@ -79,11 +102,27 @@ const LABELS_CAMPOS: Record<keyof ValoresAsegurados, string> = {
   limiteRC: 'Límite Responsabilidad Civil',
 };
 
-const PRODUCTO_DESCRIPTIONS: Record<Producto, string> = {
-  PYME: 'Pequeñas y medianas empresas, locales comerciales',
-  HOGAR: 'Viviendas, apartamentos, casas',
-  COPROPIEDAD: 'Edificios residenciales, conjuntos cerrados',
-  TRE: 'Todo Riesgo Empresarial, grandes empresas',
+const PRODUCTOS_CONFIG: Record<Producto, { icon: React.ElementType; description: string; color: string }> = {
+  PYME: { 
+    icon: Briefcase, 
+    description: 'Pequeñas y medianas empresas, locales comerciales',
+    color: 'text-blue-600 bg-blue-100'
+  },
+  HOGAR: { 
+    icon: Home, 
+    description: 'Viviendas, apartamentos, casas',
+    color: 'text-green-600 bg-green-100'
+  },
+  COPROPIEDAD: { 
+    icon: Building2, 
+    description: 'Edificios residenciales, conjuntos cerrados',
+    color: 'text-purple-600 bg-purple-100'
+  },
+  TRE: { 
+    icon: Building, 
+    description: 'Todo Riesgo Empresarial, grandes empresas',
+    color: 'text-orange-600 bg-orange-100'
+  },
 };
 
 export default function CotizadorPage() {
@@ -91,15 +130,20 @@ export default function CotizadorPage() {
   const { toast } = useToast();
   const supabase = getUntypedClient();
 
-  // Estados
+  // Estados principales
   const [isLoading, setIsLoading] = useState(true);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [step, setStep] = useState(1);
   const [factores, setFactores] = useState<Factor[]>([]);
+  const [tenantAseguradoras, setTenantAseguradoras] = useState<TenantAseguradora[]>([]);
+  const [historial, setHistorial] = useState<CotizacionHistorial[]>([]);
   const [resultados, setResultados] = useState<ResultadoAseguradora[]>([]);
   
+  // Estado de la vista: 'selection' | 'form' | 'results'
+  const [vista, setVista] = useState<'selection' | 'form' | 'results'>('selection');
+  const [step, setStep] = useState(1); // Dentro del formulario: 1=cliente, 2=valores
+  
   // Datos del formulario
-  const [producto, setProducto] = useState<Producto>('PYME');
+  const [producto, setProducto] = useState<Producto | null>(null);
   const [datosCliente, setDatosCliente] = useState<DatosCliente>({
     nombre: '',
     nit: '',
@@ -126,16 +170,31 @@ export default function CotizadorPage() {
 
   // Cargar datos iniciales
   const loadData = useCallback(async () => {
+    if (!tenantId) return;
     setIsLoading(true);
     try {
       // Cargar factores
-      const { data: factoresData, error: factoresError } = await supabase
+      const { data: factoresData } = await supabase
         .from('cotizador_factores')
         .select('*')
         .eq('activo', true);
-      
-      if (factoresError) throw factoresError;
       setFactores(factoresData || []);
+
+      // Cargar aseguradoras activas del tenant
+      const { data: tenantAsegData } = await supabase
+        .from('tenant_aseguradoras')
+        .select('aseguradora_id, is_active')
+        .eq('tenant_id', tenantId);
+      setTenantAseguradoras(tenantAsegData || []);
+
+      // Cargar historial de cotizaciones del tenant
+      const { data: historialData } = await supabase
+        .from('cotizaciones')
+        .select('id, producto, prospect_name, datos_cliente, created_at, status')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      setHistorial(historialData || []);
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -147,13 +206,13 @@ export default function CotizadorPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, toast]);
+  }, [supabase, tenantId, toast]);
 
   useEffect(() => {
-    if (!tenantLoading) {
+    if (!tenantLoading && tenantId) {
       loadData();
     }
-  }, [tenantLoading, loadData]);
+  }, [tenantLoading, tenantId, loadData]);
 
   // Obtener factores por tipo
   const getFactoresPorTipo = (tipo: string) => {
@@ -175,7 +234,14 @@ export default function CotizadorPage() {
     }
   };
 
-  // Validar paso actual
+  // Seleccionar producto y abrir formulario
+  const handleSelectProducto = (prod: Producto) => {
+    setProducto(prod);
+    setVista('form');
+    setStep(1);
+  };
+
+  // Validar paso actual del formulario
   const canProceed = () => {
     if (step === 1) {
       return datosCliente.nombre.trim() !== '' && datosCliente.ciudad !== '';
@@ -188,16 +254,31 @@ export default function CotizadorPage() {
 
   // Calcular cotización
   const handleCalcular = async () => {
+    if (!producto) return;
+    
     setIsCalculating(true);
     try {
-      const results = await calcularCotizacion(
+      let results = await calcularCotizacion(
         supabase,
         producto,
         valoresAsegurados,
         datosCliente
       );
+      
+      // Filtrar por aseguradoras activas del tenant (si hay configuración)
+      if (tenantAseguradoras.length > 0) {
+        const activeIds = tenantAseguradoras
+          .filter(ta => ta.is_active)
+          .map(ta => ta.aseguradora_id);
+        
+        // Solo filtrar si hay al menos una aseguradora activa configurada
+        if (activeIds.length > 0) {
+          results = results.filter(r => activeIds.includes(r.aseguradora.id));
+        }
+      }
+      
       setResultados(results);
-      setStep(3);
+      setVista('results');
     } catch (error) {
       console.error('Error calculando cotización:', error);
       toast({
@@ -210,11 +291,11 @@ export default function CotizadorPage() {
     }
   };
 
-  // Navegar entre pasos
+  // Navegar entre pasos del formulario
   const nextStep = () => {
     if (step === 2) {
       handleCalcular();
-    } else if (canProceed() && step < 3) {
+    } else if (canProceed() && step < 2) {
       setStep(step + 1);
     }
   };
@@ -222,15 +303,19 @@ export default function CotizadorPage() {
   const prevStep = () => {
     if (step > 1) {
       setStep(step - 1);
-      if (step === 3) {
-        setResultados([]);
-      }
+    } else {
+      // Volver a selección de producto
+      setVista('selection');
+      setProducto(null);
     }
   };
 
-  const resetCotizacion = () => {
-    setStep(1);
+  // Volver a selección desde resultados
+  const handleNuevaCotizacion = () => {
+    setVista('selection');
+    setProducto(null);
     setResultados([]);
+    setStep(1);
     setDatosCliente({
       nombre: '',
       nit: '',
@@ -260,291 +345,295 @@ export default function CotizadorPage() {
     return <LoadingScreen message="Cargando cotizador..." />;
   }
 
-  return (
-    <div className="p-6 space-y-6" data-testid="cotizador-page">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+  // ===== VISTA: SELECCIÓN DE PRODUCTO =====
+  if (vista === 'selection') {
+    return (
+      <div className="p-6 space-y-6" data-testid="cotizador-page">
+        {/* Header */}
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Calculator className="h-6 w-6 text-primary" />
             Cotizador de Seguros
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Genera cotizaciones comparativas para PYME, Hogar, Copropiedad y TRE
+            Selecciona el tipo de producto para generar un comparativo de primas
           </p>
         </div>
-        {step === 3 && (
-          <Button variant="outline" size="sm" onClick={resetCotizacion}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Nueva Cotización
-          </Button>
-        )}
-      </div>
 
-      {/* Step Indicator */}
-      <div className="flex items-center justify-center gap-2 py-4">
-        {[
-          { num: 1, label: 'Datos del Cliente' },
-          { num: 2, label: 'Valores Asegurados' },
-          { num: 3, label: 'Resultados' },
-        ].map((s, idx) => (
-          <div key={s.num} className="flex items-center">
-            <div className="flex flex-col items-center">
-              <div
-                className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                  s.num < step
-                    ? 'bg-green-500 text-white'
-                    : s.num === step
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-slate-200 text-slate-500'
-                }`}
+        {/* Selector de Productos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {(['PYME', 'HOGAR', 'COPROPIEDAD', 'TRE'] as Producto[]).map((prod) => {
+            const config = PRODUCTOS_CONFIG[prod];
+            const Icon = config.icon;
+            return (
+              <Card 
+                key={prod}
+                className="cursor-pointer hover:border-primary transition-colors group"
+                onClick={() => handleSelectProducto(prod)}
               >
-                {s.num < step ? <CheckCircle className="h-5 w-5" /> : s.num}
-              </div>
-              <span className="text-xs text-muted-foreground mt-1 hidden sm:block">
-                {s.label}
-              </span>
-            </div>
-            {idx < 2 && (
-              <div
-                className={`w-12 sm:w-20 h-0.5 mx-2 transition-colors ${
-                  s.num < step ? 'bg-green-500' : 'bg-slate-200'
-                }`}
-              />
-            )}
-          </div>
-        ))}
-      </div>
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-4">
+                    <div className={`p-3 rounded-lg ${config.color}`}>
+                      <Icon className="h-6 w-6" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">
+                        {prod}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {config.description}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
 
-      {/* Step 1: Datos del Cliente */}
-      {step === 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Datos del Cliente y Producto
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Selector de Producto */}
-            <div className="space-y-2">
-              <Label>Tipo de Producto *</Label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {(['PYME', 'HOGAR', 'COPROPIEDAD', 'TRE'] as Producto[]).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setProducto(p)}
-                    className={`p-4 rounded-lg border-2 transition-all text-left ${
-                      producto === p
-                        ? 'border-primary bg-primary/5'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <Building className={`h-6 w-6 mb-2 ${producto === p ? 'text-primary' : 'text-slate-400'}`} />
-                    <span className={`text-sm font-medium block ${producto === p ? 'text-primary' : ''}`}>
-                      {p}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {PRODUCTO_DESCRIPTIONS[p]}
-                    </span>
-                  </button>
+        {/* Historial de Cotizaciones */}
+        {historial.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <History className="h-4 w-4" />
+                Cotizaciones Recientes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="divide-y">
+                {historial.map((cot) => (
+                  <div key={cot.id} className="flex items-center justify-between py-3">
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline">{cot.producto}</Badge>
+                      <div>
+                        <p className="font-medium text-sm">{cot.prospect_name || 'Sin nombre'}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(cot.created_at).toLocaleDateString('es-CO')}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant={cot.status === 'ready' ? 'default' : 'secondary'}>
+                      {cot.status === 'ready' ? 'Completada' : cot.status}
+                    </Badge>
+                  </div>
                 ))}
               </div>
-            </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  }
 
-            {/* Datos del Cliente */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nombre / Razón Social *</Label>
-                <Input
-                  placeholder="Ej: Empresa ABC S.A.S."
-                  value={datosCliente.nombre}
-                  onChange={(e) => setDatosCliente(prev => ({ ...prev, nombre: e.target.value }))}
-                  data-testid="cliente-nombre"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>NIT / Cédula</Label>
-                <Input
-                  placeholder="Ej: 900.123.456-7"
-                  value={datosCliente.nit}
-                  onChange={(e) => setDatosCliente(prev => ({ ...prev, nit: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  placeholder="email@empresa.com"
-                  value={datosCliente.email}
-                  onChange={(e) => setDatosCliente(prev => ({ ...prev, email: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Teléfono</Label>
-                <Input
-                  placeholder="300 123 4567"
-                  value={datosCliente.telefono}
-                  onChange={(e) => setDatosCliente(prev => ({ ...prev, telefono: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label>Dirección del Riesgo</Label>
-                <Input
-                  placeholder="Calle 123 # 45-67, Local 101"
-                  value={datosCliente.direccion}
-                  onChange={(e) => setDatosCliente(prev => ({ ...prev, direccion: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
-                  Ciudad *
-                </Label>
-                <Select
-                  value={datosCliente.ciudad}
-                  onValueChange={(v) => setDatosCliente(prev => ({ ...prev, ciudad: v }))}
-                >
-                  <SelectTrigger data-testid="cliente-ciudad">
-                    <SelectValue placeholder="Seleccionar ciudad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getFactoresPorTipo('ZONA').map((f) => (
-                      <SelectItem key={f.id} value={f.clave}>
-                        {f.clave} ({f.factor > 1 ? '+' : ''}{((f.factor - 1) * 100).toFixed(0)}%)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Actividad Económica</Label>
-                <Input
-                  placeholder="Ej: Comercio al por menor"
-                  value={datosCliente.actividadEconomica}
-                  onChange={(e) => setDatosCliente(prev => ({ ...prev, actividadEconomica: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label className="flex items-center gap-1">
-                  <Shield className="h-4 w-4" />
-                  Historial de Siniestros (últimos 3 años)
-                </Label>
-                <Select
-                  value={datosCliente.historialSiniestros}
-                  onValueChange={(v) => setDatosCliente(prev => ({ ...prev, historialSiniestros: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getFactoresPorTipo('SINIESTROS').map((f) => (
-                      <SelectItem key={f.id} value={f.clave}>
-                        {f.clave} ({f.factor > 1 ? '+' : ''}{((f.factor - 1) * 100).toFixed(0)}%)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+  // ===== VISTA: FORMULARIO =====
+  if (vista === 'form' && producto) {
+    const config = PRODUCTOS_CONFIG[producto];
+    const Icon = config.icon;
 
-      {/* Step 2: Valores Asegurados */}
-      {step === 2 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Valores Asegurados - {producto}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <p className="text-sm text-muted-foreground">
-              Ingresa los valores en pesos colombianos (COP). Solo se cotizarán los amparos con valores mayores a cero.
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {CAMPOS_POR_PRODUCTO[producto].map((campo) => (
-                <div key={campo} className="space-y-2">
-                  <Label>{LABELS_CAMPOS[campo]}</Label>
-                  {campo === 'anoConstruccion' ? (
-                    <Select
-                      value={valoresAsegurados.anoConstruccion}
-                      onValueChange={(v) => handleValorChange('anoConstruccion', v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getFactoresPorTipo('ANTIGUEDAD').map((f) => (
-                          <SelectItem key={f.id} value={f.clave}>
-                            {f.clave} ({f.factor > 1 ? '+' : ''}{((f.factor - 1) * 100).toFixed(0)}%)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input
-                      type="text"
-                      placeholder="$ 0"
-                      value={valoresAsegurados[campo] > 0 ? formatCurrency(valoresAsegurados[campo] as number) : ''}
-                      onChange={(e) => handleValorChange(campo, e.target.value)}
-                      data-testid={`valor-${campo}`}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Resumen de valores */}
-            <Card className="bg-slate-50 border-slate-200">
-              <CardContent className="py-4">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Total Valor Asegurado:</span>
-                  <span className="text-xl font-bold text-primary">
-                    {formatCurrency(
-                      Object.entries(valoresAsegurados)
-                        .filter(([key]) => key !== 'anoConstruccion')
-                        .reduce((sum, [, val]) => sum + (typeof val === 'number' ? val : 0), 0)
-                    )}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Step 3: Resultados */}
-      {step === 3 && (
-        <ResultadosComparativos
-          resultados={resultados}
-          producto={producto}
-          datosCliente={datosCliente}
-          valoresAsegurados={valoresAsegurados}
-          onNuevaCotizacion={resetCotizacion}
-        />
-      )}
-
-      {/* Navigation Buttons */}
-      {step < 3 && (
-        <div className="flex justify-between">
-          <Button
-            variant="outline"
-            onClick={prevStep}
-            disabled={step === 1}
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Anterior
+    return (
+      <div className="p-6 space-y-6" data-testid="cotizador-form">
+        {/* Header con producto seleccionado */}
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={prevStep}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            {step === 1 ? 'Cambiar producto' : 'Anterior'}
           </Button>
+          <div className="flex items-center gap-2">
+            <div className={`p-2 rounded-lg ${config.color}`}>
+              <Icon className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="font-bold">Cotización {producto}</h1>
+              <p className="text-xs text-muted-foreground">
+                Paso {step} de 2
+              </p>
+            </div>
+          </div>
+        </div>
 
+        {/* Step 1: Datos del Cliente */}
+        {step === 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Datos del Cliente
+              </CardTitle>
+              <CardDescription>
+                Información básica del asegurado y ubicación del riesgo
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nombre / Razón Social *</Label>
+                  <Input
+                    placeholder="Ej: Empresa ABC S.A.S."
+                    value={datosCliente.nombre}
+                    onChange={(e) => setDatosCliente(prev => ({ ...prev, nombre: e.target.value }))}
+                    data-testid="cliente-nombre"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>NIT / Cédula</Label>
+                  <Input
+                    placeholder="Ej: 900.123.456-7"
+                    value={datosCliente.nit}
+                    onChange={(e) => setDatosCliente(prev => ({ ...prev, nit: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    placeholder="email@empresa.com"
+                    value={datosCliente.email}
+                    onChange={(e) => setDatosCliente(prev => ({ ...prev, email: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Teléfono</Label>
+                  <Input
+                    placeholder="300 123 4567"
+                    value={datosCliente.telefono}
+                    onChange={(e) => setDatosCliente(prev => ({ ...prev, telefono: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Dirección del Riesgo</Label>
+                  <Input
+                    placeholder="Calle 123 # 45-67, Local 101"
+                    value={datosCliente.direccion}
+                    onChange={(e) => setDatosCliente(prev => ({ ...prev, direccion: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    <MapPin className="h-4 w-4" />
+                    Ciudad *
+                  </Label>
+                  <Select
+                    value={datosCliente.ciudad}
+                    onValueChange={(v) => setDatosCliente(prev => ({ ...prev, ciudad: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar ciudad" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getFactoresPorTipo('ZONA').map((f) => (
+                        <SelectItem key={f.id} value={f.clave}>
+                          {f.clave}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Actividad Económica</Label>
+                  <Input
+                    placeholder="Ej: Comercio al por menor"
+                    value={datosCliente.actividadEconomica}
+                    onChange={(e) => setDatosCliente(prev => ({ ...prev, actividadEconomica: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label className="flex items-center gap-1">
+                    <Shield className="h-4 w-4" />
+                    Historial de Siniestros (últimos 3 años)
+                  </Label>
+                  <Select
+                    value={datosCliente.historialSiniestros}
+                    onValueChange={(v) => setDatosCliente(prev => ({ ...prev, historialSiniestros: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getFactoresPorTipo('SINIESTROS').map((f) => (
+                        <SelectItem key={f.id} value={f.clave}>
+                          {f.clave}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Step 2: Valores Asegurados */}
+        {step === 2 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Valores Asegurados
+              </CardTitle>
+              <CardDescription>
+                Ingresa los valores en pesos colombianos. Solo se cotizarán los amparos con valores mayores a cero.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {CAMPOS_POR_PRODUCTO[producto].map((campo) => (
+                  <div key={campo} className="space-y-2">
+                    <Label>{LABELS_CAMPOS[campo]}</Label>
+                    {campo === 'anoConstruccion' ? (
+                      <Select
+                        value={valoresAsegurados.anoConstruccion}
+                        onValueChange={(v) => handleValorChange('anoConstruccion', v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getFactoresPorTipo('ANTIGUEDAD').map((f) => (
+                            <SelectItem key={f.id} value={f.clave}>
+                              {f.clave}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        type="text"
+                        placeholder="$ 0"
+                        value={valoresAsegurados[campo] > 0 ? formatCurrency(valoresAsegurados[campo] as number) : ''}
+                        onChange={(e) => handleValorChange(campo, e.target.value)}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Resumen */}
+              <Card className="bg-slate-50 border-slate-200">
+                <CardContent className="py-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Total Valor Asegurado:</span>
+                    <span className="text-xl font-bold text-primary">
+                      {formatCurrency(
+                        Object.entries(valoresAsegurados)
+                          .filter(([key]) => key !== 'anoConstruccion')
+                          .reduce((sum, [, val]) => sum + (typeof val === 'number' ? val : 0), 0)
+                      )}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Navigation */}
+        <div className="flex justify-end">
           <Button
             onClick={nextStep}
             disabled={!canProceed() || isCalculating}
-            data-testid="cotizador-next"
           >
             {isCalculating ? (
               <>
@@ -564,7 +653,43 @@ export default function CotizadorPage() {
             )}
           </Button>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
+
+  // ===== VISTA: RESULTADOS =====
+  if (vista === 'results' && producto) {
+    return (
+      <div className="p-6 space-y-6" data-testid="cotizador-results">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Calculator className="h-6 w-6 text-primary" />
+              Comparativo de Cotización
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              {datosCliente.nombre} • {producto} • {datosCliente.ciudad}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleNuevaCotizacion}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Nueva Cotización
+            </Button>
+          </div>
+        </div>
+
+        {/* Comparativo en formato tabla */}
+        <ComparativoTabla
+          resultados={resultados}
+          producto={producto}
+          datosCliente={datosCliente}
+          valoresAsegurados={valoresAsegurados}
+        />
+      </div>
+    );
+  }
+
+  return null;
 }

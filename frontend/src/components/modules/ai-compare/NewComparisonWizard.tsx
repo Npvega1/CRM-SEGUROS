@@ -518,23 +518,18 @@ export function NewComparisonWizard({
                       </p>
                     </div>
                   ) : (
-                    <Select value={line} onValueChange={(v) => setLine(v as PolicyLine)}>
-                      <SelectTrigger data-testid="line-select">
-                        <SelectValue placeholder="Seleccionar ramo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {aiEnabledGroups.map((group) => (
-                          <SelectItem key={group.id} value={group.slug}>
-                            {group.name}
-                            <span className="text-muted-foreground ml-2">({group.line_name})</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="p-3 bg-slate-100 border border-slate-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <span className="font-medium">
+                          {getLineName(line)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Actualmente solo Fianzas está habilitado para cotización con IA
+                      </p>
+                    </div>
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    Solo se muestran ramos con prompts de IA configurados
-                  </p>
                 </div>
               </div>
             )}

@@ -533,10 +533,10 @@ export default function AIComparePage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-primary" />
-            Comparativos con IA
+            Cotizaciones IA
           </h1>
           <p className="text-muted-foreground text-sm">
-            Genera cuadros comparativos de cotizaciones automáticamente
+            Genera cotizaciones de Fianzas automáticamente con IA
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -555,7 +555,7 @@ export default function AIComparePage() {
             data-testid="new-comparison-btn"
           >
             <Plus className="h-4 w-4 mr-1" />
-            Nuevo Comparativo
+            Nueva Cotización
           </Button>
         </div>
       </div>

@@ -53,7 +53,7 @@ const navItems: NavItem[] = [
   { title: 'Pipeline', href: '/pipeline', icon: TrendingUp, permissionKey: 'pipeline' },
   { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle, permissionKey: 'siniestros' },
   { title: 'Cotizador', href: '/cotizador', icon: Calculator, permissionKey: 'cotizador', badge: 'Nuevo' },
-  { title: 'Cotizaciones IA', href: '/ai-compare', icon: Sparkles, permissionKey: 'comparativos', badge: 'Fianzas' },
+  { title: 'Cotizaciones IA', href: '/ai-compare', icon: Sparkles, permissionKey: 'comparativos' },
   { title: 'Mensajes', href: '/mensajes', icon: MessageSquare, permissionKey: 'mensajes' },
   { title: 'Facturación', href: '/billing', icon: Receipt, permissionKey: 'facturacion' },
   { title: 'Automatizaciones', href: '/automations', icon: Zap, permissionKey: 'automatizaciones' },
