@@ -26,6 +26,7 @@ import { es } from 'date-fns/locale';
 import { generateQuotationPDF, generateComparisonDOCX, generateFianzaPDF } from '@/lib/services/document-generator';
 import { createClient } from '@/lib/supabase/client';
 import { CotizacionFianza } from './CotizacionFianza';
+import { ComparativoPolizas } from './ComparativoPolizas';
 
 // Tipos para la estructura
 interface InsurerData {
@@ -42,10 +43,23 @@ interface InsurerData {
   };
 }
 
+// Tipo para aseguradoras (PYME/Hogar/Copropiedades)
+interface AseguradoraData {
+  nombre: string;
+  producto?: string;
+  recomendada?: boolean;
+  valoresAsegurados?: Record<string, number>;
+  amparos?: Array<{ nombre: string; valorAsegurado?: number | string; deducible?: string; nota_comparativa?: string }>;
+  beneficiosAdicionales?: Record<string, unknown>;
+  prima?: { netaAnteIva?: number; asistencia?: number; iva?: number; total?: number };
+}
+
 interface ComparisonTable {
   line?: string;
   type?: 'comparison' | 'quotation';
   insurers?: InsurerData[];
+  aseguradoras?: AseguradoraData[];
+  resumen_recomendacion?: string;
   quotation?: {
     tipo_documento?: string;
     datos_extraidos?: Record<string, string>;
@@ -334,6 +348,46 @@ export function ComparisonViewer({
         logoUrl={tenantSettings.logo_url || branding?.logoUrl}
         onDownloadPDF={handleDownloadFianzaPDF}
         isExporting={isExportingPDF}
+      />
+    );
+  }
+
+  // Detectar si es un comparativo de PYME, Hogar o Copropiedades (NO cotización, sino comparativo)
+  const isPolizaComparison = !isQuotation && (
+    comparison.line.toLowerCase().includes('pyme') ||
+    comparison.line.toLowerCase().includes('hogar') ||
+    comparison.line.toLowerCase().includes('copropiedad') ||
+    comparison.line.toLowerCase().includes('copropiedades') ||
+    comparison.line.toLowerCase().includes('multiriesgo') ||
+    comparison.line.toLowerCase().includes('empresarial')
+  );
+
+  // Si es un comparativo de PYME/Hogar/Copropiedades con estructura de aseguradoras
+  if (isPolizaComparison && table?.aseguradoras) {
+    return (
+      <ComparativoPolizas
+        comparativo={{
+          cliente: {
+            nombre: clientName,
+            vigenciaDesde: comparison.created_at ? format(new Date(comparison.created_at), 'dd/MM/yyyy', { locale: es }) : undefined,
+            vigenciaHasta: undefined,
+          },
+          aseguradoras: table.aseguradoras as Array<{
+            nombre: string;
+            producto?: string;
+            recomendada?: boolean;
+            valoresAsegurados?: Record<string, number>;
+            amparos?: Array<{ nombre: string; valorAsegurado?: number | string; deducible?: string; nota_comparativa?: string }>;
+            beneficiosAdicionales?: Record<string, unknown>;
+            prima?: { netaAnteIva?: number; asistencia?: number; iva?: number; total?: number };
+          }>,
+          resumen_recomendacion: (table as { resumen_recomendacion?: string }).resumen_recomendacion,
+        }}
+        tenantName={branding?.agencyName || 'Agencia de Seguros'}
+        primaryColor={tenantSettings.primary_color || branding?.primaryColor || '#3b82f6'}
+        logoUrl={tenantSettings.logo_url || branding?.logoUrl}
+        onDownloadWord={handleDownloadDOCX}
+        isExporting={isExporting}
       />
     );
   }

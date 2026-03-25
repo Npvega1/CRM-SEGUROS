@@ -157,7 +157,71 @@ Si no hay ejemplo, usa este formato por defecto:
         for i, doc in enumerate(extracted_texts, 1):
             files_content += f"\n\n{'='*60}\nCOTIZACIÓN {i}: {doc['name']}\n{'='*60}\n{doc['content']}\n"
         
-        analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza estas {len(extracted_texts)} cotizaciones del ramo "{line}" y crea un cuadro comparativo.
+        # Detectar si es PYME/Hogar/Copropiedades para usar estructura especializada
+        is_poliza_comparison = any(x in line.lower() for x in ['pyme', 'hogar', 'copropiedad', 'multiriesgo', 'empresarial'])
+        
+        if is_poliza_comparison:
+            # Estructura especializada para PYME/Hogar/Copropiedades
+            analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza estas {len(extracted_texts)} cotizaciones del ramo "{line}" y crea un cuadro comparativo detallado.
+{example_section}
+{files_content}
+{custom_instructions}
+RESPONDE SOLO CON JSON VÁLIDO (sin markdown). Si hay un ejemplo de estructura arriba, sigue ese formato exacto.
+Si no hay ejemplo, usa este formato para PYME/Hogar/Copropiedades:
+{{
+  "aseguradoras": [
+    {{
+      "nombre": "NOMBRE DE LA ASEGURADORA",
+      "producto": "Nombre del producto",
+      "recomendada": false,
+      "valoresAsegurados": {{
+        "edificio": 500000000,
+        "mueblesEnseres": 50000000,
+        "maquinaria": 100000000,
+        "mercancias": 30000000,
+        "dineroEfectivo": 5000000,
+        "totalDanoMaterial": 685000000
+      }},
+      "amparos": [
+        {{"nombre": "Incendio y Rayo", "valorAsegurado": 500000000, "deducible": "10% mín 1 SMMLV"}},
+        {{"nombre": "Terremoto", "valorAsegurado": 500000000, "deducible": "3% valor asegurado"}},
+        {{"nombre": "AMIT (Actos Mal Intencionados)", "valorAsegurado": 100000000, "deducible": "10%"}},
+        {{"nombre": "Hurto Calificado", "valorAsegurado": 50000000, "deducible": "10%"}},
+        {{"nombre": "Anegación", "valorAsegurado": 30000000, "deducible": "10%"}},
+        {{"nombre": "Rotura de Vidrios", "valorAsegurado": 5000000, "deducible": "0"}},
+        {{"nombre": "Responsabilidad Civil", "valorAsegurado": 100000000, "deducible": "10%"}}
+      ],
+      "beneficiosAdicionales": {{
+        "asistencias": [
+          {{"nombre": "Asistencia domiciliaria", "limite": "4 eventos/año"}},
+          {{"nombre": "Cerrajería", "limite": "$200,000/evento"}}
+        ],
+        "amparoAutomaticoNuevosBienes": "10% del valor asegurado",
+        "gastosExtincionSiniestro": "Incluido hasta 10%",
+        "gastosRemocionEscombros": "Incluido hasta 10%",
+        "restablecimientoAutomatico": "Sí",
+        "otrosBeneficios": ["Cobertura de bienes a la intemperie", "Daño interno de maquinaria"]
+      }},
+      "prima": {{
+        "netaAnteIva": 1500000,
+        "asistencia": 50000,
+        "iva": 294500,
+        "total": 1844500
+      }}
+    }}
+  ],
+  "resumen_recomendacion": "Se recomienda la póliza de [ASEGURADORA] porque ofrece la mejor relación costo-beneficio con una prima de $X y coberturas completas."
+}}
+
+IMPORTANTE:
+- Marca "recomendada": true en la aseguradora que consideres mejor opción
+- Incluye TODOS los amparos que encuentres en cada cotización
+- Si un amparo no está incluido, NO lo agregues en ese aseguradora
+- Los valores numéricos deben ser números, no strings con formato
+- Extrae los deducibles exactamente como aparecen en cada cotización"""
+        else:
+            # Estructura genérica para otros ramos
+            analysis_prompt = f"""Eres un experto analista de seguros colombiano. Analiza estas {len(extracted_texts)} cotizaciones del ramo "{line}" y crea un cuadro comparativo.
 {example_section}
 {files_content}
 {custom_instructions}
@@ -222,11 +286,21 @@ Si no hay ejemplo, usa este formato por defecto:
                 "quotation": comparison_data
             }
         else:
-            comparison_table = {
-                "line": line,
-                "type": "comparison",
-                "insurers": comparison_data.get("insurers", [])
-            }
+            # Verificar si tiene estructura de aseguradoras (PYME/Hogar/Copropiedades)
+            if "aseguradoras" in comparison_data:
+                comparison_table = {
+                    "line": line,
+                    "type": "comparison",
+                    "aseguradoras": comparison_data.get("aseguradoras", []),
+                    "resumen_recomendacion": comparison_data.get("resumen_recomendacion", "")
+                }
+            else:
+                # Estructura genérica con insurers
+                comparison_table = {
+                    "line": line,
+                    "type": "comparison",
+                    "insurers": comparison_data.get("insurers", [])
+                }
         
         return {
             "success": True,
