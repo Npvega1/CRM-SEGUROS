@@ -5,7 +5,7 @@
 // Visualizador de cuadro comparativo - TABLA LADO A LADO
 // =====================================================
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -198,8 +198,74 @@ export function ComparisonViewer({
     }
   };
 
+  // Función helper para renderizar valores de forma recursiva
+  const renderValue = (value: unknown, depth: number = 0): React.ReactNode => {
+    if (value === null || value === undefined) {
+      return <span className="text-muted-foreground italic">-</span>;
+    }
+    
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return <span className="font-medium">{String(value)}</span>;
+    }
+    
+    if (Array.isArray(value)) {
+      if (value.length === 0) return <span className="text-muted-foreground italic">-</span>;
+      
+      // Si es un array de objetos complejos (como polizas o amparos)
+      if (typeof value[0] === 'object' && value[0] !== null) {
+        return (
+          <div className="space-y-3 mt-2">
+            {value.map((item, idx) => (
+              <div key={idx} className={`${depth > 0 ? 'ml-4 pl-4 border-l-2 border-blue-200' : ''} bg-slate-50 rounded-lg p-3`}>
+                {typeof item === 'object' && item !== null ? (
+                  Object.entries(item).map(([k, v]) => (
+                    <div key={k} className="flex flex-wrap gap-x-2 py-1">
+                      <span className="text-muted-foreground capitalize min-w-[120px]">{formatKey(k)}:</span>
+                      {renderValue(v, depth + 1)}
+                    </div>
+                  ))
+                ) : (
+                  <span>{String(item)}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      }
+      
+      // Array simple de strings/numbers
+      return <span className="font-medium">{value.join(', ')}</span>;
+    }
+    
+    if (typeof value === 'object') {
+      return (
+        <div className={`${depth > 0 ? 'ml-4 pl-4 border-l-2 border-gray-200' : ''} space-y-1`}>
+          {Object.entries(value).map(([k, v]) => (
+            <div key={k} className="py-1">
+              <span className="text-muted-foreground capitalize">{formatKey(k)}:</span>
+              <div className="ml-2">{renderValue(v, depth + 1)}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    return String(value);
+  };
+
+  // Formatear keys para mostrar
+  const formatKey = (key: string): string => {
+    return key
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/_/g, ' ')
+      .replace(/^\w/, c => c.toUpperCase())
+      .trim();
+  };
+
   // Si es cotización, mostrar vista diferente
   if (isQuotation && table?.quotation) {
+    const quotation = table.quotation as Record<string, unknown>;
+    
     return (
       <Card>
         <CardHeader>
@@ -209,6 +275,7 @@ export function ComparisonViewer({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Info básica */}
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">Cliente:</span>
@@ -218,41 +285,27 @@ export function ComparisonViewer({
               <span className="text-muted-foreground">Ramo:</span>
               <p className="font-medium">{POLICY_LINE_LABELS[comparison.line as PolicyLine] || comparison.line}</p>
             </div>
-            <div>
-              <span className="text-muted-foreground">Tipo de documento:</span>
-              <p className="font-medium">{table.quotation.tipo_documento || 'No especificado'}</p>
-            </div>
           </div>
 
-          {table.quotation.datos_extraidos && (
-            <div className="space-y-2">
-              <h4 className="font-semibold text-sm">Datos Extraídos</h4>
-              <div className="bg-slate-50 rounded-lg p-4 grid grid-cols-2 gap-3 text-sm">
-                {Object.entries(table.quotation.datos_extraidos).map(([key, value]) => (
-                  <div key={key}>
-                    <span className="text-muted-foreground capitalize">{key.replace(/_/g, ' ')}:</span>
-                    <p className="font-medium">{String(value)}</p>
+          {/* Renderizar todo el contenido de la cotización dinámicamente */}
+          <div className="space-y-4">
+            {Object.entries(quotation).map(([key, value]) => {
+              // Saltar campos vacíos
+              if (value === null || value === undefined) return null;
+              if (Array.isArray(value) && value.length === 0) return null;
+              
+              return (
+                <div key={key} className="space-y-2">
+                  <h4 className="font-semibold text-sm text-blue-700 border-b pb-1">
+                    {formatKey(key)}
+                  </h4>
+                  <div className="text-sm">
+                    {renderValue(value)}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {table.quotation.cotizacion_sugerida && (
-            <div className="space-y-2">
-              <h4 className="font-semibold text-sm">Cotización Sugerida</h4>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 grid grid-cols-2 gap-3 text-sm">
-                {Object.entries(table.quotation.cotizacion_sugerida).map(([key, value]) => (
-                  <div key={key}>
-                    <span className="text-muted-foreground capitalize">{key.replace(/_/g, ' ')}:</span>
-                    <p className="font-medium">
-                      {Array.isArray(value) ? value.join(', ') : String(value)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
 
           {/* Botón de descarga PDF */}
           <div className="pt-4 border-t">

@@ -1,10 +1,11 @@
 // =====================================================
 // SERVICE: Document Generator
 // Genera PDFs para cotizaciones y DOCX para comparativos
+// Soporta estructuras JSON dinámicas
 // =====================================================
 
 import jsPDF from 'jspdf';
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType, HeadingLevel } from 'docx';
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel } from 'docx';
 import { saveAs } from 'file-saver';
 
 interface QuotationData {
@@ -13,26 +14,7 @@ interface QuotationData {
   created_at: string;
   comparison_table: {
     type: string;
-    quotation?: {
-      tipo_documento?: string;
-      datos_extraidos?: {
-        contratante?: string;
-        beneficiario?: string;
-        objeto?: string;
-        valor_contrato?: string;
-        plazo?: string;
-        ubicacion?: string;
-      };
-      cotizacion_sugerida?: {
-        tipo_fianza?: string;
-        valor_asegurado?: string;
-        vigencia?: string;
-        tasa_estimada?: string;
-        prima_estimada?: string;
-        requisitos?: string[];
-        observaciones?: string;
-      };
-    };
+    quotation?: Record<string, unknown>;
   };
   client?: {
     name?: string;
@@ -73,15 +55,41 @@ interface TenantSettings {
   tenant_name?: string;
 }
 
-// Función para generar PDF de cotización
+// Helper para formatear keys
+function formatKey(key: string): string {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/_/g, ' ')
+    .replace(/^\w/, c => c.toUpperCase())
+    .trim();
+}
+
+// Helper para formatear valores para PDF
+function formatValueForPDF(value: unknown): string {
+  if (value === null || value === undefined) return '-';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return value.toLocaleString('es-CO');
+  if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '-';
+    if (typeof value[0] === 'object') return `[${value.length} elementos]`;
+    return value.join(', ');
+  }
+  if (typeof value === 'object') return '[objeto]';
+  return String(value);
+}
+
+// Función para generar PDF de cotización (estructura dinámica)
 export async function generateQuotationPDF(
   data: QuotationData,
   tenantSettings: TenantSettings
 ): Promise<void> {
   const pdf = new jsPDF('p', 'mm', 'a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
-  const margin = 20;
-  let y = 20;
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 15;
+  const contentWidth = pageWidth - 2 * margin;
+  let y = 15;
 
   // Colores
   const primaryColor = tenantSettings.primary_color || '#3b82f6';
@@ -95,11 +103,21 @@ export async function generateQuotationPDF(
   };
   const rgb = hexToRgb(primaryColor);
 
+  // Función para verificar si necesitamos nueva página
+  const checkNewPage = (requiredSpace: number = 30) => {
+    if (y + requiredSpace > pageHeight - 40) {
+      pdf.addPage();
+      y = 20;
+      return true;
+    }
+    return false;
+  };
+
   // Logo
   if (tenantSettings.logo_url) {
     try {
-      pdf.addImage(tenantSettings.logo_url, 'PNG', margin, y, 40, 20);
-      y += 25;
+      pdf.addImage(tenantSettings.logo_url, 'PNG', margin, y, 35, 18);
+      y += 22;
     } catch (e) {
       console.log('Error adding logo:', e);
     }
@@ -107,148 +125,177 @@ export async function generateQuotationPDF(
 
   // Encabezado
   pdf.setFillColor(rgb.r, rgb.g, rgb.b);
-  pdf.rect(0, y, pageWidth, 12, 'F');
+  pdf.rect(0, y, pageWidth, 10, 'F');
   pdf.setTextColor(255, 255, 255);
-  pdf.setFontSize(14);
+  pdf.setFontSize(12);
   pdf.setFont('helvetica', 'bold');
-  pdf.text('COTIZACIÓN DE SEGURO', pageWidth / 2, y + 8, { align: 'center' });
-  y += 20;
+  pdf.text('COTIZACIÓN DE SEGURO', pageWidth / 2, y + 7, { align: 'center' });
+  y += 15;
 
   // Info del documento
   pdf.setTextColor(100, 100, 100);
-  pdf.setFontSize(9);
+  pdf.setFontSize(8);
   pdf.setFont('helvetica', 'normal');
   pdf.text(`Fecha: ${new Date(data.created_at).toLocaleDateString('es-CO')}`, margin, y);
   pdf.text(`Ramo: ${data.line}`, pageWidth - margin, y, { align: 'right' });
-  y += 10;
+  y += 8;
 
   // Datos del cliente
   if (data.client?.name) {
+    pdf.setFillColor(245, 245, 245);
+    pdf.rect(margin, y, contentWidth, 18, 'F');
     pdf.setTextColor(rgb.r, rgb.g, rgb.b);
-    pdf.setFontSize(11);
+    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('DATOS DEL CLIENTE', margin, y);
-    y += 6;
-
-    pdf.setTextColor(50, 50, 50);
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.text('DATOS DEL CLIENTE', margin + 3, y + 5);
     
-    const clientLines = [
-      `Nombre: ${data.client.name}`,
-      data.client.document_number ? `Documento: ${data.client.document_number}` : '',
-      data.client.email ? `Email: ${data.client.email}` : '',
-      data.client.phone ? `Teléfono: ${data.client.phone}` : '',
-    ].filter(Boolean);
-
-    clientLines.forEach(line => {
-      pdf.text(line, margin, y);
-      y += 5;
-    });
-    y += 5;
+    pdf.setTextColor(50, 50, 50);
+    pdf.setFontSize(8);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Nombre: ${data.client.name}`, margin + 3, y + 11);
+    if (data.client.document_number) {
+      pdf.text(`Documento: ${data.client.document_number}`, margin + 80, y + 11);
+    }
+    if (data.client.email) {
+      pdf.text(`Email: ${data.client.email}`, margin + 3, y + 16);
+    }
+    y += 23;
   }
 
+  // Procesar la cotización dinámicamente
   const quotation = data.comparison_table?.quotation;
-  
-  // Datos extraídos
-  if (quotation?.datos_extraidos) {
-    pdf.setTextColor(rgb.r, rgb.g, rgb.b);
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('INFORMACIÓN DEL CONTRATO', margin, y);
-    y += 6;
-
-    pdf.setTextColor(50, 50, 50);
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-
-    const datos = quotation.datos_extraidos;
-    const infoLines = [
-      datos.contratante ? `Contratante: ${datos.contratante}` : '',
-      datos.beneficiario ? `Beneficiario: ${datos.beneficiario}` : '',
-      datos.objeto ? `Objeto: ${datos.objeto}` : '',
-      datos.valor_contrato ? `Valor del Contrato: ${datos.valor_contrato}` : '',
-      datos.plazo ? `Plazo: ${datos.plazo}` : '',
-      datos.ubicacion ? `Ubicación: ${datos.ubicacion}` : '',
-    ].filter(Boolean);
-
-    infoLines.forEach(line => {
-      // Dividir líneas largas
-      const splitLines = pdf.splitTextToSize(line, pageWidth - 2 * margin);
-      splitLines.forEach((splitLine: string) => {
-        pdf.text(splitLine, margin, y);
-        y += 5;
-      });
-    });
-    y += 5;
-  }
-
-  // Cotización sugerida
-  if (quotation?.cotizacion_sugerida) {
-    pdf.setTextColor(rgb.r, rgb.g, rgb.b);
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('COTIZACIÓN SUGERIDA', margin, y);
-    y += 6;
-
-    pdf.setTextColor(50, 50, 50);
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-
-    const cot = quotation.cotizacion_sugerida;
-    const cotLines = [
-      cot.tipo_fianza ? `Tipo de Fianza: ${cot.tipo_fianza}` : '',
-      cot.valor_asegurado ? `Valor Asegurado: ${cot.valor_asegurado}` : '',
-      cot.vigencia ? `Vigencia: ${cot.vigencia}` : '',
-      cot.tasa_estimada ? `Tasa Estimada: ${cot.tasa_estimada}` : '',
-      cot.prima_estimada ? `Prima Estimada: ${cot.prima_estimada}` : '',
-    ].filter(Boolean);
-
-    cotLines.forEach(line => {
-      pdf.text(line, margin, y);
-      y += 5;
-    });
-
-    // Requisitos
-    if (cot.requisitos && cot.requisitos.length > 0) {
-      y += 3;
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Requisitos:', margin, y);
-      y += 5;
-      pdf.setFont('helvetica', 'normal');
-      cot.requisitos.forEach((req: string) => {
-        pdf.text(`• ${req}`, margin + 5, y);
-        y += 5;
-      });
-    }
-
-    // Observaciones
-    if (cot.observaciones) {
-      y += 3;
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Observaciones:', margin, y);
-      y += 5;
-      pdf.setFont('helvetica', 'normal');
-      const obsLines = pdf.splitTextToSize(cot.observaciones, pageWidth - 2 * margin);
-      obsLines.forEach((line: string) => {
-        pdf.text(line, margin, y);
-        y += 5;
-      });
-    }
+  if (quotation) {
+    // Función recursiva para renderizar contenido
+    const renderContent = (obj: Record<string, unknown>, level: number = 0) => {
+      for (const [key, value] of Object.entries(obj)) {
+        if (value === null || value === undefined) continue;
+        
+        checkNewPage();
+        
+        const indent = margin + (level * 5);
+        
+        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+          // Array de objetos (como polizas, amparos, etc.)
+          pdf.setTextColor(rgb.r, rgb.g, rgb.b);
+          pdf.setFontSize(9);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(formatKey(key).toUpperCase(), indent, y);
+          y += 5;
+          
+          value.forEach((item, idx) => {
+            checkNewPage(40);
+            
+            // Fondo para cada item
+            pdf.setFillColor(250, 250, 250);
+            pdf.setDrawColor(230, 230, 230);
+            
+            let itemStartY = y;
+            let maxY = y;
+            
+            pdf.setTextColor(80, 80, 80);
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'normal');
+            
+            if (typeof item === 'object' && item !== null) {
+              const entries = Object.entries(item as Record<string, unknown>);
+              entries.forEach(([k, v], i) => {
+                if (v === null || v === undefined) return;
+                
+                // Calcular posición en dos columnas
+                const col = i % 2;
+                const row = Math.floor(i / 2);
+                const xPos = indent + 3 + (col * 85);
+                const yPos = itemStartY + 3 + (row * 5);
+                
+                if (yPos > maxY) maxY = yPos;
+                
+                checkNewPage();
+                
+                pdf.setFont('helvetica', 'bold');
+                pdf.setTextColor(100, 100, 100);
+                const keyText = `${formatKey(k)}:`;
+                pdf.text(keyText, xPos, yPos);
+                
+                pdf.setFont('helvetica', 'normal');
+                pdf.setTextColor(50, 50, 50);
+                const valueText = formatValueForPDF(v);
+                const truncatedValue = valueText.length > 40 ? valueText.substring(0, 37) + '...' : valueText;
+                pdf.text(truncatedValue, xPos + 30, yPos);
+              });
+              
+              // Dibujar rectángulo alrededor del item
+              const itemHeight = maxY - itemStartY + 6;
+              pdf.roundedRect(indent, itemStartY - 2, contentWidth - (level * 5), itemHeight, 1, 1, 'S');
+              
+              y = maxY + 8;
+            }
+          });
+          y += 3;
+          
+        } else if (typeof value === 'object' && !Array.isArray(value)) {
+          // Objeto anidado (como tomador)
+          pdf.setTextColor(rgb.r, rgb.g, rgb.b);
+          pdf.setFontSize(9);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(formatKey(key).toUpperCase(), indent, y);
+          y += 5;
+          
+          pdf.setTextColor(50, 50, 50);
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'normal');
+          
+          Object.entries(value as Record<string, unknown>).forEach(([k, v]) => {
+            if (v === null || v === undefined) return;
+            checkNewPage();
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(`${formatKey(k)}:`, indent + 3, y);
+            pdf.setFont('helvetica', 'normal');
+            pdf.text(formatValueForPDF(v), indent + 35, y);
+            y += 5;
+          });
+          y += 3;
+          
+        } else {
+          // Valor simple
+          pdf.setTextColor(50, 50, 50);
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`${formatKey(key)}:`, indent, y);
+          pdf.setFont('helvetica', 'normal');
+          
+          const valueStr = formatValueForPDF(value);
+          if (valueStr.length > 80) {
+            // Texto largo - dividir en líneas
+            const lines = pdf.splitTextToSize(valueStr, contentWidth - 40);
+            pdf.text(lines[0], indent + 35, y);
+            y += 4;
+            for (let i = 1; i < Math.min(lines.length, 4); i++) {
+              pdf.text(lines[i], indent + 3, y);
+              y += 4;
+            }
+          } else {
+            pdf.text(valueStr, indent + 35, y);
+          }
+          y += 5;
+        }
+      }
+    };
+    
+    renderContent(quotation as Record<string, unknown>);
   }
 
   // Pie de página legal
-  const footerY = pdf.internal.pageSize.getHeight() - 25;
+  const footerY = pageHeight - 20;
   pdf.setDrawColor(200, 200, 200);
   pdf.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
   
   pdf.setTextColor(120, 120, 120);
-  pdf.setFontSize(8);
+  pdf.setFontSize(7);
   pdf.setFont('helvetica', 'italic');
   const legalText = 'NOTA: Este documento es una cotización preliminar y está sujeto a aprobación por parte de la compañía de seguros. Las condiciones, tasas y valores aquí presentados pueden variar según la evaluación del riesgo y las políticas de suscripción vigentes.';
-  const legalLines = pdf.splitTextToSize(legalText, pageWidth - 2 * margin);
+  const legalLines = pdf.splitTextToSize(legalText, contentWidth);
   legalLines.forEach((line: string, index: number) => {
-    pdf.text(line, margin, footerY + (index * 4));
+    pdf.text(line, margin, footerY + (index * 3));
   });
 
   // Descargar
