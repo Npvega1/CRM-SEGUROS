@@ -223,9 +223,9 @@ COTIZACIONES A COMPARAR:`
     console.log('[AI Compare] Initializing Gemini...');
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Usar gemini-1.5-flash que soporta multimodal
+    // Usar gemini-2.0-flash (el modelo 1.5 fue descontinuado en abril 2025)
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
       generationConfig: {
         temperature: 0.2, // Respuestas más consistentes
         maxOutputTokens: 4096
