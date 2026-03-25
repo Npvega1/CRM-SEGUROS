@@ -15,9 +15,8 @@ import type {
 
 export async function getAlliedAgents(): Promise<AlliedAgent[]> {
   const supabase = getBrowserClient();
-  // @ts-expect-error - tabla no tipada en schema
-  const { data, error } = await supabase
-    .from('allied_agents')
+  const { data, error } = await (supabase
+    .from('allied_agents') as any)
     .select('*')
     .order('created_at', { ascending: false });
 
@@ -27,9 +26,8 @@ export async function getAlliedAgents(): Promise<AlliedAgent[]> {
 
 export async function getAlliedAgentById(id: string): Promise<AlliedAgent | null> {
   const supabase = getBrowserClient();
-  // @ts-expect-error - tabla no tipada en schema
-  const { data, error } = await supabase
-    .from('allied_agents')
+  const { data, error } = await (supabase
+    .from('allied_agents') as any)
     .select('*')
     .eq('id', id)
     .single();
@@ -40,9 +38,8 @@ export async function getAlliedAgentById(id: string): Promise<AlliedAgent | null
 
 export async function getAlliedAgentByAuthUserId(authUserId: string): Promise<AlliedAgent | null> {
   const supabase = getBrowserClient();
-  // @ts-expect-error - tabla no tipada en schema
-  const { data, error } = await supabase
-    .from('allied_agents')
+  const { data, error } = await (supabase
+    .from('allied_agents') as any)
     .select('*')
     .eq('auth_user_id', authUserId)
     .single();
@@ -58,9 +55,8 @@ export async function createAlliedAgent(
   const supabase = getBrowserClient();
   const { password, ...agentData } = input;
   
-  // @ts-expect-error - tabla no tipada en schema
-  const { data, error } = await supabase
-    .from('allied_agents')
+  const { data, error } = await (supabase
+    .from('allied_agents') as any)
     .insert({
       ...agentData,
       tenant_id: tenantId,
@@ -77,9 +73,8 @@ export async function updateAlliedAgent(
   input: UpdateAlliedAgentInput
 ): Promise<AlliedAgent> {
   const supabase = getBrowserClient();
-  // @ts-expect-error - tabla no tipada en schema
-  const { data, error } = await supabase
-    .from('allied_agents')
+  const { data, error } = await (supabase
+    .from('allied_agents') as any)
     .update(input)
     .eq('id', id)
     .select()
@@ -91,9 +86,8 @@ export async function updateAlliedAgent(
 
 export async function deleteAlliedAgent(id: string): Promise<void> {
   const supabase = getBrowserClient();
-  // @ts-expect-error - tabla no tipada en schema
-  const { error } = await supabase
-    .from('allied_agents')
+  const { error } = await (supabase
+    .from('allied_agents') as any)
     .update({ is_active: false })
     .eq('id', id);
 
@@ -102,9 +96,8 @@ export async function deleteAlliedAgent(id: string): Promise<void> {
 
 export async function getActiveAlliedAgents(): Promise<AlliedAgent[]> {
   const supabase = getBrowserClient();
-  // @ts-expect-error - tabla no tipada en schema
-  const { data, error } = await supabase
-    .from('allied_agents')
+  const { data, error } = await (supabase
+    .from('allied_agents') as any)
     .select('*')
     .eq('is_active', true)
     .order('full_name', { ascending: true });
@@ -132,9 +125,8 @@ export async function uploadAlliedAgentDocument(
   if (uploadError) throw uploadError;
 
   const columnName = `document_${documentType}`;
-  // @ts-expect-error - tabla no tipada en schema
-  const { error: updateError } = await supabase
-    .from('allied_agents')
+  const { error: updateError } = await (supabase
+    .from('allied_agents') as any)
     .update({ [columnName]: fileName })
     .eq('id', alliedAgentId);
 
@@ -167,9 +159,8 @@ export async function deleteAlliedAgentDocument(
   if (deleteError) throw deleteError;
 
   const columnName = `document_${documentType}`;
-  // @ts-expect-error - tabla no tipada en schema
-  const { error: updateError } = await supabase
-    .from('allied_agents')
+  const { error: updateError } = await (supabase
+    .from('allied_agents') as any)
     .update({ [columnName]: null })
     .eq('id', alliedAgentId);
 
@@ -180,9 +171,8 @@ export async function deleteAlliedAgentDocument(
 
 export async function getAlliedAgentCommissions(): Promise<AlliedAgentCommissionWithPolicy[]> {
   const supabase = getBrowserClient();
-  // @ts-expect-error - tabla no tipada en schema
-  const { data, error } = await supabase
-    .from('allied_agent_commissions')
+  const { data, error } = await (supabase
+    .from('allied_agent_commissions') as any)
     .select(`
       *,
       allied_agent:allied_agents(id, full_name),
@@ -205,9 +195,8 @@ export async function getCommissionsByAlliedAgent(
   alliedAgentId: string
 ): Promise<AlliedAgentCommissionWithPolicy[]> {
   const supabase = getBrowserClient();
-  // @ts-expect-error - tabla no tipada en schema
-  const { data, error } = await supabase
-    .from('allied_agent_commissions')
+  const { data, error } = await (supabase
+    .from('allied_agent_commissions') as any)
     .select(`
       *,
       policy:policies(
@@ -236,9 +225,8 @@ export async function updateCommissionStatus(
     paid_at: status === 'paid' ? new Date().toISOString() : null,
   };
 
-  // @ts-expect-error - tabla no tipada en schema
-  const { data, error } = await supabase
-    .from('allied_agent_commissions')
+  const { data, error } = await (supabase
+    .from('allied_agent_commissions') as any)
     .update(updateData)
     .eq('id', commissionId)
     .select()
@@ -255,9 +243,8 @@ export async function getAlliedAgentPolicies(
 ): Promise<AlliedAgentPolicy[]> {
   const supabase = getBrowserClient();
   
-  // @ts-expect-error - campo allied_agent_id no tipado
-  const { data: clients, error: clientsError } = await supabase
-    .from('clients')
+  const { data: clients, error: clientsError } = await (supabase
+    .from('clients') as any)
     .select('id')
     .eq('allied_agent_id', alliedAgentId);
 
@@ -285,19 +272,16 @@ export async function getAlliedAgentPolicies(
 
   if (policiesError) throw policiesError;
 
-  // @ts-expect-error - tipos de policies
-  const policyIds = (policies || []).map((p) => p.id);
+  const policyIds = (policies || []).map((p: any) => p.id);
   
-  // @ts-expect-error - tabla no tipada en schema
-  const { data: commissions } = await supabase
-    .from('allied_agent_commissions')
+  const { data: commissions } = await (supabase
+    .from('allied_agent_commissions') as any)
     .select('id, policy_id, commission_amount, status, paid_at')
     .in('policy_id', policyIds);
 
-  // @ts-expect-error - tipos de policies y commissions
-  return (policies || []).map((policy) => ({
+  return (policies || []).map((policy: any) => ({
     ...policy,
-    commission: commissions?.find((c) => c.policy_id === policy.id),
+    commission: commissions?.find((c: any) => c.policy_id === policy.id),
   })) as AlliedAgentPolicy[];
 }
 
@@ -343,9 +327,8 @@ export async function updateClientAlliedAgent(
   alliedAgentId: string | null
 ): Promise<void> {
   const supabase = getBrowserClient();
-  // @ts-expect-error - campo allied_agent_id no tipado
-  const { error } = await supabase
-    .from('clients')
+  const { error } = await (supabase
+    .from('clients') as any)
     .update({ allied_agent_id: alliedAgentId })
     .eq('id', clientId);
 
