@@ -42,7 +42,7 @@ interface NavItem {
   href: string;
   icon: React.ElementType;
   badge?: string;
-  permissionKey?: 'clientes' | 'polizas' | 'pipeline' | 'siniestros' | 'facturacion' | 'reportes' | 'mensajes' | 'automatizaciones' | 'comparativos' | 'cotizador' | 'aliados';
+  permissionKey?: 'clientes' | 'polizas' | 'pipeline' | 'siniestros' | 'facturacion' | 'reportes' | 'mensajes' | 'automatizaciones' | 'comparativos' | 'cotizador';
   adminOnly?: boolean;
   alwaysShow?: boolean;
 }
