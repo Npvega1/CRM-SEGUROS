@@ -1,17 +1,12 @@
 'use client';
 
-// =====================================================
-// COMPONENTE: ClientForm
-// Formulario para crear/editar clientes
-// =====================================================
-
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -24,387 +19,355 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { 
-  CreateClientInputSchema,
-  type Client,
-  DOC_TYPE_LABELS,
-  SEGMENT_LABELS,
-  type DocType,
-  type ClientSegment
-} from '@/lib/validations/clients';
-import { getActiveAlliedAgents } from '@/lib/services/allied-agents.service';
-import type { AlliedAgent } from '@/types/allied-agents';
-import { Loader2, Save, X, ChevronsUpDown, Check, UserPlus, Search } from 'lucide-react';
-import { cn } from '@/lib/utils/cn';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { clientSchema, type ClientFormData } from '@/lib/validations/clients';
+import { createClient, updateClient } from '@/lib/services/clients.service';
+import { createBrowserClient } from '@/lib/supabase/client';
+import { Loader2, Check, ChevronsUpDown, Search } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-// Tipo para el formulario
-interface ClientFormData {
+interface AlliedAgent {
+  id: string;
   full_name: string;
-  doc_type: DocType;
-  doc_number: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  segment: ClientSegment;
-  agent_id?: string | null;
-  allied_agent_id?: string | null;
-  tags?: string[];
-  metadata?: Record<string, unknown>;
 }
 
 interface ClientFormProps {
-  client?: Client;
-  onSubmit: (data: ClientFormData) => Promise<void>;
-  onCancel?: () => void;
-  isLoading?: boolean;
+  initialData?: ClientFormData & { id?: string };
+  tenantId: string;
+  agentId: string;
 }
 
-export function ClientForm({ 
-  client, 
-  onSubmit, 
-  onCancel,
-  isLoading = false 
-}: ClientFormProps) {
-  const isEditing = !!client;
+export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [alliedAgents, setAlliedAgents] = useState<AlliedAgent[]>([]);
-  const [loadingAgents, setLoadingAgents] = useState(true);
-  const [alliedOpen, setAlliedOpen] = useState(false);
-  const [alliedSearch, setAlliedSearch] = useState('');
-
-  // Cargar aliados activos
-  useEffect(() => {
-    const loadAlliedAgents = async () => {
-      try {
-        const agents = await getActiveAlliedAgents();
-        setAlliedAgents(agents);
-      } catch (error) {
-        console.error('Error loading allied agents:', error);
-      } finally {
-        setLoadingAgents(false);
-      }
-    };
-    loadAlliedAgents();
-  }, []);
+  const [loadingAllies, setLoadingAllies] = useState(true);
+  const [allyOpen, setAllyOpen] = useState(false);
+  const [allySearch, setAllySearch] = useState('');
 
   const {
     register,
     handleSubmit,
+    formState: { errors },
     setValue,
     watch,
-    formState: { errors, isSubmitting }
   } = useForm<ClientFormData>({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    resolver: zodResolver(CreateClientInputSchema) as any,
-    defaultValues: client ? {
-      full_name: client.full_name,
-      doc_type: client.doc_type as DocType,
-      doc_number: client.doc_number,
-      email: client.email || '',
-      phone: client.phone || '',
-      address: (client as any).address || '',
-      segment: client.segment as ClientSegment,
-      allied_agent_id: (client as any).allied_agent_id || null,
-      tags: client.tags || []
-    } : {
+    resolver: zodResolver(clientSchema),
+    defaultValues: initialData || {
       full_name: '',
       doc_type: 'cedula',
       doc_number: '',
       email: '',
       phone: '',
       address: '',
-      segment: 'individual',
+      segment: 'persona_natural',
       allied_agent_id: null,
-      tags: []
-    }
+    },
   });
 
-  const docType = watch('doc_type');
-  const segment = watch('segment');
-  const alliedAgentId = watch('allied_agent_id');
+  const selectedAllyId = watch('allied_agent_id');
 
-  // Filtrar aliados según búsqueda
-  const filteredAlliedAgents = useMemo(() => {
-    if (!alliedSearch) return alliedAgents;
-    const search = alliedSearch.toLowerCase();
-    return alliedAgents.filter(agent => 
-      agent.full_name.toLowerCase().includes(search) ||
-      agent.identification.includes(search)
-    );
-  }, [alliedAgents, alliedSearch]);
+  // Cargar aliados
+  useEffect(() => {
+    async function loadAlliedAgents() {
+      try {
+        const supabase = createBrowserClient();
+        const { data, error } = await (supabase as any)
+          .from('allied_agents')
+          .select('id, full_name')
+          .eq('tenant_id', tenantId)
+          .eq('status', 'active')
+          .order('full_name');
+
+        if (!error && data) {
+          setAlliedAgents(data);
+        }
+      } catch (err) {
+        console.error('Error loading allied agents:', err);
+      } finally {
+        setLoadingAllies(false);
+      }
+    }
+    loadAlliedAgents();
+  }, [tenantId]);
+
+  const onSubmit = async (data: ClientFormData) => {
+    setIsSubmitting(true);
+    try {
+      const clientData = {
+        ...data,
+        tenant_id: tenantId,
+        agent_id: agentId,
+        allied_agent_id: data.allied_agent_id || null,
+      };
+
+      if (initialData?.id) {
+        await updateClient(initialData.id, clientData);
+      } else {
+        await createClient(clientData);
+      }
+
+      router.push('/clientes');
+      router.refresh();
+    } catch (error) {
+      console.error('Error saving client:', error);
+      alert('Error al guardar el cliente');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Filtrar aliados por búsqueda
+  const filteredAllies = alliedAgents.filter((ally) =>
+    ally.full_name.toLowerCase().includes(allySearch.toLowerCase())
+  );
 
   // Obtener nombre del aliado seleccionado
-  const selectedAlliedAgent = useMemo(() => {
-    if (!alliedAgentId) return null;
-    if (alliedAgentId === 'direct') return { full_name: 'Directo (sin aliado)' };
-    return alliedAgents.find(a => a.id === alliedAgentId);
-  }, [alliedAgentId, alliedAgents]);
-
-  const handleSelectAllied = (value: string) => {
-    setValue('allied_agent_id', value);
-    setAlliedOpen(false);
-    setAlliedSearch('');
-  };
-
-  const handleFormSubmit = async (data: ClientFormData) => {
-    // Si es "direct", enviar null
-    const submitData = {
-      ...data,
-      allied_agent_id: data.allied_agent_id === 'direct' ? null : data.allied_agent_id
-    };
-    await onSubmit(submitData);
-  };
-
-  const loading = isLoading || isSubmitting;
+  const selectedAllyName = selectedAllyId
+    ? alliedAgents.find((a) => a.id === selectedAllyId)?.full_name
+    : null;
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
-      {/* Nombre Completo */}
-      <div className="space-y-2">
-        <Label htmlFor="full_name">Nombre Completo *</Label>
-        <Input
-          id="full_name"
-          placeholder="Ej: Juan Pérez García"
-          {...register('full_name')}
-          disabled={loading}
-          data-testid="client-full-name-input"
-        />
-        {errors.full_name && (
-          <p className="text-sm text-red-500">{errors.full_name.message}</p>
-        )}
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          {initialData?.id ? 'Editar Cliente' : 'Nuevo Cliente'}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* Nombre Completo */}
+          <div className="space-y-2">
+            <Label htmlFor="full_name">Nombre Completo *</Label>
+            <Input
+              id="full_name"
+              {...register('full_name')}
+              placeholder="Nombre del cliente"
+            />
+            {errors.full_name && (
+              <p className="text-sm text-red-500">{errors.full_name.message}</p>
+            )}
+          </div>
 
-      {/* Tipo y Número de Documento */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="doc_type">Tipo de Documento *</Label>
-          <Select
-            value={docType}
-            onValueChange={(value: DocType) => setValue('doc_type', value)}
-            disabled={loading}
-          >
-            <SelectTrigger id="doc_type" data-testid="client-doc-type-select">
-              <SelectValue placeholder="Seleccionar tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.entries(DOC_TYPE_LABELS) as [DocType, string][]).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {errors.doc_type && (
-            <p className="text-sm text-red-500">{errors.doc_type.message}</p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="doc_number">Número de Documento *</Label>
-          <Input
-            id="doc_number"
-            placeholder="Ej: 12345678"
-            {...register('doc_number')}
-            disabled={loading}
-            data-testid="client-doc-number-input"
-          />
-          {errors.doc_number && (
-            <p className="text-sm text-red-500">{errors.doc_number.message}</p>
-          )}
-        </div>
-      </div>
-
-      {/* Email y Teléfono */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="correo@ejemplo.com"
-            {...register('email')}
-            disabled={loading}
-            data-testid="client-email-input"
-          />
-          {errors.email && (
-            <p className="text-sm text-red-500">{errors.email.message}</p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="phone">Teléfono</Label>
-          <Input
-            id="phone"
-            type="tel"
-            placeholder="+57 300 123 4567"
-            {...register('phone')}
-            disabled={loading}
-            data-testid="client-phone-input"
-          />
-          {errors.phone && (
-            <p className="text-sm text-red-500">{errors.phone.message}</p>
-          )}
-        </div>
-      </div>
-
-      {/* Dirección */}
-      <div className="space-y-2">
-        <Label htmlFor="address">Dirección</Label>
-        <Textarea
-          id="address"
-          placeholder="Ej: Calle 123 #45-67, Bogotá"
-          {...register('address')}
-          disabled={loading}
-          rows={2}
-          data-testid="client-address-input"
-        />
-      </div>
-
-      {/* Segmento y Aliado */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="segment">Segmento *</Label>
-          <Select
-            value={segment}
-            onValueChange={(value: ClientSegment) => setValue('segment', value)}
-            disabled={loading}
-          >
-            <SelectTrigger id="segment" data-testid="client-segment-select">
-              <SelectValue placeholder="Seleccionar segmento" />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.entries(SEGMENT_LABELS) as [ClientSegment, string][]).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {errors.segment && (
-            <p className="text-sm text-red-500">{errors.segment.message}</p>
-          )}
-        </div>
-
-        {/* Selector de Aliado con búsqueda */}
-        <div className="space-y-2">
-          <Label>Aliado / Referido por</Label>
-          <Popover open={alliedOpen} onOpenChange={setAlliedOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                role="combobox"
-                aria-expanded={alliedOpen}
-                className="w-full justify-between font-normal"
-                disabled={loading || loadingAgents}
-                data-testid="client-allied-select"
-                type="button"
+          {/* Tipo y Número de Documento */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="doc_type">Tipo de Documento *</Label>
+              <Select
+                defaultValue={initialData?.doc_type || 'cedula'}
+                onValueChange={(value) => setValue('doc_type', value as any)}
               >
-                {loadingAgents ? (
-                  <span className="text-muted-foreground">Cargando aliados...</span>
-                ) : selectedAlliedAgent ? (
-                  <span className="flex items-center gap-2">
-                    <UserPlus className="h-4 w-4 text-muted-foreground" />
-                    {selectedAlliedAgent.full_name}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">Seleccionar aliado...</span>
-                )}
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 p-0" align="start">
-              <div className="p-2 border-b">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar aliado..."
-                    value={alliedSearch}
-                    onChange={(e) => setAlliedSearch(e.target.value)}
-                    className="pl-8"
-                  />
-                </div>
-              </div>
-              <div className="max-h-60 overflow-y-auto">
-                {/* Opción Directo */}
-                <div
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-100",
-                    alliedAgentId === 'direct' && "bg-slate-100"
-                  )}
-                  onClick={() => handleSelectAllied('direct')}
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cedula">Cédula</SelectItem>
+                  <SelectItem value="pasaporte">Pasaporte</SelectItem>
+                  <SelectItem value="ruc">RUC</SelectItem>
+                  <SelectItem value="nit">NIT</SelectItem>
+                  <SelectItem value="otro">Otro</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.doc_type && (
+                <p className="text-sm text-red-500">{errors.doc_type.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="doc_number">Número de Documento *</Label>
+              <Input
+                id="doc_number"
+                {...register('doc_number')}
+                placeholder="Número de documento"
+              />
+              {errors.doc_number && (
+                <p className="text-sm text-red-500">{errors.doc_number.message}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Email y Teléfono */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                {...register('email')}
+                placeholder="correo@ejemplo.com"
+              />
+              {errors.email && (
+                <p className="text-sm text-red-500">{errors.email.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Teléfono</Label>
+              <Input
+                id="phone"
+                {...register('phone')}
+                placeholder="+593 999 999 999"
+              />
+              {errors.phone && (
+                <p className="text-sm text-red-500">{errors.phone.message}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Dirección */}
+          <div className="space-y-2">
+            <Label htmlFor="address">Dirección</Label>
+            <Input
+              id="address"
+              {...register('address')}
+              placeholder="Dirección del cliente"
+            />
+            {errors.address && (
+              <p className="text-sm text-red-500">{errors.address.message}</p>
+            )}
+          </div>
+
+          {/* Segmento */}
+          <div className="space-y-2">
+            <Label htmlFor="segment">Segmento *</Label>
+            <Select
+              defaultValue={initialData?.segment || 'persona_natural'}
+              onValueChange={(value) => setValue('segment', value as any)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar segmento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="persona_natural">Persona Natural</SelectItem>
+                <SelectItem value="persona_juridica">Persona Jurídica</SelectItem>
+              </SelectContent>
+            </Select>
+            {errors.segment && (
+              <p className="text-sm text-red-500">{errors.segment.message}</p>
+            )}
+          </div>
+
+          {/* Aliado / Referido por */}
+          <div className="space-y-2">
+            <Label>Aliado / Referido por</Label>
+            <Popover open={allyOpen} onOpenChange={setAllyOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={allyOpen}
+                  className="w-full justify-between"
+                  disabled={loadingAllies}
                 >
-                  <Check
-                    className={cn(
-                      "h-4 w-4",
-                      alliedAgentId === 'direct' ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  <span className="font-medium">Directo (sin aliado)</span>
-                </div>
-                
-                {/* Separador */}
-                <div className="border-t my-1" />
-                
-                {/* Lista de aliados */}
-                {filteredAlliedAgents.length === 0 ? (
-                  <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-                    No se encontraron aliados
+                  {loadingAllies ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Cargando...
+                    </span>
+                  ) : selectedAllyName ? (
+                    selectedAllyName
+                  ) : (
+                    'Directo (sin aliado)'
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0" align="start">
+                <div className="p-2">
+                  <div className="flex items-center border-b px-2 pb-2">
+                    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                    <Input
+                      placeholder="Buscar aliado..."
+                      value={allySearch}
+                      onChange={(e) => setAllySearch(e.target.value)}
+                      className="border-0 focus-visible:ring-0"
+                    />
                   </div>
-                ) : (
-                  filteredAlliedAgents.map((agent) => (
+                  <div className="max-h-60 overflow-y-auto py-2">
+                    {/* Opción Directo */}
                     <div
-                      key={agent.id}
                       className={cn(
-                        "flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-100",
-                        alliedAgentId === agent.id && "bg-slate-100"
+                        'flex cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent',
+                        !selectedAllyId && 'bg-accent'
                       )}
-                      onClick={() => handleSelectAllied(agent.id!)}
+                      onClick={() => {
+                        setValue('allied_agent_id', null);
+                        setAllyOpen(false);
+                        setAllySearch('');
+                      }}
                     >
                       <Check
                         className={cn(
-                          "h-4 w-4 flex-shrink-0",
-                          alliedAgentId === agent.id ? "opacity-100" : "opacity-0"
+                          'mr-2 h-4 w-4',
+                          !selectedAllyId ? 'opacity-100' : 'opacity-0'
                         )}
                       />
-                      <div className="flex flex-col min-w-0">
-                        <span className="truncate">{agent.full_name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {agent.identification} • {agent.commission_percentage}% comisión
-                        </span>
-                      </div>
+                      Directo (sin aliado)
                     </div>
-                  ))
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
-          <p className="text-xs text-muted-foreground">
-            Si el cliente fue referido por un aliado, selecciónalo aquí
-          </p>
-        </div>
-      </div>
 
-      {/* Botones */}
-      <div className="flex justify-end gap-3 pt-4 border-t">
-        {onCancel && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            disabled={loading}
-          >
-            <X className="w-4 h-4 mr-2" />
-            Cancelar
-          </Button>
-        )}
-        <Button type="submit" disabled={loading} data-testid="client-submit-button">
-          {loading ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4 mr-2" />
-          )}
-          {isEditing ? 'Guardar Cambios' : 'Crear Cliente'}
-        </Button>
-      </div>
-    </form>
+                    {/* Lista de aliados */}
+                    {filteredAllies.length === 0 ? (
+                      <p className="px-2 py-4 text-center text-sm text-muted-foreground">
+                        No se encontraron aliados
+                      </p>
+                    ) : (
+                      filteredAllies.map((ally) => (
+                        <div
+                          key={ally.id}
+                          className={cn(
+                            'flex cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent',
+                            selectedAllyId === ally.id && 'bg-accent'
+                          )}
+                          onClick={() => {
+                            setValue('allied_agent_id', ally.id);
+                            setAllyOpen(false);
+                            setAllySearch('');
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              'mr-2 h-4 w-4',
+                              selectedAllyId === ally.id ? 'opacity-100' : 'opacity-0'
+                            )}
+                          />
+                          {ally.full_name}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+            <p className="text-xs text-muted-foreground">
+              Selecciona el aliado que refirió a este cliente, o deja &quot;Directo&quot; si no aplica.
+            </p>
+          </div>
+
+          {/* Botones */}
+          <div className="flex gap-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.back()}
+              disabled={isSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : initialData?.id ? (
+                'Actualizar Cliente'
+              ) : (
+                'Crear Cliente'
+              )}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
