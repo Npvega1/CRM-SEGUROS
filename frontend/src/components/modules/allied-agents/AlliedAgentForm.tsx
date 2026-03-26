@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useParams } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,9 @@ interface AlliedAgentFormProps {
 }
 
 export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormProps) {
+  const params = useParams();
+  const tenantSlug = params.tenantSlug as string || '';
+  
   const [saving, setSaving] = useState(false);
   const isEditing = !!agent;
 
@@ -33,7 +37,6 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
     email: agent?.email || '',
     address: agent?.address || '',
     commission_percentage: agent?.commission_percentage || 60,
-    password: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -55,6 +58,7 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
       }
 
       if (isEditing && agent?.id) {
+        // Actualizar aliado existente
         const updateData: UpdateAlliedAgentInput = {
           full_name: formData.full_name,
           identification: formData.identification,
@@ -65,11 +69,28 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
         await updateAlliedAgent(agent.id, updateData);
         toast.success('Aliado actualizado exitosamente');
       } else {
-        if (!formData.password || formData.password.length < 6) {
-          toast.error('La contraseña debe tener al menos 6 caracteres');
-          setSaving(false);
-          return;
+        // Crear nuevo aliado
+        
+        // 1. Primero invitar al usuario via API
+        const inviteResponse = await fetch('/api/allied-agents/invite', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: formData.email,
+            full_name: formData.full_name,
+            tenantSlug: tenantSlug,
+          }),
+        });
+
+        const inviteResult = await inviteResponse.json();
+
+        if (!inviteResponse.ok) {
+          throw new Error(inviteResult.error || 'Error al enviar invitación');
         }
+
+        // 2. Crear el registro del aliado con el auth_user_id
         const createData: CreateAlliedAgentInput = {
           full_name: formData.full_name,
           identification: formData.identification,
@@ -77,11 +98,12 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
           email: formData.email,
           address: formData.address || null,
           commission_percentage: Number(formData.commission_percentage),
-          password: formData.password,
           is_active: true,
+          auth_user_id: inviteResult.userId,
         };
+        
         await createAlliedAgent(createData, tenantId);
-        toast.success('Aliado creado exitosamente');
+        toast.success('Aliado creado exitosamente. Se envió un email de invitación.');
       }
 
       onSuccess();
@@ -141,6 +163,11 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
             disabled={isEditing}
             required
           />
+          {!isEditing && (
+            <p className="text-xs text-muted-foreground">
+              Se enviará un email de invitación a esta dirección
+            </p>
+          )}
         </div>
 
         <div className="space-y-2 md:col-span-2">
@@ -174,24 +201,6 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
             Porcentaje de la comisión que recibe el aliado
           </p>
         </div>
-
-        {!isEditing && (
-          <div className="space-y-2">
-            <Label htmlFor="password">Contraseña *</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="Mínimo 6 caracteres"
-              required={!isEditing}
-            />
-            <p className="text-xs text-muted-foreground">
-              El aliado usará este correo y contraseña para acceder al portal
-            </p>
-          </div>
-        )}
       </div>
 
       <div className="flex justify-end gap-3 pt-4">
@@ -202,10 +211,10 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
           {saving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Guardando...
+              {isEditing ? 'Guardando...' : 'Creando y enviando invitación...'}
             </>
           ) : (
-            'Guardar'
+            isEditing ? 'Guardar' : 'Crear y Enviar Invitación'
           )}
         </Button>
       </div>
