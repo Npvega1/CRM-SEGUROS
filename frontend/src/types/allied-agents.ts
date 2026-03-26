@@ -23,11 +23,8 @@ export const alliedAgentSchema = z.object({
 export const createAlliedAgentSchema = alliedAgentSchema.omit({
   id: true,
   tenant_id: true,
-  auth_user_id: true,
   created_at: true,
   updated_at: true,
-}).extend({
-  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
 });
 
 export const updateAlliedAgentSchema = alliedAgentSchema.partial().omit({
