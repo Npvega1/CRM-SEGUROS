@@ -20,14 +20,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -42,7 +34,7 @@ import {
 } from '@/lib/validations/clients';
 import { getActiveAlliedAgents } from '@/lib/services/allied-agents.service';
 import type { AlliedAgent } from '@/types/allied-agents';
-import { Loader2, Save, X, ChevronsUpDown, Check, UserPlus } from 'lucide-react';
+import { Loader2, Save, X, ChevronsUpDown, Check, UserPlus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 // Tipo para el formulario
@@ -146,6 +138,12 @@ export function ClientForm({
     if (alliedAgentId === 'direct') return { full_name: 'Directo (sin aliado)' };
     return alliedAgents.find(a => a.id === alliedAgentId);
   }, [alliedAgentId, alliedAgents]);
+
+  const handleSelectAllied = (value: string) => {
+    setValue('allied_agent_id', value);
+    setAlliedOpen(false);
+    setAlliedSearch('');
+  };
 
   const handleFormSubmit = async (data: ClientFormData) => {
     // Si es "direct", enviar null
@@ -259,9 +257,6 @@ export function ClientForm({
           rows={2}
           data-testid="client-address-input"
         />
-        {errors.address && (
-          <p className="text-sm text-red-500">{(errors.address as any)?.message}</p>
-        )}
       </div>
 
       {/* Segmento y Aliado */}
@@ -301,6 +296,7 @@ export function ClientForm({
                 className="w-full justify-between font-normal"
                 disabled={loading || loadingAgents}
                 data-testid="client-allied-select"
+                type="button"
               >
                 {loadingAgents ? (
                   <span className="text-muted-foreground">Cargando aliados...</span>
@@ -315,62 +311,70 @@ export function ClientForm({
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-full p-0" align="start">
-              <Command shouldFilter={false}>
-                <CommandInput 
-                  placeholder="Buscar aliado por nombre o documento..." 
-                  value={alliedSearch}
-                  onValueChange={setAlliedSearch}
-                />
-                <CommandList>
-                  <CommandEmpty>No se encontraron aliados.</CommandEmpty>
-                  <CommandGroup>
-                    {/* Opción Directo */}
-                    <CommandItem
-                      value="direct"
-                      onSelect={() => {
-                        setValue('allied_agent_id', 'direct');
-                        setAlliedOpen(false);
-                        setAlliedSearch('');
-                      }}
+            <PopoverContent className="w-80 p-0" align="start">
+              <div className="p-2 border-b">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar aliado..."
+                    value={alliedSearch}
+                    onChange={(e) => setAlliedSearch(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+              <div className="max-h-60 overflow-y-auto">
+                {/* Opción Directo */}
+                <div
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-100",
+                    alliedAgentId === 'direct' && "bg-slate-100"
+                  )}
+                  onClick={() => handleSelectAllied('direct')}
+                >
+                  <Check
+                    className={cn(
+                      "h-4 w-4",
+                      alliedAgentId === 'direct' ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <span className="font-medium">Directo (sin aliado)</span>
+                </div>
+                
+                {/* Separador */}
+                <div className="border-t my-1" />
+                
+                {/* Lista de aliados */}
+                {filteredAlliedAgents.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-muted-foreground text-center">
+                    No se encontraron aliados
+                  </div>
+                ) : (
+                  filteredAlliedAgents.map((agent) => (
+                    <div
+                      key={agent.id}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-100",
+                        alliedAgentId === agent.id && "bg-slate-100"
+                      )}
+                      onClick={() => handleSelectAllied(agent.id!)}
                     >
                       <Check
                         className={cn(
-                          "mr-2 h-4 w-4",
-                          alliedAgentId === 'direct' ? "opacity-100" : "opacity-0"
+                          "h-4 w-4 flex-shrink-0",
+                          alliedAgentId === agent.id ? "opacity-100" : "opacity-0"
                         )}
                       />
-                      <span className="font-medium">Directo (sin aliado)</span>
-                    </CommandItem>
-                    
-                    {/* Lista de aliados */}
-                    {filteredAlliedAgents.map((agent) => (
-                      <CommandItem
-                        key={agent.id}
-                        value={agent.id}
-                        onSelect={() => {
-                          setValue('allied_agent_id', agent.id!);
-                          setAlliedOpen(false);
-                          setAlliedSearch('');
-                        }}
-                      >
-                        <Check
-                          className={cn(
-                            "mr-2 h-4 w-4",
-                            alliedAgentId === agent.id ? "opacity-100" : "opacity-0"
-                          )}
-                        />
-                        <div className="flex flex-col">
-                          <span>{agent.full_name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {agent.identification} • {agent.commission_percentage}% comisión
-                          </span>
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate">{agent.full_name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {agent.identification} • {agent.commission_percentage}% comisión
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </PopoverContent>
           </Popover>
           <p className="text-xs text-muted-foreground">
