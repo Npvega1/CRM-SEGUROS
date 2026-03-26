@@ -289,7 +289,7 @@ export async function getAlliedAgentStats(
   alliedAgentId: string
 ): Promise<AlliedAgentStats> {
   const supabase = getBrowserClient();
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .rpc('get_allied_agent_stats', { p_allied_agent_id: alliedAgentId });
 
   if (error) throw error;
