@@ -7,9 +7,11 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -17,6 +19,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { 
   CreateClientInputSchema,
   type Client,
@@ -25,7 +40,10 @@ import {
   type DocType,
   type ClientSegment
 } from '@/lib/validations/clients';
-import { Loader2, Save, X } from 'lucide-react';
+import { getActiveAlliedAgents } from '@/lib/services/allied-agents.service';
+import type { AlliedAgent } from '@/types/allied-agents';
+import { Loader2, Save, X, ChevronsUpDown, Check, UserPlus } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
 
 // Tipo para el formulario
 interface ClientFormData {
@@ -34,8 +52,10 @@ interface ClientFormData {
   doc_number: string;
   email?: string;
   phone?: string;
+  address?: string;
   segment: ClientSegment;
   agent_id?: string | null;
+  allied_agent_id?: string | null;
   tags?: string[];
   metadata?: Record<string, unknown>;
 }
@@ -54,6 +74,25 @@ export function ClientForm({
   isLoading = false 
 }: ClientFormProps) {
   const isEditing = !!client;
+  const [alliedAgents, setAlliedAgents] = useState<AlliedAgent[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(true);
+  const [alliedOpen, setAlliedOpen] = useState(false);
+  const [alliedSearch, setAlliedSearch] = useState('');
+
+  // Cargar aliados activos
+  useEffect(() => {
+    const loadAlliedAgents = async () => {
+      try {
+        const agents = await getActiveAlliedAgents();
+        setAlliedAgents(agents);
+      } catch (error) {
+        console.error('Error loading allied agents:', error);
+      } finally {
+        setLoadingAgents(false);
+      }
+    };
+    loadAlliedAgents();
+  }, []);
 
   const {
     register,
@@ -70,7 +109,9 @@ export function ClientForm({
       doc_number: client.doc_number,
       email: client.email || '',
       phone: client.phone || '',
+      address: (client as any).address || '',
       segment: client.segment as ClientSegment,
+      allied_agent_id: (client as any).allied_agent_id || null,
       tags: client.tags || []
     } : {
       full_name: '',
@@ -78,16 +119,41 @@ export function ClientForm({
       doc_number: '',
       email: '',
       phone: '',
+      address: '',
       segment: 'individual',
+      allied_agent_id: null,
       tags: []
     }
   });
 
   const docType = watch('doc_type');
   const segment = watch('segment');
+  const alliedAgentId = watch('allied_agent_id');
+
+  // Filtrar aliados según búsqueda
+  const filteredAlliedAgents = useMemo(() => {
+    if (!alliedSearch) return alliedAgents;
+    const search = alliedSearch.toLowerCase();
+    return alliedAgents.filter(agent => 
+      agent.full_name.toLowerCase().includes(search) ||
+      agent.identification.includes(search)
+    );
+  }, [alliedAgents, alliedSearch]);
+
+  // Obtener nombre del aliado seleccionado
+  const selectedAlliedAgent = useMemo(() => {
+    if (!alliedAgentId) return null;
+    if (alliedAgentId === 'direct') return { full_name: 'Directo (sin aliado)' };
+    return alliedAgents.find(a => a.id === alliedAgentId);
+  }, [alliedAgentId, alliedAgents]);
 
   const handleFormSubmit = async (data: ClientFormData) => {
-    await onSubmit(data);
+    // Si es "direct", enviar null
+    const submitData = {
+      ...data,
+      allied_agent_id: data.allied_agent_id === 'direct' ? null : data.allied_agent_id
+    };
+    await onSubmit(submitData);
   };
 
   const loading = isLoading || isSubmitting;
@@ -182,28 +248,135 @@ export function ClientForm({
         </div>
       </div>
 
-      {/* Segmento */}
+      {/* Dirección */}
       <div className="space-y-2">
-        <Label htmlFor="segment">Segmento *</Label>
-        <Select
-          value={segment}
-          onValueChange={(value: ClientSegment) => setValue('segment', value)}
+        <Label htmlFor="address">Dirección</Label>
+        <Textarea
+          id="address"
+          placeholder="Ej: Calle 123 #45-67, Bogotá"
+          {...register('address')}
           disabled={loading}
-        >
-          <SelectTrigger id="segment" data-testid="client-segment-select">
-            <SelectValue placeholder="Seleccionar segmento" />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.entries(SEGMENT_LABELS) as [ClientSegment, string][]).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {errors.segment && (
-          <p className="text-sm text-red-500">{errors.segment.message}</p>
+          rows={2}
+          data-testid="client-address-input"
+        />
+        {errors.address && (
+          <p className="text-sm text-red-500">{(errors.address as any)?.message}</p>
         )}
+      </div>
+
+      {/* Segmento y Aliado */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="segment">Segmento *</Label>
+          <Select
+            value={segment}
+            onValueChange={(value: ClientSegment) => setValue('segment', value)}
+            disabled={loading}
+          >
+            <SelectTrigger id="segment" data-testid="client-segment-select">
+              <SelectValue placeholder="Seleccionar segmento" />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.entries(SEGMENT_LABELS) as [ClientSegment, string][]).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.segment && (
+            <p className="text-sm text-red-500">{errors.segment.message}</p>
+          )}
+        </div>
+
+        {/* Selector de Aliado con búsqueda */}
+        <div className="space-y-2">
+          <Label>Aliado / Referido por</Label>
+          <Popover open={alliedOpen} onOpenChange={setAlliedOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={alliedOpen}
+                className="w-full justify-between font-normal"
+                disabled={loading || loadingAgents}
+                data-testid="client-allied-select"
+              >
+                {loadingAgents ? (
+                  <span className="text-muted-foreground">Cargando aliados...</span>
+                ) : selectedAlliedAgent ? (
+                  <span className="flex items-center gap-2">
+                    <UserPlus className="h-4 w-4 text-muted-foreground" />
+                    {selectedAlliedAgent.full_name}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">Seleccionar aliado...</span>
+                )}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0" align="start">
+              <Command shouldFilter={false}>
+                <CommandInput 
+                  placeholder="Buscar aliado por nombre o documento..." 
+                  value={alliedSearch}
+                  onValueChange={setAlliedSearch}
+                />
+                <CommandList>
+                  <CommandEmpty>No se encontraron aliados.</CommandEmpty>
+                  <CommandGroup>
+                    {/* Opción Directo */}
+                    <CommandItem
+                      value="direct"
+                      onSelect={() => {
+                        setValue('allied_agent_id', 'direct');
+                        setAlliedOpen(false);
+                        setAlliedSearch('');
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          alliedAgentId === 'direct' ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      <span className="font-medium">Directo (sin aliado)</span>
+                    </CommandItem>
+                    
+                    {/* Lista de aliados */}
+                    {filteredAlliedAgents.map((agent) => (
+                      <CommandItem
+                        key={agent.id}
+                        value={agent.id}
+                        onSelect={() => {
+                          setValue('allied_agent_id', agent.id!);
+                          setAlliedOpen(false);
+                          setAlliedSearch('');
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            alliedAgentId === agent.id ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <div className="flex flex-col">
+                          <span>{agent.full_name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {agent.identification} • {agent.commission_percentage}% comisión
+                          </span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          <p className="text-xs text-muted-foreground">
+            Si el cliente fue referido por un aliado, selecciónalo aquí
+          </p>
+        </div>
       </div>
 
       {/* Botones */}
