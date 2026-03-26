@@ -13,13 +13,21 @@ import { z } from 'zod';
 /**
  * Tipo de documento de identidad
  */
-export const DocTypeEnum = z.enum(['rut', 'nit', 'cedula', 'pasaporte']);
+export const DocTypeEnum = z.enum([
+  'cedula',
+  'cedula_extranjeria',
+  'carnet_diplomatico',
+  'consorcio',
+  'nit',
+  'pasaporte',
+  'rut'
+]);
 export type DocType = z.infer<typeof DocTypeEnum>;
 
 /**
  * Segmento de cliente
  */
-export const ClientSegmentEnum = z.enum(['individual', 'empresa', 'vip']);
+export const ClientSegmentEnum = z.enum(['persona_natural', 'persona_juridica']);
 export type ClientSegment = z.infer<typeof ClientSegmentEnum>;
 
 // =====================================================
@@ -37,8 +45,10 @@ export const ClientSchema = z.object({
   doc_number: z.string().min(1, 'El documento es requerido').max(30, 'Máximo 30 caracteres'),
   email: z.string().email('Email inválido').max(150).nullable().optional(),
   phone: z.string().max(20).nullable().optional(),
+  address: z.string().nullable().optional(),
   segment: ClientSegmentEnum,
   agent_id: z.string().uuid().nullable().optional(),
+  allied_agent_id: z.string().uuid().nullable().optional(),
   tags: z.array(z.string()).default([]),
   metadata: z.record(z.string(), z.unknown()).default({}),
   is_active: z.boolean().default(true),
@@ -66,8 +76,13 @@ export const CreateClientInputSchema = z.object({
     .max(20, 'Máximo 20 caracteres')
     .optional()
     .or(z.literal('')),
-  segment: ClientSegmentEnum.default('individual'),
+  address: z.string()
+    .max(500, 'Máximo 500 caracteres')
+    .optional()
+    .or(z.literal('')),
+  segment: ClientSegmentEnum.default('persona_natural'),
   agent_id: z.string().uuid().optional().nullable(),
+  allied_agent_id: z.string().uuid().optional().nullable(),
   tags: z.array(z.string().max(50)).max(20).default([]),
   metadata: z.record(z.string(), z.unknown()).default({})
 });
@@ -98,7 +113,7 @@ export const CSVClientRowSchema = z.object({
   doc_number: z.string().min(1).max(30),
   email: z.string().email().optional().nullable(),
   phone: z.string().max(20).optional().nullable(),
-  segment: ClientSegmentEnum.default('individual'),
+  segment: ClientSegmentEnum.default('persona_natural'),
   tags: z.string().optional() // CSV viene como string separado por comas
 });
 
@@ -141,26 +156,27 @@ export type CSVImportResult = z.infer<typeof CSVImportResultSchema>;
  * Labels para tipos de documento
  */
 export const DOC_TYPE_LABELS: Record<DocType, string> = {
-  rut: 'RUT',
-  nit: 'NIT',
   cedula: 'Cédula',
-  pasaporte: 'Pasaporte'
+  cedula_extranjeria: 'Cédula de Extranjería',
+  carnet_diplomatico: 'Carnet Diplomático',
+  consorcio: 'Consorcio',
+  nit: 'NIT',
+  pasaporte: 'Pasaporte',
+  rut: 'RUT'
 };
 
 /**
  * Labels para segmentos de cliente
  */
 export const SEGMENT_LABELS: Record<ClientSegment, string> = {
-  individual: 'Individual',
-  empresa: 'Empresa',
-  vip: 'VIP'
+  persona_natural: 'Persona Natural',
+  persona_juridica: 'Persona Jurídica'
 };
 
 /**
  * Colores para segmentos (Tailwind classes)
  */
 export const SEGMENT_COLORS: Record<ClientSegment, string> = {
-  individual: 'bg-blue-100 text-blue-800',
-  empresa: 'bg-purple-100 text-purple-800',
-  vip: 'bg-amber-100 text-amber-800'
+  persona_natural: 'bg-blue-100 text-blue-800',
+  persona_juridica: 'bg-purple-100 text-purple-800'
 };
