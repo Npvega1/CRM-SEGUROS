@@ -53,12 +53,11 @@ export async function createAlliedAgent(
   tenantId: string
 ): Promise<AlliedAgent> {
   const supabase = getBrowserClient();
-  const { password, ...agentData } = input;
   
   const { data, error } = await (supabase
     .from('allied_agents') as any)
     .insert({
-      ...agentData,
+      ...input,
       tenant_id: tenantId,
     })
     .select()
