@@ -21,7 +21,6 @@ import {
 } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { clientSchema, type ClientFormData } from '@/lib/validations/clients';
-import { createClient, updateClient } from '@/lib/services/clients.service';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { Loader2, Check, ChevronsUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -94,17 +93,36 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   const onSubmit = async (data: ClientFormData) => {
     setIsSubmitting(true);
     try {
+      const supabase = createBrowserClient();
+      
       const clientData = {
-        ...data,
+        full_name: data.full_name,
+        doc_type: data.doc_type,
+        doc_number: data.doc_number,
+        email: data.email || null,
+        phone: data.phone || null,
+        address: data.address || null,
+        segment: data.segment,
         tenant_id: tenantId,
         agent_id: agentId,
         allied_agent_id: data.allied_agent_id || null,
       };
 
       if (initialData?.id) {
-        await updateClient(initialData.id, clientData);
+        // Actualizar cliente existente
+        const { error } = await (supabase as any)
+          .from('clients')
+          .update(clientData)
+          .eq('id', initialData.id);
+        
+        if (error) throw error;
       } else {
-        await createClient(clientData);
+        // Crear nuevo cliente
+        const { error } = await (supabase as any)
+          .from('clients')
+          .insert(clientData);
+        
+        if (error) throw error;
       }
 
       router.push('/clientes');
