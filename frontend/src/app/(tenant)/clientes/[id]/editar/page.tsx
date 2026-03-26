@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ClientForm } from '@/components/modules/clients/ClientForm';
-import type { Client } from '@/lib/validations/clients';
+import type { Client, DocType, ClientSegment } from '@/lib/validations/clients';
 import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -20,12 +20,14 @@ import { getBrowserClient } from '@/lib/supabase/client';
 
 interface ClientFormData {
   full_name: string;
-  doc_type: 'rut' | 'nit' | 'cedula' | 'pasaporte';
+  doc_type: DocType;
   doc_number: string;
   email?: string;
   phone?: string;
-  segment: 'individual' | 'empresa' | 'vip';
+  address?: string;
+  segment: ClientSegment;
   agent_id?: string | null;
+  allied_agent_id?: string | null;
   tags?: string[];
   metadata?: Record<string, unknown>;
 }
@@ -92,8 +94,10 @@ export default function EditClientPage() {
           doc_number: data.doc_number,
           email: data.email || null,
           phone: data.phone || null,
+          address: data.address || null,
           segment: data.segment,
           agent_id: data.agent_id || null,
+          allied_agent_id: data.allied_agent_id || null,
           tags: data.tags || [],
           metadata: data.metadata || {},
         })
