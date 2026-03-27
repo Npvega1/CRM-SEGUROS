@@ -46,14 +46,14 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function ClientPoliciesPage() {
-  const { clientData } = usePortal();
+  const { client } = usePortal();
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPolicies = async () => {
-      if (!clientData?.id) {
+      if (!client?.client_id) {
         setLoading(false);
         return;
       }
@@ -63,7 +63,7 @@ export default function ClientPoliciesPage() {
         
         // Usar el RPC con SECURITY DEFINER
         const { data, error } = await supabase
-          .rpc('get_client_policies', { p_client_id: clientData.id });
+          .rpc('get_client_policies', { p_client_id: client.client_id });
 
         if (error) {
           console.error('Error fetching policies:', error);
@@ -78,7 +78,7 @@ export default function ClientPoliciesPage() {
     };
 
     fetchPolicies();
-  }, [clientData?.id]);
+  }, [client?.client_id]);
 
   const handleDownload = async (policy: Policy) => {
     if (!policy.document_url) return;
