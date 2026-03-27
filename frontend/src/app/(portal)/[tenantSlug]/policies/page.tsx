@@ -63,7 +63,7 @@ export default function ClientPoliciesPage() {
         
         // Usar el RPC con SECURITY DEFINER
         const { data, error } = await supabase
-          .rpc('get_client_policies', { p_client_id: client.client_id });
+          .rpc('get_client_policies' as any, { p_client_id: client.client_id });
 
         if (error) {
           console.error('Error fetching policies:', error);
