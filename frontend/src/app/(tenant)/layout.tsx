@@ -38,12 +38,6 @@ import {
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { UnreadMessagesBadge } from '@/components/ui/UnreadMessagesBadge';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 
 interface NavItem {
   title: string;
@@ -53,7 +47,7 @@ interface NavItem {
   permissionKey?: 'clientes' | 'polizas' | 'pipeline' | 'siniestros' | 'facturacion' | 'reportes' | 'mensajes' | 'automatizaciones' | 'comparativos' | 'cotizador';
   adminOnly?: boolean;
   alwaysShow?: boolean;
-  premiumOnly?: boolean; // Nuevo: módulos solo para premium
+  premiumOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -62,7 +56,7 @@ const navItems: NavItem[] = [
   { title: 'Pólizas', href: '/polizas', icon: FileText, permissionKey: 'polizas' },
   { title: 'Pipeline', href: '/pipeline', icon: TrendingUp, permissionKey: 'pipeline', premiumOnly: true },
   { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle, permissionKey: 'siniestros' },
-  { title: 'Cotizador', href: '/cotizador', icon: Calculator, permissionKey: 'cotizador', badge: 'Nuevo', premiumOnly: true },
+  { title: 'Cotizador', href: '/cotizador', icon: Calculator, permissionKey: 'cotizador', badge: 'Pro', premiumOnly: true },
   { title: 'Cotizaciones IA', href: '/ai-compare', icon: Sparkles, permissionKey: 'comparativos', premiumOnly: true },
   { title: 'Mensajes', href: '/mensajes', icon: MessageSquare, permissionKey: 'mensajes', premiumOnly: true },
   { title: 'Aliados', href: '/aliados', icon: Handshake, adminOnly: true, badge: 'Nuevo' },
@@ -120,28 +114,17 @@ export default function TenantLayout({
     const isLocked = item.premiumOnly && !hasPremiumAccess;
 
     if (isLocked) {
-      // Mostrar item bloqueado con tooltip
+      // Mostrar item bloqueado
       return (
-        <TooltipProvider key={item.href}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium cursor-not-allowed opacity-50',
-                  'text-muted-foreground'
-                )}
-              >
-                <item.icon className="h-5 w-5 flex-shrink-0" />
-                <span>{item.title}</span>
-                <Lock className="ml-auto h-4 w-4 text-amber-500" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="flex items-center gap-2">
-              <Crown className="h-4 w-4 text-amber-500" />
-              <span>Módulo Premium</span>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <div
+          key={item.href}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium cursor-not-allowed opacity-50 text-muted-foreground"
+          title="Módulo Premium - Actualiza tu plan"
+        >
+          <item.icon className="h-5 w-5 flex-shrink-0" />
+          <span>{item.title}</span>
+          <Lock className="ml-auto h-4 w-4 text-amber-500" />
+        </div>
       );
     }
 
@@ -189,7 +172,7 @@ export default function TenantLayout({
               {hasPremiumAccess && (
                 <span className="inline-flex items-center gap-0.5 text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
                   <Crown className="h-3 w-3" />
-                  Premium
+                  Pro
                 </span>
               )}
             </div>
