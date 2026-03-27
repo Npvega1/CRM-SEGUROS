@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(request: NextRequest) {
   try {
+    // Importar Resend dinámicamente
+    const { Resend } = await import('resend');
+    
+    const apiKey = process.env.RESEND_API_KEY;
+    
+    if (!apiKey) {
+      console.error('RESEND_API_KEY not configured');
+      return NextResponse.json(
+        { error: 'Servicio de email no configurado' },
+        { status: 500 }
+      );
+    }
+    
+    const resend = new Resend(apiKey);
+    
     const body = await request.json();
     const { to, tenantName, adminName } = body;
 
@@ -37,7 +49,7 @@ export async function POST(request: NextRequest) {
                   <tr>
                     <td style="padding: 40px 40px 20px 40px; text-align: center; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border-radius: 12px 12px 0 0;">
                       <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">
-                        🎉 ¡Felicitaciones!
+                        ¡Felicitaciones!
                       </h1>
                     </td>
                   </tr>
@@ -63,7 +75,7 @@ export async function POST(request: NextRequest) {
                           <td align="center">
                             <a href="https://app.integratech.com.co/login" 
                                style="display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px; border-radius: 8px;">
-                              Iniciar Sesión
+                              Iniciar Sesion
                             </a>
                           </td>
                         </tr>
@@ -75,11 +87,11 @@ export async function POST(request: NextRequest) {
                           Con tu cuenta puedes:
                         </p>
                         <ul style="margin: 0; padding-left: 20px; color: #4b5563; font-size: 14px; line-height: 1.8;">
-                          <li>Gestionar clientes y pólizas</li>
+                          <li>Gestionar clientes y polizas</li>
                           <li>Controlar siniestros</li>
-                          <li>Administrar facturación</li>
+                          <li>Administrar facturacion</li>
                           <li>Generar reportes</li>
-                          <li>Y mucho más...</li>
+                          <li>Y mucho mas...</li>
                         </ul>
                       </div>
                     </td>
@@ -89,13 +101,13 @@ export async function POST(request: NextRequest) {
                   <tr>
                     <td style="padding: 24px 40px; background-color: #f8fafc; border-radius: 0 0 12px 12px; text-align: center;">
                       <p style="margin: 0 0 8px 0; font-size: 14px; color: #6b7280;">
-                        ¿Tienes preguntas? Contáctanos en
+                        Tienes preguntas? Contactanos en
                       </p>
                       <a href="mailto:contact@integratech.com.co" style="color: #3b82f6; text-decoration: none; font-weight: 500;">
                         contact@integratech.com.co
                       </a>
                       <p style="margin: 16px 0 0 0; font-size: 12px; color: #9ca3af;">
-                        © 2024 IntegraTech. Todos los derechos reservados.
+                        2024 IntegraTech. Todos los derechos reservados.
                       </p>
                     </td>
                   </tr>
@@ -112,7 +124,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error sending email:', error);
       return NextResponse.json(
-        { error: 'Error al enviar email', details: error },
+        { error: 'Error al enviar email', details: error.message },
         { status: 500 }
       );
     }
