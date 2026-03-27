@@ -13,12 +13,13 @@ import { es } from 'date-fns/locale';
 interface Policy {
   id: string;
   policy_number: string;
-  product_name: string | null;
-  insurer_name: string | null;
+  insurer: string | null;
+  line: string | null;
   start_date: string | null;
   end_date: string | null;
   status: string;
   premium: number | null;
+  currency: string | null;
   document_url: string | null;
   created_at: string;
 }
@@ -145,7 +146,7 @@ export default function ClientPoliciesPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-lg">{policy.policy_number}</CardTitle>
-                    <CardDescription>{policy.product_name || 'Producto no especificado'}</CardDescription>
+                    <CardDescription>{policy.line || 'Ramo no especificado'}</CardDescription>
                   </div>
                   <Badge className={statusColors[policy.status?.toLowerCase()] || 'bg-gray-100 text-gray-800'}>
                     {statusLabels[policy.status?.toLowerCase()] || policy.status}
@@ -153,10 +154,10 @@ export default function ClientPoliciesPage() {
                 </div>
               </CardHeader>
               <CardContent className="flex-1 space-y-3">
-                {policy.insurer_name && (
+                {policy.insurer && (
                   <div className="flex items-center gap-2 text-sm">
                     <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <span>{policy.insurer_name}</span>
+                    <span>{policy.insurer}</span>
                   </div>
                 )}
                 
@@ -174,7 +175,7 @@ export default function ClientPoliciesPage() {
                 {policy.premium && (
                   <div className="flex items-center gap-2 text-sm">
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    <span>Prima: ${policy.premium.toLocaleString('es-CO')}</span>
+                    <span>Prima: ${policy.premium.toLocaleString('es-CO')} {policy.currency || ''}</span>
                   </div>
                 )}
 
