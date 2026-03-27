@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileText, Loader2, Download, Eye, ExternalLink, File } from 'lucide-react';
+import { FileText, Loader2, Download, ExternalLink, File } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -29,11 +29,15 @@ import {
 } from '@/lib/services/allied-agents.service';
 import type { AlliedAgentPolicy } from '@/types/allied-agents';
 
+const STORAGE_BUCKET = 'policy-documents';
+
 export default function AlliedPoliciesPage() {
   const [policies, setPolicies] = useState<AlliedAgentPolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPolicy, setSelectedPolicy] = useState<AlliedAgentPolicy | null>(null);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+  const [loadingDocument, setLoadingDocument] = useState(false);
 
   useEffect(() => {
     loadPolicies();
@@ -88,13 +92,64 @@ export default function AlliedPoliciesPage() {
     }
   };
 
-  const handleViewDocument = (policy: AlliedAgentPolicy) => {
+  const handleViewDocument = async (policy: AlliedAgentPolicy) => {
+    if (!policy.document_url) return;
+    
     setSelectedPolicy(policy);
     setShowDocumentModal(true);
+    setLoadingDocument(true);
+    setDocumentUrl(null);
+
+    try {
+      const supabase = getBrowserClient();
+      
+      // Intentar obtener URL pública primero
+      const { data: publicData } = supabase.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(policy.document_url);
+
+      if (publicData?.publicUrl) {
+        setDocumentUrl(publicData.publicUrl);
+      } else {
+        // Si no es público, crear URL firmada (válida por 1 hora)
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .createSignedUrl(policy.document_url, 3600);
+
+        if (signedError) {
+          console.error('Error creating signed URL:', signedError);
+          toast.error('Error al acceder al documento');
+          return;
+        }
+
+        if (signedData?.signedUrl) {
+          setDocumentUrl(signedData.signedUrl);
+        }
+      }
+    } catch (error) {
+      console.error('Error getting document URL:', error);
+      toast.error('Error al cargar el documento');
+    } finally {
+      setLoadingDocument(false);
+    }
   };
 
-  const openDocumentInNewTab = (url: string) => {
-    window.open(url, '_blank');
+  const openDocumentInNewTab = () => {
+    if (documentUrl) {
+      window.open(documentUrl, '_blank');
+    }
+  };
+
+  const downloadDocument = () => {
+    if (documentUrl && selectedPolicy) {
+      const link = document.createElement('a');
+      link.href = documentUrl;
+      link.target = '_blank';
+      link.download = `poliza-${selectedPolicy.policy_number}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   return (
@@ -170,7 +225,7 @@ export default function AlliedPoliciesPage() {
                             onClick={() => handleViewDocument(policy)}
                             className="gap-2"
                           >
-                            <Eye className="h-4 w-4" />
+                            <FileText className="h-4 w-4" />
                             Ver
                           </Button>
                         ) : (
@@ -205,10 +260,15 @@ export default function AlliedPoliciesPage() {
                 <p className="font-medium">{selectedPolicy.client?.full_name}</p>
               </div>
 
-              {selectedPolicy.document_url && (
+              {loadingDocument ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-muted-foreground">Cargando documento...</span>
+                </div>
+              ) : documentUrl ? (
                 <div className="flex flex-col gap-3">
                   <Button
-                    onClick={() => openDocumentInNewTab(selectedPolicy.document_url!)}
+                    onClick={openDocumentInNewTab}
                     className="w-full gap-2"
                   >
                     <ExternalLink className="h-4 w-4" />
@@ -217,17 +277,16 @@ export default function AlliedPoliciesPage() {
                   
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      const link = document.createElement('a');
-                      link.href = selectedPolicy.document_url!;
-                      link.download = `poliza-${selectedPolicy.policy_number}.pdf`;
-                      link.click();
-                    }}
+                    onClick={downloadDocument}
                     className="w-full gap-2"
                   >
                     <Download className="h-4 w-4" />
                     Descargar
                   </Button>
+                </div>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  No se pudo cargar el documento
                 </div>
               )}
             </div>
