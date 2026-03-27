@@ -14,6 +14,7 @@ import type { Database } from '@/lib/supabase/database-types';
 // =====================================================
 
 export type Role = 'superadmin' | 'admin' | 'senior_agent' | 'agent' | 'readonly';
+export type Plan = 'basic' | 'premium' | 'trial';
 
 interface TenantContextData {
   // Usuario
@@ -26,6 +27,7 @@ interface TenantContextData {
   tenantId: string;
   tenantName: string;
   tenantSlug: string;
+  tenantPlan: Plan;
   
   // Agente asignado (puede ser diferente al userId)
   agentId: string;
@@ -36,6 +38,7 @@ interface TenantContextValue extends Partial<TenantContextData> {
   error: string | null;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
+  isPremiumFeature: (feature: string) => boolean;
 }
 
 const defaultContextValue: TenantContextValue = {
@@ -46,12 +49,17 @@ const defaultContextValue: TenantContextValue = {
   tenantId: '',
   tenantName: '',
   tenantSlug: '',
+  tenantPlan: 'basic',
   agentId: '',
   isLoading: true,
   error: null,
   refresh: async () => {},
   signOut: async () => {},
+  isPremiumFeature: () => false,
 };
+
+// Módulos que son exclusivos de Premium
+const PREMIUM_ONLY_MODULES = ['pipeline', 'cotizador', 'comparativos', 'mensajes', 'automatizaciones'];
 
 // =====================================================
 // CACHE - Evita re-fetch en navegación
@@ -110,7 +118,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
+
       if (sessionError) {
         console.error('Session error:', sessionError);
         setContext(null);
@@ -143,7 +151,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       // Obtener datos del JWT (buscar en app_metadata Y user_metadata)
       const appMetadata = user.app_metadata || {};
       const userMetadata = user.user_metadata || {};
-      
+
       // Buscar tenant_id en ambos lugares
       const tenantId = (appMetadata.tenant_id || userMetadata.tenant_id) as string | undefined;
       const role = (appMetadata.role || userMetadata.role) as Role || 'readonly';
@@ -154,15 +162,16 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       let userEmail = user.email || '';
       let tenantName = '';
       let tenantSlug = '';
+      let tenantPlan: Plan = 'basic';
       let finalRole = role;
 
       // Cargar datos adicionales solo si hay tenantId
       if (tenantId) {
         try {
-          // Cargar datos del tenant
+          // Cargar datos del tenant (incluyendo plan)
           const tenantResult = await supabase
             .from('tenants')
-            .select('name, slug')
+            .select('name, slug, plan')
             .eq('id', tenantId)
             .maybeSingle();
 
@@ -172,9 +181,10 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           finalRole = role;
 
           if (tenantResult.data) {
-            const tenantData = tenantResult.data as { name?: string; slug?: string };
+            const tenantData = tenantResult.data as { name?: string; slug?: string; plan?: string };
             tenantName = tenantData.name || '';
             tenantSlug = tenantData.slug || '';
+            tenantPlan = (tenantData.plan as Plan) || 'basic';
           }
         } catch {
           // Silenciar errores - usar valores del JWT
@@ -189,6 +199,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         tenantId: tenantId || '',
         tenantName,
         tenantSlug,
+        tenantPlan,
         agentId
       };
 
@@ -196,6 +207,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       setCachedContext(user.id, contextData);
       setContext(contextData);
       setError(null);
+
     } catch (e) {
       console.error('Error loading context:', e);
       setError('Error al cargar datos');
@@ -216,6 +228,11 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       console.error('Error signing out:', e);
     }
   }, [supabase]);
+
+  // Función para verificar si una feature es premium
+  const isPremiumFeature = useCallback((feature: string): boolean => {
+    return PREMIUM_ONLY_MODULES.includes(feature);
+  }, []);
 
   // Cargar contexto inicial
   useEffect(() => {
@@ -249,8 +266,9 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     error,
     refresh: () => loadTenantContext(true),
-    signOut
-  }), [context, isLoading, error, loadTenantContext, signOut]);
+    signOut,
+    isPremiumFeature
+  }), [context, isLoading, error, loadTenantContext, signOut, isPremiumFeature]);
 
   return (
     <TenantContext.Provider value={value}>
@@ -271,4 +289,17 @@ export function useTenant() {
 export function useIsAuthenticated() {
   const { userId, isLoading } = useTenant();
   return !isLoading && !!userId;
+}
+
+// Hook para verificar acceso a módulos premium
+export function useCanAccessModule(moduleKey: string) {
+  const { tenantPlan, isPremiumFeature } = useTenant();
+  
+  // Si es premium, puede acceder a todo
+  if (tenantPlan === 'premium' || tenantPlan === 'trial') {
+    return true;
+  }
+  
+  // Si es básico, solo puede acceder si NO es feature premium
+  return !isPremiumFeature(moduleKey);
 }
