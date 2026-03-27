@@ -13,7 +13,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Cliente admin de Supabase
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -25,7 +24,6 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Obtener el tenant_id y nombre basado en el slug
     const { data: tenantData, error: tenantError } = await supabaseAdmin
       .from('tenants')
       .select('id, name')
@@ -40,7 +38,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Crear usuario e invitarlo - redirigir a la página de setup
+    // IMPORTANTE: Usar el callback de aliados, no el de clientes
     const { data: userData, error: userError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       email,
       {
@@ -49,20 +47,18 @@ export async function POST(request: NextRequest) {
           role: 'allied_agent',
           tenant_id: tenantData.id,
         },
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/${tenantSlug}/aliado/setup`,
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/${tenantSlug}/aliado/auth/callback`,
       }
     );
 
     if (userError) {
       console.error('Error inviting user:', userError);
       
-      // Si el usuario ya existe, intentar obtener su ID
       if (userError.message.includes('already been registered')) {
         const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers();
         const user = existingUser?.users?.find(u => u.email === email);
         
         if (user) {
-          // Actualizar el metadata del usuario existente
           await supabaseAdmin.auth.admin.updateUserById(user.id, {
             app_metadata: {
               tenant_id: tenantData.id,
@@ -87,7 +83,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Asegurar que el app_metadata tenga el tenant_id
     if (userData?.user?.id) {
       await supabaseAdmin.auth.admin.updateUserById(userData.user.id, {
         app_metadata: {
