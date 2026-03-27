@@ -20,7 +20,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { clientSchema, type ClientFormData } from '@/lib/validations/clients';
+import { ClientSchema, type ClientFormData } from '@/lib/validations/clients';
 import { createClient } from '@/lib/supabase/client';
 import { Loader2, Check, ChevronsUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -51,7 +51,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     setValue,
     watch,
   } = useForm<ClientFormData>({
-    resolver: zodResolver(clientSchema),
+    resolver: zodResolver(ClientSchema),
     defaultValues: initialData || {
       full_name: '',
       doc_type: 'cedula',
