@@ -1,395 +1,145 @@
-'use client';
+// =====================================================
+// VALIDACIONES ZOD - Clientes
+// Módulo 01: Gestión de Clientes
+// =====================================================
 
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CreateClientInputSchema, type CreateClientInput } from '@/lib/validations/clients';
-import { createClient } from '@/lib/supabase/client';
-import { Loader2, Check, ChevronsUpDown, Search } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { z } from 'zod';
 
-interface AlliedAgent {
-  id: string;
-  full_name: string;
-}
+// =====================================================
+// ENUMS
+// =====================================================
 
-interface ClientFormProps {
-  initialData?: CreateClientInput & { id?: string };
-  tenantId: string;
-  agentId: string;
-}
+export const DocTypeEnum = z.enum([
+  'cedula',
+  'cedula_extranjeria',
+  'carnet_diplomatico',
+  'consorcio',
+  'nit',
+  'pasaporte',
+  'rut'
+]);
+export type DocType = z.infer<typeof DocTypeEnum>;
 
-export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) {
-  const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [alliedAgents, setAlliedAgents] = useState<AlliedAgent[]>([]);
-  const [loadingAllies, setLoadingAllies] = useState(true);
-  const [allyOpen, setAllyOpen] = useState(false);
-  const [allySearch, setAllySearch] = useState('');
+export const ClientSegmentEnum = z.enum(['persona_natural', 'persona_juridica']);
+export type ClientSegment = z.infer<typeof ClientSegmentEnum>;
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    setValue,
-    watch,
-  } = useForm<CreateClientInput>({
-    resolver: zodResolver(CreateClientInputSchema),
-    defaultValues: initialData || {
-      full_name: '',
-      doc_type: 'cedula',
-      doc_number: '',
-      email: '',
-      phone: '',
-      address: '',
-      segment: 'persona_natural',
-      allied_agent_id: null,
-    },
-  });
+// =====================================================
+// SCHEMAS ZOD
+// =====================================================
 
-  const selectedAllyId = watch('allied_agent_id');
+export const ClientSchema = z.object({
+  id: z.string().uuid(),
+  tenant_id: z.string().uuid(),
+  full_name: z.string().min(1, 'El nombre es requerido').max(200, 'Maximo 200 caracteres'),
+  doc_type: DocTypeEnum,
+  doc_number: z.string().min(1, 'El documento es requerido').max(30, 'Maximo 30 caracteres'),
+  email: z.string().email('Email invalido').max(150).nullable().optional(),
+  phone: z.string().max(20).nullable().optional(),
+  address: z.string().nullable().optional(),
+  segment: ClientSegmentEnum,
+  agent_id: z.string().uuid().nullable().optional(),
+  allied_agent_id: z.string().uuid().nullable().optional(),
+  tags: z.array(z.string()).default([]),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  is_active: z.boolean().default(true),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime()
+});
 
-  // Cargar aliados
-  useEffect(() => {
-    async function loadAlliedAgents() {
-      try {
-        const supabase = createClient();
-        const { data, error } = await (supabase as any)
-          .from('allied_agents')
-          .select('id, full_name')
-          .eq('tenant_id', tenantId)
-          .eq('status', 'active')
-          .order('full_name');
+export const CreateClientInputSchema = z.object({
+  full_name: z.string()
+    .min(1, 'El nombre es requerido')
+    .max(200, 'Maximo 200 caracteres'),
+  doc_type: DocTypeEnum.default('cedula'),
+  doc_number: z.string()
+    .min(1, 'El documento es requerido')
+    .max(30, 'Maximo 30 caracteres'),
+  email: z.string()
+    .email('Email invalido')
+    .max(150, 'Maximo 150 caracteres')
+    .optional()
+    .or(z.literal('')),
+  phone: z.string()
+    .max(20, 'Maximo 20 caracteres')
+    .optional()
+    .or(z.literal('')),
+  address: z.string()
+    .max(500, 'Maximo 500 caracteres')
+    .optional()
+    .or(z.literal('')),
+  segment: ClientSegmentEnum.default('persona_natural'),
+  agent_id: z.string().uuid().optional().nullable(),
+  allied_agent_id: z.string().uuid().optional().nullable(),
+  tags: z.array(z.string().max(50)).max(20).default([]),
+  metadata: z.record(z.string(), z.unknown()).default({})
+});
 
-        if (!error && data) {
-          setAlliedAgents(data);
-        }
-      } catch (err) {
-        console.error('Error loading allied agents:', err);
-      } finally {
-        setLoadingAllies(false);
-      }
-    }
-    loadAlliedAgents();
-  }, [tenantId]);
+export const UpdateClientInputSchema = CreateClientInputSchema.partial().extend({
+  is_active: z.boolean().optional()
+});
 
-  const onSubmit = async (data: CreateClientInput) => {
-    setIsSubmitting(true);
-    try {
-      const supabase = createClient();
-      
-      const clientData = {
-        full_name: data.full_name,
-        doc_type: data.doc_type,
-        doc_number: data.doc_number,
-        email: data.email || null,
-        phone: data.phone || null,
-        address: data.address || null,
-        segment: data.segment,
-        tenant_id: tenantId,
-        agent_id: agentId,
-        allied_agent_id: data.allied_agent_id || null,
-      };
+export const SearchClientsInputSchema = z.object({
+  query: z.string().min(1).max(100),
+  segment: ClientSegmentEnum.optional(),
+  agent_id: z.string().uuid().optional(),
+  limit: z.number().int().min(1).max(100).default(50)
+});
 
-      if (initialData?.id) {
-        // Actualizar cliente existente
-        const { error } = await (supabase as any)
-          .from('clients')
-          .update(clientData)
-          .eq('id', initialData.id);
-        
-        if (error) throw error;
-      } else {
-        // Crear nuevo cliente
-        const { error } = await (supabase as any)
-          .from('clients')
-          .insert(clientData);
-        
-        if (error) throw error;
-      }
+export const CSVClientRowSchema = z.object({
+  full_name: z.string().min(1).max(200),
+  doc_type: DocTypeEnum.default('cedula'),
+  doc_number: z.string().min(1).max(30),
+  email: z.string().email().optional().nullable(),
+  phone: z.string().max(20).optional().nullable(),
+  segment: ClientSegmentEnum.default('persona_natural'),
+  tags: z.string().optional()
+});
 
-      router.push('/clientes');
-      router.refresh();
-    } catch (error) {
-      console.error('Error saving client:', error);
-      alert('Error al guardar el cliente');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+export const CSVRowErrorSchema = z.object({
+  row: z.number(),
+  field: z.string(),
+  message: z.string(),
+  value: z.string().optional()
+});
 
-  // Filtrar aliados por búsqueda
-  const filteredAllies = alliedAgents.filter((ally) =>
-    ally.full_name.toLowerCase().includes(allySearch.toLowerCase())
-  );
+export const CSVImportResultSchema = z.object({
+  success: z.number(),
+  failed: z.number(),
+  errors: z.array(CSVRowErrorSchema)
+});
 
-  // Obtener nombre del aliado seleccionado
-  const selectedAllyName = selectedAllyId
-    ? alliedAgents.find((a) => a.id === selectedAllyId)?.full_name
-    : null;
+// =====================================================
+// TIPOS TYPESCRIPT
+// =====================================================
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {initialData?.id ? 'Editar Cliente' : 'Nuevo Cliente'}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Nombre Completo */}
-          <div className="space-y-2">
-            <Label htmlFor="full_name">Nombre Completo *</Label>
-            <Input
-              id="full_name"
-              {...register('full_name')}
-              placeholder="Nombre del cliente"
-            />
-            {errors.full_name && (
-              <p className="text-sm text-red-500">{errors.full_name.message}</p>
-            )}
-          </div>
+export type Client = z.infer<typeof ClientSchema>;
+export type CreateClientInput = z.infer<typeof CreateClientInputSchema>;
+export type UpdateClientInput = z.infer<typeof UpdateClientInputSchema>;
+export type SearchClientsInput = z.infer<typeof SearchClientsInputSchema>;
+export type CSVClientRow = z.infer<typeof CSVClientRowSchema>;
+export type CSVRowError = z.infer<typeof CSVRowErrorSchema>;
+export type CSVImportResult = z.infer<typeof CSVImportResultSchema>;
 
-          {/* Tipo y Número de Documento */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="doc_type">Tipo de Documento *</Label>
-              <Select
-                defaultValue={initialData?.doc_type || 'cedula'}
-                onValueChange={(value) => setValue('doc_type', value as any)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cedula">Cédula</SelectItem>
-                  <SelectItem value="pasaporte">Pasaporte</SelectItem>
-                  <SelectItem value="ruc">RUC</SelectItem>
-                  <SelectItem value="nit">NIT</SelectItem>
-                  <SelectItem value="rut">RUT</SelectItem>
-                  <SelectItem value="cedula_extranjeria">Cédula Extranjería</SelectItem>
-                  <SelectItem value="carnet_diplomatico">Carnet Diplomático</SelectItem>
-                  <SelectItem value="consorcio">Consorcio</SelectItem>
-                </SelectContent>
-              </Select>
-              {errors.doc_type && (
-                <p className="text-sm text-red-500">{errors.doc_type.message}</p>
-              )}
-            </div>
+// =====================================================
+// HELPERS
+// =====================================================
 
-            <div className="space-y-2">
-              <Label htmlFor="doc_number">Número de Documento *</Label>
-              <Input
-                id="doc_number"
-                {...register('doc_number')}
-                placeholder="Número de documento"
-              />
-              {errors.doc_number && (
-                <p className="text-sm text-red-500">{errors.doc_number.message}</p>
-              )}
-            </div>
-          </div>
+export const DOC_TYPE_LABELS: Record<DocType, string> = {
+  cedula: 'Cedula',
+  cedula_extranjeria: 'Cedula de Extranjeria',
+  carnet_diplomatico: 'Carnet Diplomatico',
+  consorcio: 'Consorcio',
+  nit: 'NIT',
+  pasaporte: 'Pasaporte',
+  rut: 'RUT'
+};
 
-          {/* Email y Teléfono */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                {...register('email')}
-                placeholder="correo@ejemplo.com"
-              />
-              {errors.email && (
-                <p className="text-sm text-red-500">{errors.email.message}</p>
-              )}
-            </div>
+export const SEGMENT_LABELS: Record<ClientSegment, string> = {
+  persona_natural: 'Persona Natural',
+  persona_juridica: 'Persona Juridica'
+};
 
-            <div className="space-y-2">
-              <Label htmlFor="phone">Teléfono</Label>
-              <Input
-                id="phone"
-                {...register('phone')}
-                placeholder="+593 999 999 999"
-              />
-              {errors.phone && (
-                <p className="text-sm text-red-500">{errors.phone.message}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Dirección */}
-          <div className="space-y-2">
-            <Label htmlFor="address">Dirección</Label>
-            <Input
-              id="address"
-              {...register('address')}
-              placeholder="Dirección del cliente"
-            />
-            {errors.address && (
-              <p className="text-sm text-red-500">{errors.address.message}</p>
-            )}
-          </div>
-
-          {/* Segmento */}
-          <div className="space-y-2">
-            <Label htmlFor="segment">Segmento *</Label>
-            <Select
-              defaultValue={initialData?.segment || 'persona_natural'}
-              onValueChange={(value) => setValue('segment', value as any)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar segmento" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="persona_natural">Persona Natural</SelectItem>
-                <SelectItem value="persona_juridica">Persona Jurídica</SelectItem>
-              </SelectContent>
-            </Select>
-            {errors.segment && (
-              <p className="text-sm text-red-500">{errors.segment.message}</p>
-            )}
-          </div>
-
-          {/* Aliado / Referido por */}
-          <div className="space-y-2">
-            <Label>Aliado / Referido por</Label>
-            <Popover open={allyOpen} onOpenChange={setAllyOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={allyOpen}
-                  className="w-full justify-between"
-                  disabled={loadingAllies}
-                  type="button"
-                >
-                  {loadingAllies ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Cargando...
-                    </span>
-                  ) : selectedAllyName ? (
-                    selectedAllyName
-                  ) : (
-                    'Directo (sin aliado)'
-                  )}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0" align="start">
-                <div className="p-2">
-                  <div className="flex items-center border-b px-2 pb-2">
-                    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                    <Input
-                      placeholder="Buscar aliado..."
-                      value={allySearch}
-                      onChange={(e) => setAllySearch(e.target.value)}
-                      className="border-0 focus-visible:ring-0"
-                    />
-                  </div>
-                  <div className="max-h-60 overflow-y-auto py-2">
-                    {/* Opción Directo */}
-                    <div
-                      className={cn(
-                        'flex cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent',
-                        !selectedAllyId && 'bg-accent'
-                      )}
-                      onClick={() => {
-                        setValue('allied_agent_id', null);
-                        setAllyOpen(false);
-                        setAllySearch('');
-                      }}
-                    >
-                      <Check
-                        className={cn(
-                          'mr-2 h-4 w-4',
-                          !selectedAllyId ? 'opacity-100' : 'opacity-0'
-                        )}
-                      />
-                      Directo (sin aliado)
-                    </div>
-
-                    {/* Lista de aliados */}
-                    {filteredAllies.length === 0 ? (
-                      <p className="px-2 py-4 text-center text-sm text-muted-foreground">
-                        No se encontraron aliados
-                      </p>
-                    ) : (
-                      filteredAllies.map((ally) => (
-                        <div
-                          key={ally.id}
-                          className={cn(
-                            'flex cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent',
-                            selectedAllyId === ally.id && 'bg-accent'
-                          )}
-                          onClick={() => {
-                            setValue('allied_agent_id', ally.id);
-                            setAllyOpen(false);
-                            setAllySearch('');
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              'mr-2 h-4 w-4',
-                              selectedAllyId === ally.id ? 'opacity-100' : 'opacity-0'
-                            )}
-                          />
-                          {ally.full_name}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-            <p className="text-xs text-muted-foreground">
-              Selecciona el aliado que refirió a este cliente, o deja &quot;Directo&quot; si no aplica.
-            </p>
-          </div>
-
-          {/* Botones */}
-          <div className="flex gap-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.back()}
-              disabled={isSubmitting}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Guardando...
-                </>
-              ) : initialData?.id ? (
-                'Actualizar Cliente'
-              ) : (
-                'Crear Cliente'
-              )}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
+export const SEGMENT_COLORS: Record<ClientSegment, string> = {
+  persona_natural: 'bg-blue-100 text-blue-800',
+  persona_juridica: 'bg-purple-100 text-purple-800'
+};
