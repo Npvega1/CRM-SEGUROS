@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileText, Loader2, Download, Eye } from 'lucide-react';
+import { FileText, Loader2, Download, Eye, ExternalLink, File } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 import { getBrowserClient } from '@/lib/supabase/client';
 import { 
@@ -26,6 +32,8 @@ import type { AlliedAgentPolicy } from '@/types/allied-agents';
 export default function AlliedPoliciesPage() {
   const [policies, setPolicies] = useState<AlliedAgentPolicy[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPolicy, setSelectedPolicy] = useState<AlliedAgentPolicy | null>(null);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
 
   useEffect(() => {
     loadPolicies();
@@ -80,12 +88,21 @@ export default function AlliedPoliciesPage() {
     }
   };
 
+  const handleViewDocument = (policy: AlliedAgentPolicy) => {
+    setSelectedPolicy(policy);
+    setShowDocumentModal(true);
+  };
+
+  const openDocumentInNewTab = (url: string) => {
+    window.open(url, '_blank');
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Mis Pólizas</h1>
         <p className="text-muted-foreground mt-1">
-          Pólizas de los clientes que has referido
+          Pólizas de tus clientes vinculados
         </p>
       </div>
 
@@ -99,7 +116,7 @@ export default function AlliedPoliciesPage() {
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
               <FileText className="h-12 w-12 mb-4 opacity-50" />
               <p>Aún no tienes pólizas registradas</p>
-              <p className="text-sm">Cuando tus clientes referidos tengan pólizas, aparecerán aquí</p>
+              <p className="text-sm">Cuando tus clientes tengan pólizas, aparecerán aquí</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -113,7 +130,7 @@ export default function AlliedPoliciesPage() {
                     <TableHead>Prima</TableHead>
                     <TableHead>Vigencia</TableHead>
                     <TableHead>Estado</TableHead>
-                    <TableHead>Mi Comisión</TableHead>
+                    <TableHead>Documentos</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -146,24 +163,18 @@ export default function AlliedPoliciesPage() {
                         {getStatusBadge(policy.status)}
                       </TableCell>
                       <TableCell>
-                        {policy.commission ? (
-                          <div className="text-sm">
-                            <div className="font-semibold">
-                              {formatCurrency(policy.commission.commission_amount)}
-                            </div>
-                            <Badge 
-                              variant="outline" 
-                              className={
-                                policy.commission.status === 'paid' 
-                                  ? 'text-emerald-600 border-emerald-300' 
-                                  : 'text-amber-600 border-amber-300'
-                              }
-                            >
-                              {policy.commission.status === 'paid' ? 'Pagada' : 'Pendiente'}
-                            </Badge>
-                          </div>
+                        {policy.document_url ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewDocument(policy)}
+                            className="gap-2"
+                          >
+                            <Eye className="h-4 w-4" />
+                            Ver
+                          </Button>
                         ) : (
-                          <span className="text-muted-foreground text-sm">-</span>
+                          <span className="text-muted-foreground text-sm">Sin documentos</span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -174,6 +185,55 @@ export default function AlliedPoliciesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal para ver documento */}
+      <Dialog open={showDocumentModal} onOpenChange={setShowDocumentModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <File className="h-5 w-5" />
+              Documento de Póliza
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedPolicy && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-sm text-muted-foreground">Póliza</p>
+                <p className="font-semibold">{selectedPolicy.policy_number}</p>
+                <p className="text-sm text-muted-foreground mt-2">Cliente</p>
+                <p className="font-medium">{selectedPolicy.client?.full_name}</p>
+              </div>
+
+              {selectedPolicy.document_url && (
+                <div className="flex flex-col gap-3">
+                  <Button
+                    onClick={() => openDocumentInNewTab(selectedPolicy.document_url!)}
+                    className="w-full gap-2"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Abrir Documento
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = selectedPolicy.document_url!;
+                      link.download = `poliza-${selectedPolicy.policy_number}.pdf`;
+                      link.click();
+                    }}
+                    className="w-full gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    Descargar
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
