@@ -3,105 +3,52 @@
 // =====================================================
 // PÁGINA: Nuevo Cliente
 // /clientes/nuevo
-// Usa Supabase client directamente (evita API Routes con problemas de proxy)
 // =====================================================
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ClientForm } from '@/components/modules/clients/ClientForm';
-import type { DocType, ClientSegment } from '@/lib/validations/clients';
-import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Shield } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
-import { getBrowserClient } from '@/lib/supabase/client';
-
-// Tipo para el formulario
-interface ClientFormData {
-  full_name: string;
-  doc_type: DocType;
-  doc_number: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  segment: ClientSegment;
-  agent_id?: string | null;
-  allied_agent_id?: string | null;
-  tags?: string[];
-  metadata?: Record<string, unknown>;
-}
+import { createClient } from '@/lib/supabase/client';
 
 export default function NewClientPage() {
-  const router = useRouter();
   const { isLoading: isLoadingTenant, tenantName } = useTenant();
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [tenantId, setTenantId] = useState<string | null>(null);
+  const [agentId, setAgentId] = useState<string | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
 
-  const handleSubmit = async (data: ClientFormData) => {
-    setIsLoading(true);
-    setError(null);
-
-    // Re-obtener el contexto actual para asegurar que tenemos la sesión más reciente
-    const supabase = getBrowserClient();
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    
-    if (!currentUser) {
-      setError('No hay sesión activa. Por favor, inicia sesión de nuevo.');
-      setIsLoading(false);
-      return;
-    }
-    
-    const currentTenantId = currentUser.app_metadata?.tenant_id;
-    if (!currentTenantId) {
-      setError('No se pudo obtener la información del tenant.');
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: newClient, error: insertError } = await (supabase as any)
-        .from('clients')
-        .insert({
-          tenant_id: currentTenantId,
-          full_name: data.full_name,
-          doc_type: data.doc_type,
-          doc_number: data.doc_number,
-          email: data.email || null,
-          phone: data.phone || null,
-          address: data.address || null,
-          segment: data.segment,
-          agent_id: data.agent_id || currentUser.id,
-          allied_agent_id: data.allied_agent_id || null,
-          tags: data.tags || [],
-          metadata: data.metadata || {},
-        })
-        .select()
-        .single();
-
-      if (insertError) {
-        console.error('Error creating client:', insertError);
-        if (insertError.code === '23505') {
-          setError('Ya existe un cliente con este número de documento.');
-        } else {
-          setError(insertError.message || 'Error al crear cliente');
+  useEffect(() => {
+    async function loadUserData() {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user) {
+          setTenantId(user.app_metadata?.tenant_id || null);
+          setAgentId(user.id);
         }
-        setIsLoading(false);
-        return;
+      } catch (err) {
+        console.error('Error loading user:', err);
+      } finally {
+        setLoadingUser(false);
       }
-
-      router.push(`/clientes/${newClient.id}`);
-    } catch {
-      console.error('Error de conexión');
-      setError('Error de conexión. Por favor, intenta de nuevo.');
-      setIsLoading(false);
     }
-  };
+    loadUserData();
+  }, []);
 
-  if (isLoadingTenant) {
+  if (isLoadingTenant || loadingUser) {
     return <LoadingScreen message="Cargando..." />;
+  }
+
+  if (!tenantId || !agentId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-red-500">Error: No se pudo obtener la información del usuario.</p>
+      </div>
+    );
   }
 
   return (
@@ -130,27 +77,10 @@ export default function NewClientPage() {
 
       {/* Main Content */}
       <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Crear Nuevo Cliente</CardTitle>
-            <CardDescription>
-              Ingresa los datos del nuevo cliente
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {error && (
-              <div className="flex items-center gap-2 p-3 mb-6 bg-red-50 text-red-700 rounded-lg">
-                <AlertCircle className="w-5 h-5" />
-                <span>{error}</span>
-              </div>
-            )}
-            <ClientForm
-              onSubmit={handleSubmit}
-              onCancel={() => router.push('/clientes')}
-              isLoading={isLoading}
-            />
-          </CardContent>
-        </Card>
+        <ClientForm
+          tenantId={tenantId}
+          agentId={agentId}
+        />
       </main>
     </div>
   );
