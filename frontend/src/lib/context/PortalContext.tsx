@@ -3,7 +3,7 @@
 // =====================================================
 // CONTEXT: PortalContext
 // Contexto para el Portal del Cliente (M07)
-// Maneja sesión, cliente, y configuración del tenant
+// Login simplificado con número de documento (sin Supabase Auth)
 // =====================================================
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -63,7 +63,6 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   
   const isLoadingRef = useRef(false);
-  const activityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const supabase = useMemo(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,89 +78,75 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
     setError(null);
 
     try {
-      // Obtener sesión actual
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session?.user) {
+      // Verificar sesión en sessionStorage
+      const storedClientId = sessionStorage.getItem('portal_client_id');
+      const storedTenantSlug = sessionStorage.getItem('portal_tenant_slug');
+
+      // Si no hay sesión o el tenant no coincide, no hay cliente autenticado
+      if (!storedClientId || storedTenantSlug !== tenantSlug) {
         setIsLoading(false);
         isLoadingRef.current = false;
         return;
       }
 
-      const userEmail = session.user.email;
-      if (!userEmail) {
-        setError('Email no disponible');
-        setIsLoading(false);
-        isLoadingRef.current = false;
-        return;
-      }
-
-      // Obtener datos del cliente por email y tenant slug
+      // Obtener datos completos del cliente desde la base de datos
       const { data: clientData, error: clientError } = await supabase
-        .rpc('get_portal_client_by_email', {
-          p_tenant_slug: tenantSlug,
-          p_email: userEmail
-        });
+        .from('clients')
+        .select(`
+          id,
+          full_name,
+          email,
+          tenant_id,
+          agent_id,
+          tenants:tenant_id (name)
+        `)
+        .eq('id', storedClientId)
+        .eq('is_active', true)
+        .single();
 
-      if (clientError) {
-        console.error('Error fetching client:', clientError);
-        setError('No se pudo verificar tu cuenta');
+      if (clientError || !clientData) {
+        // Sesión inválida, limpiar
+        sessionStorage.removeItem('portal_client_id');
+        sessionStorage.removeItem('portal_client_name');
+        sessionStorage.removeItem('portal_client_email');
+        sessionStorage.removeItem('portal_tenant_slug');
+        setError('Sesión expirada. Por favor ingresa de nuevo.');
         setIsLoading(false);
         isLoadingRef.current = false;
         return;
       }
 
-      const clientArray = clientData as { client_id: string; client_name: string; tenant_id: string; tenant_name: string; agent_id: string | null }[] | null;
+      const tenantInfo = clientData.tenants as { name: string } | null;
 
-      if (!clientArray || clientArray.length === 0) {
-        setError('No tienes acceso a este portal. Verifica que tu email esté registrado.');
-        setIsLoading(false);
-        isLoadingRef.current = false;
-        return;
-      }
-
-      const clientInfo = clientArray[0];
-      
       // Cargar settings del tenant y resumen en paralelo
       const [settingsResult, summaryResult, agentResult] = await Promise.all([
         supabase
           .from('tenant_settings')
           .select('*')
-          .eq('tenant_id', clientInfo.tenant_id)
+          .eq('tenant_id', clientData.tenant_id)
           .maybeSingle(),
         supabase
           .rpc('get_portal_summary', {
-            p_tenant_id: clientInfo.tenant_id,
-            p_client_id: clientInfo.client_id
+            p_tenant_id: clientData.tenant_id,
+            p_client_id: clientData.id
           }),
-        clientInfo.agent_id 
+        clientData.agent_id 
           ? supabase
               .from('users')
               .select('full_name')
-              .eq('id', clientInfo.agent_id)
+              .eq('id', clientData.agent_id)
               .maybeSingle()
           : Promise.resolve({ data: null })
       ]);
 
-      // Registrar sesión del portal
-      await supabase.rpc('register_portal_session', {
-        p_tenant_id: clientInfo.tenant_id,
-        p_client_id: clientInfo.client_id,
-        p_auth_user_id: session.user.id,
-        p_device_info: {
-          userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : '',
-          platform: typeof window !== 'undefined' ? window.navigator.platform : ''
-        }
-      });
-
       setClient({
-        client_id: clientInfo.client_id,
-        client_name: clientInfo.client_name,
-        client_email: userEmail,
-        tenant_id: clientInfo.tenant_id,
-        tenant_name: clientInfo.tenant_name,
+        client_id: clientData.id,
+        client_name: clientData.full_name,
+        client_email: clientData.email || '',
+        tenant_id: clientData.tenant_id,
+        tenant_name: tenantInfo?.name || '',
         tenant_slug: tenantSlug,
-        agent_id: clientInfo.agent_id,
+        agent_id: clientData.agent_id,
         agent_name: agentResult.data?.full_name || undefined
       });
 
@@ -186,60 +171,48 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
   // Cerrar sesión
   const signOut = useCallback(async () => {
     try {
-      await supabase.auth.signOut();
+      // Limpiar sessionStorage
+      sessionStorage.removeItem('portal_client_id');
+      sessionStorage.removeItem('portal_client_name');
+      sessionStorage.removeItem('portal_client_email');
+      sessionStorage.removeItem('portal_tenant_slug');
+      
       setClient(null);
       setSummary(null);
       router.push(`/${tenantSlug}/login`);
     } catch (e) {
       console.error('Error signing out:', e);
     }
-  }, [supabase, router, tenantSlug]);
+  }, [router, tenantSlug]);
 
-  // Actualizar actividad
+  // Actualizar actividad (placeholder para compatibilidad)
   const updateActivity = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user?.id) {
-      await supabase.rpc('update_portal_session_activity', {
-        p_auth_user_id: session.user.id
-      });
-    }
-  }, [supabase]);
+    // No se necesita para login con documento
+  }, []);
 
   // Cargar datos al montar
   useEffect(() => {
     loadPortalData();
   }, [loadPortalData]);
 
-  // Actualizar actividad periódicamente
+  // Escuchar cambios en sessionStorage (por si se abre otra pestaña)
   useEffect(() => {
-    if (client) {
-      // Actualizar cada 2 minutos
-      activityTimeoutRef.current = setInterval(() => {
-        updateActivity();
-      }, 2 * 60 * 1000);
-
-      return () => {
-        if (activityTimeoutRef.current) {
-          clearInterval(activityTimeoutRef.current);
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'portal_client_id') {
+        if (!e.newValue) {
+          // Se cerró sesión en otra pestaña
+          setClient(null);
+          setSummary(null);
+        } else {
+          // Se inició sesión en otra pestaña
+          loadPortalData(true);
         }
-      };
-    }
-  }, [client, updateActivity]);
-
-  // Escuchar cambios de autenticación
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') {
-        setClient(null);
-        setSummary(null);
-        setIsLoading(false);
-      } else if (event === 'SIGNED_IN') {
-        loadPortalData(true);
       }
-    });
+    };
 
-    return () => subscription.unsubscribe();
-  }, [supabase.auth, loadPortalData]);
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [loadPortalData]);
 
   const value: PortalContextValue = useMemo(() => ({
     client: client || defaultContextValue.client,
