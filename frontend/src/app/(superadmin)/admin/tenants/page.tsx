@@ -53,6 +53,7 @@ import {
   Crown,
   MoreVertical,
   Sparkles,
+  Mail,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -84,6 +85,7 @@ export default function TenantsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [processingTenantId, setProcessingTenantId] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
 
   const supabase = getUntypedClient();
 
@@ -91,7 +93,6 @@ export default function TenantsPage() {
     try {
       setIsRefreshing(true);
 
-      // Obtener todos los tenants
       const { data: tenantsData, error: tenantsError } = await supabase
         .from('tenants')
         .select('*')
@@ -99,17 +100,14 @@ export default function TenantsPage() {
 
       if (tenantsError) throw tenantsError;
 
-      // Obtener conteos para cada tenant
       const tenantsWithStats: TenantWithStats[] = await Promise.all(
         (tenantsData || []).map(async (tenant) => {
-          // Contar usuarios activos
           const { count: agentsCount } = await supabase
             .from('users')
             .select('*', { count: 'exact', head: true })
             .eq('tenant_id', tenant.id)
             .eq('is_active', true);
 
-          // Obtener email del admin
           const { data: adminUser } = await supabase
             .from('users')
             .select('email')
@@ -118,19 +116,16 @@ export default function TenantsPage() {
             .limit(1)
             .single();
 
-          // Contar clientes
           const { count: clientsCount } = await supabase
             .from('clients')
             .select('*', { count: 'exact', head: true })
             .eq('tenant_id', tenant.id);
 
-          // Contar pólizas
           const { count: policiesCount } = await supabase
             .from('policies')
             .select('*', { count: 'exact', head: true })
             .eq('tenant_id', tenant.id);
 
-          // Última actividad (último login de cualquier usuario)
           const { data: lastUser } = await supabase
             .from('users')
             .select('last_login_at')
@@ -177,7 +172,6 @@ export default function TenantsPage() {
 
       if (error) throw error;
 
-      // Log audit
       await supabase.from('audit_logs').insert({
         action: 'tenant.plan_changed',
         entity_type: 'tenant',
@@ -193,11 +187,16 @@ export default function TenantsPage() {
     }
   };
 
-  // Aprobar tenant
+  // Aprobar tenant y enviar email de bienvenida
   const handleApproveTenant = async (tenantId: string) => {
     try {
       setProcessingTenantId(tenantId);
+      setEmailStatus(null);
       
+      // Obtener datos del tenant
+      const tenant = tenants.find(t => t.id === tenantId);
+      
+      // Actualizar estado del tenant
       const { error } = await supabase
         .from('tenants')
         .update({ status: 'active', is_active: true })
@@ -205,6 +204,7 @@ export default function TenantsPage() {
 
       if (error) throw error;
 
+      // Log audit
       await supabase.from('audit_logs').insert({
         action: 'tenant.approved',
         entity_type: 'tenant',
@@ -212,8 +212,36 @@ export default function TenantsPage() {
         new_values: { status: 'active', is_active: true },
       });
 
-      // TODO: Enviar email de bienvenida
-      
+      // Enviar email de bienvenida
+      if (tenant?.admin_email) {
+        try {
+          setEmailStatus('Enviando email de bienvenida...');
+          const emailResponse = await fetch('/api/emails/welcome', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: tenant.admin_email,
+              tenantName: tenant.name,
+              adminName: tenant.name,
+            }),
+          });
+          
+          if (emailResponse.ok) {
+            setEmailStatus('Email enviado correctamente');
+          } else {
+            setEmailStatus('Tenant aprobado (email no enviado)');
+          }
+        } catch (emailError) {
+          console.error('Error sending welcome email:', emailError);
+          setEmailStatus('Tenant aprobado (email no enviado)');
+        }
+      } else {
+        setEmailStatus('Tenant aprobado (sin email configurado)');
+      }
+
+      // Limpiar mensaje después de 3 segundos
+      setTimeout(() => setEmailStatus(null), 3000);
+
       fetchTenants();
     } catch (error) {
       console.error('Error approving tenant:', error);
@@ -325,7 +353,6 @@ export default function TenantsPage() {
   const totalAgents = tenants.reduce((acc, t) => acc + t.agents_count, 0);
   const totalClients = tenants.reduce((acc, t) => acc + t.clients_count, 0);
 
-  // Helper para badge de status
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -341,7 +368,6 @@ export default function TenantsPage() {
     }
   };
 
-  // Helper para badge de plan
   const getPlanBadge = (plan: string) => {
     switch (plan) {
       case 'premium':
@@ -360,7 +386,7 @@ export default function TenantsPage() {
         );
       case 'basic':
       default:
-        return <Badge className="bg-zinc-500/20 text-zinc-400 border-zinc-500/30">Básico</Badge>;
+        return <Badge className="bg-zinc-500/20 text-zinc-400 border-zinc-500/30">Basico</Badge>;
     }
   };
 
@@ -373,7 +399,7 @@ export default function TenantsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Gestión de Tenants</h1>
+          <h1 className="text-2xl font-bold text-white">Gestion de Tenants</h1>
           <p className="text-zinc-400 mt-1">Administra todas las agencias de seguros</p>
         </div>
         <Button
@@ -385,6 +411,14 @@ export default function TenantsPage() {
           Nuevo Tenant
         </Button>
       </div>
+
+      {/* Email Status Toast */}
+      {emailStatus && (
+        <div className="fixed top-4 right-4 z-50 bg-zinc-800 border border-zinc-700 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2">
+          <Mail className="h-4 w-4 text-green-400" />
+          <span className="text-sm">{emailStatus}</span>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
@@ -400,7 +434,6 @@ export default function TenantsPage() {
           </CardContent>
         </Card>
 
-        {/* Pendientes Card - Destacado */}
         <Card className={`border-2 ${pendingTenants > 0 ? 'bg-amber-500/10 border-amber-500/50' : 'bg-zinc-900 border-zinc-800'}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-amber-400">Pendientes</CardTitle>
@@ -427,7 +460,6 @@ export default function TenantsPage() {
           </CardContent>
         </Card>
 
-        {/* Premium Card */}
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-amber-400">Premium</CardTitle>
@@ -497,7 +529,7 @@ export default function TenantsPage() {
           </SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-800">
             <SelectItem value="all" className="text-white">Todos</SelectItem>
-            <SelectItem value="basic" className="text-zinc-400">Básico</SelectItem>
+            <SelectItem value="basic" className="text-zinc-400">Basico</SelectItem>
             <SelectItem value="premium" className="text-amber-400">Premium</SelectItem>
             <SelectItem value="trial" className="text-purple-400">Trial</SelectItem>
           </SelectContent>
@@ -525,7 +557,7 @@ export default function TenantsPage() {
                 <TableHead className="text-zinc-400">Plan</TableHead>
                 <TableHead className="text-zinc-400 text-center">Agentes</TableHead>
                 <TableHead className="text-zinc-400 text-center">Clientes</TableHead>
-                <TableHead className="text-zinc-400">Última actividad</TableHead>
+                <TableHead className="text-zinc-400">Ultima actividad</TableHead>
                 <TableHead className="text-zinc-400 text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -562,7 +594,6 @@ export default function TenantsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {/* Ver detalle */}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -576,7 +607,6 @@ export default function TenantsPage() {
                           <Eye className="h-4 w-4" />
                         </Button>
 
-                        {/* Acciones según estado */}
                         {tenant.status === 'pending' && (
                           <>
                             <Button
@@ -586,7 +616,7 @@ export default function TenantsPage() {
                               disabled={processingTenantId === tenant.id}
                               className="text-green-400 hover:text-green-300 hover:bg-green-500/10"
                               data-testid={`approve-tenant-${tenant.slug}`}
-                              title="Aprobar"
+                              title="Aprobar y enviar email"
                             >
                               <CheckCircle className="h-4 w-4" />
                             </Button>
@@ -632,7 +662,6 @@ export default function TenantsPage() {
                           </Button>
                         )}
 
-                        {/* Menú de más opciones (cambiar plan) */}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -652,7 +681,7 @@ export default function TenantsPage() {
                               className={`text-zinc-300 hover:bg-zinc-800 cursor-pointer ${tenant.plan === 'basic' ? 'bg-zinc-800' : ''}`}
                             >
                               <span className="w-2 h-2 rounded-full bg-zinc-500 mr-2" />
-                              Plan Básico
+                              Plan Basico
                               {tenant.plan === 'basic' && <CheckCircle className="h-3 w-3 ml-auto text-green-400" />}
                             </DropdownMenuItem>
                             <DropdownMenuItem 
@@ -683,7 +712,6 @@ export default function TenantsPage() {
         </CardContent>
       </Card>
 
-      {/* Tenant Detail Drawer */}
       <TenantDetailDrawer
         tenant={selectedTenant}
         isOpen={isDrawerOpen}
@@ -693,7 +721,6 @@ export default function TenantsPage() {
         }}
       />
 
-      {/* Create Tenant Modal */}
       <CreateTenantModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
