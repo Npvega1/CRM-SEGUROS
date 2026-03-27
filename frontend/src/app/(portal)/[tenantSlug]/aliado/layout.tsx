@@ -10,7 +10,8 @@ import {
   LogOut,
   Menu,
   X,
-  User
+  User,
+  Settings
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
     { name: 'Dashboard', href: basePath, icon: LayoutDashboard },
     { name: 'Mis Pólizas', href: `${basePath}/polizas`, icon: FileText },
     { name: 'Mis Comisiones', href: `${basePath}/comisiones`, icon: DollarSign },
+    { name: 'Configuración', href: `${basePath}/configuracion`, icon: Settings },
   ];
 
   useEffect(() => {
@@ -50,21 +52,27 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push(`/${tenantSlug}/login`);
+        router.push(`/${tenantSlug}/aliado/login`);
+        return;
+      }
+
+      // Verificar que es un aliado
+      if (user.app_metadata?.role !== 'allied_agent') {
+        router.push(`/${tenantSlug}/aliado/login`);
         return;
       }
 
       const alliedAgent = await getAlliedAgentByAuthUserId(user.id);
       
       if (!alliedAgent) {
-        router.push(`/${tenantSlug}/login`);
+        router.push(`/${tenantSlug}/aliado/login`);
         return;
       }
 
       setAgent(alliedAgent);
     } catch (error) {
       console.error('Error checking auth:', error);
-      router.push(`/${tenantSlug}/login`);
+      router.push(`/${tenantSlug}/aliado/login`);
     } finally {
       setLoading(false);
     }
@@ -73,7 +81,7 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
   const handleLogout = async () => {
     const supabase = getBrowserClient();
     await supabase.auth.signOut();
-    router.push(`/${tenantSlug}/login`);
+    router.push(`/${tenantSlug}/aliado/login`);
   };
 
   if (loading) {
