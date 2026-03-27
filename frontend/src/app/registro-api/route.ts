@@ -14,7 +14,7 @@ const registroSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
+
     // Validar datos
     const validationResult = registroSchema.safeParse(body);
     if (!validationResult.success) {
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Auto-confirmar email
+      email_confirm: true,
       user_metadata: {
         full_name: fullName
       }
@@ -82,12 +82,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Crear tenant (agencia)
+    // 3. Crear tenant (agencia) con status PENDING
     const { data: tenantData, error: tenantError } = await supabaseAdmin
       .from('tenants')
       .insert({
         name: agencyName,
-        slug: agencySlug
+        slug: agencySlug,
+        status: 'pending',
+        is_active: false
       })
       .select('id')
       .single();
@@ -133,7 +135,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Agencia creada exitosamente',
+      message: 'Solicitud de agencia enviada exitosamente',
       user: {
         id: authData.user.id,
         email: authData.user.email
