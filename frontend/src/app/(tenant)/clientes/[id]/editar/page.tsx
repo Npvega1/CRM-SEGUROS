@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ClientForm } from '@/components/modules/clients/ClientForm';
-import { createBrowserClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { Loader2 } from 'lucide-react';
 
 interface Client {
@@ -31,7 +31,7 @@ export default function EditClientPage() {
   useEffect(() => {
     async function loadClient() {
       try {
-        const supabase = createBrowserClient();
+        const supabase = createClient();
         
         const { data, error: fetchError } = await (supabase as any)
           .from('clients')
