@@ -11,13 +11,13 @@ import { es } from 'date-fns/locale';
 
 interface Claim {
   id: string;
-  claim_number: string;
+  policy_id: string | null;
   policy_number: string | null;
-  product_name: string | null;
-  claim_date: string | null;
-  description: string | null;
   status: string;
-  amount: number | null;
+  incident_date: string | null;
+  claimed_amount: number | null;
+  approved_amount: number | null;
+  description: string | null;
   created_at: string;
 }
 
@@ -26,6 +26,7 @@ const statusColors: Record<string, string> = {
   pendiente: 'bg-yellow-100 text-yellow-800',
   in_review: 'bg-blue-100 text-blue-800',
   en_revision: 'bg-blue-100 text-blue-800',
+  revision: 'bg-blue-100 text-blue-800',
   approved: 'bg-green-100 text-green-800',
   aprobado: 'bg-green-100 text-green-800',
   rejected: 'bg-red-100 text-red-800',
@@ -39,6 +40,7 @@ const statusLabels: Record<string, string> = {
   pendiente: 'Pendiente',
   in_review: 'En Revisión',
   en_revision: 'En Revisión',
+  revision: 'En Revisión',
   approved: 'Aprobado',
   aprobado: 'Aprobado',
   rejected: 'Rechazado',
@@ -116,7 +118,9 @@ export default function ClientClaimsPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div>
-                    <CardTitle className="text-lg">{claim.claim_number}</CardTitle>
+                    <CardTitle className="text-lg">
+                      Siniestro #{claim.id.substring(0, 8).toUpperCase()}
+                    </CardTitle>
                     <CardDescription>
                       {claim.policy_number ? `Póliza: ${claim.policy_number}` : 'Sin póliza asociada'}
                     </CardDescription>
@@ -127,24 +131,24 @@ export default function ClientClaimsPage() {
                 </div>
               </CardHeader>
               <CardContent className="flex-1 space-y-3">
-                {claim.product_name && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>{claim.product_name}</span>
-                  </div>
-                )}
-                
-                {claim.claim_date && (
+                {claim.incident_date && (
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>Fecha: {format(new Date(claim.claim_date), 'dd MMM yyyy', { locale: es })}</span>
+                    <span>Fecha incidente: {format(new Date(claim.incident_date), 'dd MMM yyyy', { locale: es })}</span>
                   </div>
                 )}
 
-                {claim.amount && (
+                {claim.claimed_amount && (
                   <div className="flex items-center gap-2 text-sm">
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    <span>Monto: ${claim.amount.toLocaleString('es-CO')}</span>
+                    <span>Monto reclamado: ${claim.claimed_amount.toLocaleString('es-CO')}</span>
+                  </div>
+                )}
+
+                {claim.approved_amount && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <DollarSign className="h-4 w-4" />
+                    <span>Monto aprobado: ${claim.approved_amount.toLocaleString('es-CO')}</span>
                   </div>
                 )}
 
