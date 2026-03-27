@@ -76,8 +76,9 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
         .eq('slug', tenantSlug)
         .single();
       
-      if (tenantData?.name) {
-        setTenantName(tenantData.name);
+      const tenant = tenantData as { name: string } | null;
+      if (tenant?.name) {
+        setTenantName(tenant.name);
       }
 
       const alliedAgent = await getAlliedAgentByAuthUserId(user.id);
