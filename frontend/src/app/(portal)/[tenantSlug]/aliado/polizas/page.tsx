@@ -290,25 +290,3 @@ export default function AlliedPoliciesPage() {
     </div>
   );
 }
-Además, necesitamos agregar una política RLS en Storage para permitir que los aliados accedan a los documentos de sus clientes.
-
-Ejecuta este SQL en Supabase:
-
--- Política para permitir a los aliados ver documentos de pólizas de sus clientes
-CREATE POLICY "Allied agents can view policy documents"
-ON storage.objects FOR SELECT
-USING (
-  bucket_id = 'policy-documents'
-  AND (
-    -- El usuario es un aliado y el documento pertenece a un cliente suyo
-    EXISTS (
-      SELECT 1 FROM allied_agents aa
-      JOIN clients c ON c.allied_agent_id = aa.id
-      JOIN policies p ON p.client_id = c.id
-      WHERE aa.auth_user_id = auth.uid()
-      AND storage.objects.name LIKE '%' || p.id::text || '%'
-    )
-    -- O el usuario pertenece al tenant del documento
-    OR (storage.objects.name LIKE (auth.jwt() -> 'app_metadata' ->> 'tenant_id') || '/%')
-  )
-);
