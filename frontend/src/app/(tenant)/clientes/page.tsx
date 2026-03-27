@@ -1,11 +1,5 @@
 'use client';
 
-// =====================================================
-// PÁGINA: Lista de Clientes
-// /clientes
-// Usa Supabase client directamente (evita API Routes con problemas de proxy)
-// =====================================================
-
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTenant } from '@/lib/context/TenantContext';
@@ -16,12 +10,11 @@ import { Button } from '@/components/ui/button';
 import { ClientsTable } from '@/components/modules/clients/ClientsTable';
 import { CSVImporter } from '@/components/modules/clients/CSVImporter';
 import type { Client } from '@/lib/validations/clients';
-import { getBrowserClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { 
   Plus, 
   Users, 
-  Building2, 
-  Crown,
+  Building2,
   ArrowLeft,
   Shield
 } from 'lucide-react';
@@ -39,12 +32,11 @@ export default function ClientsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<{
     total: number;
-    bySegment: Record<string, number>;
-    thisMonth: number;
+    persona_natural: number;
+    persona_juridica: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Cargar datos usando Supabase client directamente
   useEffect(() => {
     let isMounted = true;
 
@@ -55,10 +47,9 @@ export default function ClientsPage() {
       setError(null);
       
       try {
-        const supabase = getBrowserClient();
+        const supabase = createClient();
         
-        // Build query for clients
-        let query = supabase
+        let query = (supabase as any)
           .from('clients')
           .select('*', { count: 'exact' })
           .eq('tenant_id', tenantId)
@@ -73,7 +64,6 @@ export default function ClientsPage() {
           query = query.eq('segment', segmentFilter);
         }
         
-        // Load clients
         const { data: clientsData, count, error: clientsError } = await query;
         
         if (!isMounted) return;
@@ -82,18 +72,15 @@ export default function ClientsPage() {
           console.error('Error loading clients:', clientsError);
           setError(clientsError.message || 'Error al cargar clientes');
         } else if (clientsData) {
-          // Cargar conteo de pólizas para cada cliente
           const clientIds = clientsData.map((c: Client) => c.id);
           
           if (clientIds.length > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: policiesCount } = await (supabase as any)
               .from('policies')
               .select('client_id')
               .eq('tenant_id', tenantId)
               .in('client_id', clientIds);
             
-            // Contar pólizas por cliente
             const countMap: Record<string, number> = {};
             if (policiesCount) {
               policiesCount.forEach((p: { client_id: string }) => {
@@ -101,7 +88,6 @@ export default function ClientsPage() {
               });
             }
             
-            // Agregar conteo a cada cliente
             const clientsWithCount = clientsData.map((client: Client) => ({
               ...client,
               policies_count: countMap[client.id] || 0
@@ -114,38 +100,28 @@ export default function ClientsPage() {
           setTotal(count || 0);
         }
         
-        // Load stats
-        const { data: allClients, error: statsError } = await supabase
+        // Cargar estadisticas con los segmentos correctos
+        const { data: allClients, error: statsError } = await (supabase as any)
           .from('clients')
-          .select('segment, created_at')
+          .select('segment')
           .eq('tenant_id', tenantId);
         
         if (!statsError && allClients) {
-          const thisMonth = new Date();
-          thisMonth.setDate(1);
-          thisMonth.setHours(0, 0, 0, 0);
+          let naturalCount = 0;
+          let juridicaCount = 0;
           
-          const bySegment: Record<string, number> = {
-            individual: 0,
-            empresa: 0,
-            vip: 0
-          };
-          
-          let thisMonthCount = 0;
-          
-          (allClients as Array<{ segment: string; created_at: string }>).forEach(client => {
-            if (client.segment && bySegment[client.segment] !== undefined) {
-              bySegment[client.segment]++;
-            }
-            if (new Date(client.created_at) >= thisMonth) {
-              thisMonthCount++;
+          (allClients as Array<{ segment: string }>).forEach(client => {
+            if (client.segment === 'persona_natural') {
+              naturalCount++;
+            } else if (client.segment === 'persona_juridica') {
+              juridicaCount++;
             }
           });
           
           setStats({
             total: allClients.length,
-            bySegment,
-            thisMonth: thisMonthCount
+            persona_natural: naturalCount,
+            persona_juridica: juridicaCount
           });
         }
         
@@ -182,7 +158,6 @@ export default function ClientsPage() {
   };
 
   const handleImportSuccess = () => {
-    // Trigger reload by resetting page
     setPage(1);
     setSearchQuery('');
     setSegmentFilter(undefined);
@@ -192,12 +167,10 @@ export default function ClientsPage() {
     return <LoadingScreen message="Cargando..." />;
   }
 
-  // Verificar si puede crear clientes
   const showCreateButton = isAdmin || canCreate('clientes');
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -212,16 +185,14 @@ export default function ClientsPage() {
               </div>
               <div>
                 <h1 className="font-semibold text-foreground">{tenantName || 'CRM Seguros'}</h1>
-                <p className="text-xs text-muted-foreground">Gestión de Clientes</p>
+                <p className="text-xs text-muted-foreground">Gestion de Clientes</p>
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Error Message */}
         {error && (
           <Card className="mb-6 border-red-200 bg-red-50">
             <CardContent className="pt-6">
@@ -247,8 +218,8 @@ export default function ClientsPage() {
           </Card>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        {/* Stats - Solo 3 tarjetas */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
@@ -265,8 +236,8 @@ export default function ClientsPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Individuales</p>
-                  <p className="text-2xl font-bold">{stats?.bySegment?.individual || 0}</p>
+                  <p className="text-sm text-muted-foreground">Persona Natural</p>
+                  <p className="text-2xl font-bold">{stats?.persona_natural || 0}</p>
                 </div>
                 <Users className="w-8 h-8 text-blue-500/30" />
               </div>
@@ -277,28 +248,15 @@ export default function ClientsPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Empresas</p>
-                  <p className="text-2xl font-bold">{stats?.bySegment?.empresa || 0}</p>
+                  <p className="text-sm text-muted-foreground">Persona Juridica</p>
+                  <p className="text-2xl font-bold">{stats?.persona_juridica || 0}</p>
                 </div>
                 <Building2 className="w-8 h-8 text-purple-500/30" />
               </div>
             </CardContent>
           </Card>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">VIP</p>
-                  <p className="text-2xl font-bold">{stats?.bySegment?.vip || 0}</p>
-                </div>
-                <Crown className="w-8 h-8 text-amber-500/30" />
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
-        {/* Acciones y Tabla */}
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -309,10 +267,8 @@ export default function ClientsPage() {
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                {/* Importar CSV - Solo administradores */}
                 {isAdmin && <CSVImporter onSuccess={handleImportSuccess} />}
                 
-                {/* Nuevo Cliente - Admin o con permiso de crear */}
                 {showCreateButton && (
                   <Link href="/clientes/nuevo">
                     <Button data-testid="new-client-button">
