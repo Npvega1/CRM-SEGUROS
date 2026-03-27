@@ -30,12 +30,12 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
   const tenantSlug = params.tenantSlug as string;
   
   const [agent, setAgent] = useState<AlliedAgent | null>(null);
+  const [tenantName, setTenantName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const basePath = `/${tenantSlug}/aliado`;
 
-  // Rutas públicas que NO requieren autenticación
   const isPublicRoute = pathname?.includes('/login') || pathname?.includes('/setup') || pathname?.includes('/auth');
 
   const navigation = [
@@ -46,7 +46,6 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
   ];
 
   useEffect(() => {
-    // Si es ruta pública, no verificar auth
     if (isPublicRoute) {
       setLoading(false);
       return;
@@ -65,10 +64,20 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
         return;
       }
 
-      // Verificar que es un aliado
       if (user.app_metadata?.role !== 'allied_agent') {
         router.push(`/${tenantSlug}/aliado/login`);
         return;
+      }
+
+      // Obtener nombre del tenant
+      const { data: tenantData } = await supabase
+        .from('tenants')
+        .select('name')
+        .eq('slug', tenantSlug)
+        .single();
+      
+      if (tenantData?.name) {
+        setTenantName(tenantData.name);
       }
 
       const alliedAgent = await getAlliedAgentByAuthUserId(user.id);
@@ -93,7 +102,6 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
     router.push(`/${tenantSlug}/aliado/login`);
   };
 
-  // Si es ruta pública (login, setup), renderizar solo el children sin layout
   if (isPublicRoute) {
     return <>{children}</>;
   }
@@ -119,7 +127,9 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
               >
                 {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </button>
-              <h1 className="text-xl font-bold text-primary">Portal Aliado</h1>
+              <h1 className="text-xl font-bold text-primary">
+                Portal Aliados {tenantName && <span className="text-gray-500 font-normal">— {tenantName}</span>}
+              </h1>
             </div>
             
             <div className="flex items-center gap-4">
