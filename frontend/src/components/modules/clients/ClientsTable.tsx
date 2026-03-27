@@ -1,11 +1,6 @@
 'use client';
 
-// =====================================================
-// COMPONENTE: ClientsTable
-// Tabla de clientes con paginación y búsqueda
-// =====================================================
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,7 +34,8 @@ import {
   ChevronRight, 
   Eye,
   Edit,
-  FileText
+  FileText,
+  Loader2
 } from 'lucide-react';
 
 interface ClientsTableProps {
@@ -68,36 +64,51 @@ export function ClientsTable({
   isLoading = false
 }: ClientsTableProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
+  const [isSearching, setIsSearching] = useState(false);
   const totalPages = Math.ceil(total / pageSize);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSearch(localSearch);
-  };
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      onSearch(localSearch);
+  // Busqueda en tiempo real con debounce
+  useEffect(() => {
+    // Si el valor local es igual al query actual, no hacer nada
+    if (localSearch === searchQuery) {
+      setIsSearching(false);
+      return;
     }
-  };
+
+    setIsSearching(true);
+
+    // Debounce: esperar 300ms antes de buscar
+    const timer = setTimeout(() => {
+      onSearch(localSearch);
+      setIsSearching(false);
+    }, 300);
+
+    // Limpiar timer si el usuario sigue escribiendo
+    return () => clearTimeout(timer);
+  }, [localSearch, searchQuery, onSearch]);
+
+  // Sincronizar cuando searchQuery cambia externamente
+  useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
 
   return (
     <div className="space-y-4">
-      {/* Filtros y Búsqueda */}
+      {/* Filtros y Busqueda */}
       <div className="flex flex-col sm:flex-row gap-4">
-        <form onSubmit={handleSearchSubmit} className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nombre, documento o email..."
-              value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              className="pl-10"
-              data-testid="clients-search-input"
-            />
-          </div>
-        </form>
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre, documento o email..."
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
+            className="pl-10 pr-10"
+            data-testid="clients-search-input"
+          />
+          {isSearching && (
+            <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
+          )}
+        </div>
         
         <Select
           value={segmentFilter || 'all'}
@@ -126,7 +137,7 @@ export function ClientsTable({
               <TableHead>Documento</TableHead>
               <TableHead className="hidden md:table-cell">Email</TableHead>
               <TableHead className="hidden sm:table-cell">Segmento</TableHead>
-              <TableHead className="hidden lg:table-cell">Pólizas</TableHead>
+              <TableHead className="hidden lg:table-cell">Polizas</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -135,7 +146,7 @@ export function ClientsTable({
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center">
                   <div className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     <span className="ml-2">Cargando...</span>
                   </div>
                 </TableCell>
@@ -143,7 +154,7 @@ export function ClientsTable({
             ) : clients.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  No se encontraron clientes
+                  {localSearch ? `No se encontraron clientes para "${localSearch}"` : 'No se encontraron clientes'}
                 </TableCell>
               </TableRow>
             ) : (
@@ -160,7 +171,7 @@ export function ClientsTable({
                   <TableCell>
                     <div className="text-sm">
                       <span className="text-muted-foreground">
-                        {DOC_TYPE_LABELS[client.doc_type as DocType]}:
+                        {DOC_TYPE_LABELS[client.doc_type as DocType] || client.doc_type}:
                       </span>{' '}
                       {client.doc_number}
                     </div>
@@ -169,8 +180,8 @@ export function ClientsTable({
                     {client.email || '-'}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">
-                    <Badge className={SEGMENT_COLORS[client.segment as ClientSegment]}>
-                      {SEGMENT_LABELS[client.segment as ClientSegment]}
+                    <Badge className={SEGMENT_COLORS[client.segment as ClientSegment] || 'bg-gray-100 text-gray-800'}>
+                      {SEGMENT_LABELS[client.segment as ClientSegment] || client.segment}
                     </Badge>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell">
@@ -200,7 +211,7 @@ export function ClientsTable({
         </Table>
       </div>
 
-      {/* Paginación */}
+      {/* Paginacion */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
@@ -216,7 +227,7 @@ export function ClientsTable({
               <ChevronLeft className="w-4 h-4" />
             </Button>
             <span className="text-sm">
-              Página {page} de {totalPages}
+              Pagina {page} de {totalPages}
             </span>
             <Button
               variant="outline"
