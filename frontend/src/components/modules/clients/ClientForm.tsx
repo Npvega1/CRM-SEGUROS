@@ -54,6 +54,9 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   const [allyOpen, setAllyOpen] = useState(false);
   const [allySearch, setAllySearch] = useState('');
   
+  // Nombre del aliado inicial (para mostrar cuando está bloqueado)
+  const [initialAllyName, setInitialAllyName] = useState<string | null>(null);
+  
   // Permisos
   const [userRole, setUserRole] = useState<string | null>(null);
   const [canModifyAllied, setCanModifyAllied] = useState(false);
@@ -130,11 +133,13 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     loadUserPermissions();
   }, []);
 
-  // Cargar aliados
+  // Cargar aliados Y el nombre del aliado inicial si existe
   useEffect(() => {
     async function loadAlliedAgents() {
       try {
         const supabase = createClient();
+        
+        // Cargar todos los aliados activos
         const { data, error } = await (supabase as any)
           .from('allied_agents')
           .select('id, full_name')
@@ -144,6 +149,25 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
 
         if (!error && data) {
           setAlliedAgents(data);
+          
+          // Buscar el nombre del aliado inicial
+          if (initialData?.allied_agent_id) {
+            const initialAlly = data.find((a: AlliedAgent) => a.id === initialData.allied_agent_id);
+            if (initialAlly) {
+              setInitialAllyName(initialAlly.full_name);
+            } else {
+              // Si no está en los activos, buscarlo directamente
+              const { data: allyData } = await (supabase as any)
+                .from('allied_agents')
+                .select('full_name')
+                .eq('id', initialData.allied_agent_id)
+                .single();
+              
+              if (allyData) {
+                setInitialAllyName(allyData.full_name);
+              }
+            }
+          }
         }
       } catch (err) {
         console.error('Error loading allied agents:', err);
@@ -152,7 +176,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
       }
     }
     loadAlliedAgents();
-  }, [tenantId]);
+  }, [tenantId, initialData?.allied_agent_id]);
 
   const onSubmit = async (data: any) => {
     setIsSubmitting(true);
@@ -205,9 +229,13 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     ally.full_name.toLowerCase().includes(allySearch.toLowerCase())
   );
 
+  // Obtener nombre del aliado seleccionado actualmente
   const selectedAllyName = selectedAllyId
-    ? alliedAgents.find((a) => a.id === selectedAllyId)?.full_name
+    ? alliedAgents.find((a) => a.id === selectedAllyId)?.full_name || initialAllyName
     : null;
+
+  // Nombre a mostrar en el campo bloqueado
+  const displayAllyName = initialAllyName || selectedAllyName || 'Directo (sin aliado)';
 
   return (
     <Card>
@@ -315,19 +343,19 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
               Aliado / Referido por
-              {!canEditAlliedField && <Lock className="h-3 w-3 text-muted-foreground" />}
+              {!canEditAlliedField && !loadingPermissions && <Lock className="h-3 w-3 text-muted-foreground" />}
             </Label>
             
-            {loadingPermissions ? (
+            {loadingPermissions || loadingAllies ? (
               <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span className="text-sm text-muted-foreground">Cargando...</span>
               </div>
             ) : !canEditAlliedField ? (
-              // Campo bloqueado - mostrar solo lectura
+              // Campo bloqueado - mostrar solo lectura con el nombre real
               <div className="flex items-center justify-between h-10 px-3 border rounded-md bg-muted">
-                <span className="text-sm">
-                  {selectedAllyName || 'Directo (sin aliado)'}
+                <span className="text-sm font-medium">
+                  {displayAllyName}
                 </span>
                 <Lock className="h-4 w-4 text-muted-foreground" />
               </div>
@@ -340,19 +368,9 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     role="combobox"
                     aria-expanded={allyOpen}
                     className="w-full justify-between"
-                    disabled={loadingAllies}
                     type="button"
                   >
-                    {loadingAllies ? (
-                      <span className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Cargando...
-                      </span>
-                    ) : selectedAllyName ? (
-                      selectedAllyName
-                    ) : (
-                      'Directo (sin aliado)'
-                    )}
+                    {selectedAllyName || initialAllyName || 'Directo (sin aliado)'}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -423,7 +441,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
             )}
             
             <p className="text-xs text-muted-foreground">
-              {!canEditAlliedField 
+              {!canEditAlliedField && !loadingPermissions
                 ? 'Solo un administrador puede modificar el aliado de este cliente.'
                 : 'Selecciona el aliado que refirio a este cliente, o deja Directo si no aplica.'
               }
