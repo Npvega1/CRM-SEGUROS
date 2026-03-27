@@ -47,7 +47,6 @@ const WEBHOOK_ROUTES = [
 
 // Regex para detectar rutas del portal de CLIENTES: /[tenantSlug]/...
 const PORTAL_ROUTE_REGEX = /^\/([a-z0-9-]+)\/(login|dashboard|policies|claims|account|chat|auth)(\/.*)?$/;
-const PORTAL_LOGIN_REGEX = /^\/([a-z0-9-]+)\/(login|auth\/callback)$/;
 
 // Regex para detectar rutas del portal de ALIADOS: /[tenantSlug]/aliado/...
 const ALLIED_PORTAL_REGEX = /^\/([a-z0-9-]+)\/aliado(\/.*)?$/;
@@ -64,10 +63,6 @@ function matchesRoute(pathname: string, routes: string[]): boolean {
 
 function isPortalRoute(pathname: string): boolean {
   return PORTAL_ROUTE_REGEX.test(pathname);
-}
-
-function isPortalLoginRoute(pathname: string): boolean {
-  return PORTAL_LOGIN_REGEX.test(pathname);
 }
 
 function isAlliedPortalRoute(pathname: string): boolean {
@@ -144,6 +139,17 @@ export async function middleware(request: NextRequest) {
   }
 
   // =====================================================
+  // PORTAL DEL CLIENTE (M07)
+  // Usa sessionStorage para autenticación (no Supabase Auth)
+  // La verificación se hace en PortalContext, no en middleware
+  // =====================================================
+  if (isPortalRoute(pathname)) {
+    // Todas las rutas del portal pasan sin verificación de auth
+    // El PortalContext se encarga de verificar sessionStorage
+    return NextResponse.next();
+  }
+
+  // =====================================================
   // RUTAS DE SUPER ADMIN
   // Requieren autenticación Y role='superadmin'
   // =====================================================
@@ -183,50 +189,6 @@ export async function middleware(request: NextRequest) {
     }
 
     // Es superadmin: permitir acceso
-    return NextResponse.next();
-  }
-
-  // =====================================================
-  // PORTAL DEL CLIENTE (M07)
-  // Las rutas del portal tienen su propia autenticación
-  // =====================================================
-  if (isPortalRoute(pathname)) {
-    // Login del portal: siempre público
-    if (isPortalLoginRoute(pathname)) {
-      return NextResponse.next();
-    }
-
-    // Otras rutas del portal: verificar sesión de Supabase Auth
-    // La verificación del email vs client se hace en PortalContext
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.next();
-    }
-
-    const supabase = createServerClient(
-      supabaseUrl,
-      supabaseKey,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll() {},
-        },
-      }
-    );
-
-    const { data: { session } } = await supabase.auth.getSession();
-
-    // Sin sesión: redirigir al login del portal
-    if (!session) {
-      const tenantSlug = pathname.split('/')[1];
-      return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
-    }
-
-    // Con sesión: permitir acceso (PortalContext verificará el email)
     return NextResponse.next();
   }
 
@@ -293,10 +255,9 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setAll(cookies: any[]) {
+        setAll(cookies: { name: string; value: string; options: CookieOptions }[]) {
           // Acumular cookies para setear después
-          cookies.forEach((cookie: { name: string; value: string; options: CookieOptions }) => {
+          cookies.forEach((cookie) => {
             // Verificar si la cookie realmente cambió
             const existingCookie = request.cookies.get(cookie.name);
             if (!existingCookie || existingCookie.value !== cookie.value) {
