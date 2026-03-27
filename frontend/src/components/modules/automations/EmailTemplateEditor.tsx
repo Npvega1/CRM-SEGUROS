@@ -16,7 +16,6 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -34,7 +33,6 @@ import {
   Users,
   Loader2,
   Image as ImageIcon,
-  Upload,
   X,
   CheckCircle
 } from 'lucide-react';
@@ -184,13 +182,11 @@ export function EmailTemplateEditor({
 
       if (uploadError) throw uploadError;
 
-      // Obtener URL pública
       const { data: urlData } = supabase
         .storage
         .from('email-images')
         .getPublicUrl(data.path);
 
-      // Insertar tag de imagen en el cuerpo
       const imgTag = `\n<img src="${urlData.publicUrl}" alt="Imagen" style="max-width: 100%; height: auto;" />\n`;
       setHtmlBody(prev => prev + imgTag);
 
@@ -207,7 +203,6 @@ export function EmailTemplateEditor({
     }
   };
 
-  // Copiar variable
   const handleCopyVariable = (variableName: string) => {
     const variableText = `{${variableName}}`;
     navigator.clipboard.writeText(variableText);
@@ -215,13 +210,11 @@ export function EmailTemplateEditor({
     setTimeout(() => setCopiedVariable(null), 2000);
   };
 
-  // Insertar variable
   const insertVariable = (variableName: string) => {
     const variableText = `{${variableName}}`;
     setHtmlBody(prev => prev + variableText);
   };
 
-  // Toggle selección de destinatario
   const toggleRecipient = (id: string) => {
     setSelectedRecipients(prev => 
       prev.includes(id) 
@@ -230,7 +223,6 @@ export function EmailTemplateEditor({
     );
   };
 
-  // Seleccionar/deseleccionar todos
   const toggleAllRecipients = () => {
     if (selectedRecipients.length === availableRecipients.length) {
       setSelectedRecipients([]);
@@ -239,7 +231,6 @@ export function EmailTemplateEditor({
     }
   };
 
-  // Guardar plantilla
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -299,7 +290,6 @@ export function EmailTemplateEditor({
     }
   };
 
-  // Enviar emails
   const handleSendEmails = async () => {
     if (!tenantId || !userId) return;
 
@@ -354,7 +344,6 @@ export function EmailTemplateEditor({
     }
   };
 
-  // Preview con datos de ejemplo
   const exampleContext = getExampleContext();
   const previewSubject = replaceTemplateVariables(subject, exampleContext);
   const previewBody = replaceTemplateVariables(htmlBody, exampleContext);
@@ -364,24 +353,19 @@ export function EmailTemplateEditor({
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-auto">
-            <X className="h-4 w-4" />
-          </button>
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)}><X className="h-4 w-4" /></button>
         </div>
       )}
 
       {success && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
           <CheckCircle className="h-4 w-4 flex-shrink-0" />
-          <span>{success}</span>
-          <button onClick={() => setSuccess(null)} className="ml-auto">
-            <X className="h-4 w-4" />
-          </button>
+          <span className="flex-1">{success}</span>
+          <button onClick={() => setSuccess(null)}><X className="h-4 w-4" /></button>
         </div>
       )}
 
-      {/* Información básica */}
       <div className="grid gap-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex-1">
@@ -395,11 +379,7 @@ export function EmailTemplateEditor({
           </div>
           <div className="flex items-center gap-2 pt-6">
             <Label htmlFor="is_active" className="text-sm">Activa</Label>
-            <Switch
-              id="is_active"
-              checked={isActive}
-              onCheckedChange={setIsActive}
-            />
+            <Switch id="is_active" checked={isActive} onCheckedChange={setIsActive} />
           </div>
         </div>
 
@@ -416,9 +396,7 @@ export function EmailTemplateEditor({
           <div>
             <Label htmlFor="recipient_type">Tipo de destinatarios</Label>
             <Select value={recipientType} onValueChange={(v) => setRecipientType(v as typeof recipientType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="clients">Solo Clientes</SelectItem>
                 <SelectItem value="allies">Solo Aliados</SelectItem>
@@ -429,11 +407,8 @@ export function EmailTemplateEditor({
         </div>
       </div>
 
-      {/* Variables disponibles */}
       <div className="border rounded-lg p-4 bg-muted/30">
-        <Label className="text-sm font-medium mb-3 block">
-          Variables disponibles (click para insertar)
-        </Label>
+        <Label className="text-sm font-medium mb-3 block">Variables disponibles (click para insertar)</Label>
         <div className="flex flex-wrap gap-2">
           {EMAIL_TEMPLATE_VARIABLES.map((variable) => (
             <Badge
@@ -447,90 +422,44 @@ export function EmailTemplateEditor({
               <button
                 type="button"
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCopyVariable(variable.name);
-                }}
+                onClick={(e) => { e.stopPropagation(); handleCopyVariable(variable.name); }}
               >
-                {copiedVariable === variable.name ? (
-                  <Check className="h-3 w-3 text-green-500" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
+                {copiedVariable === variable.name ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
               </button>
             </Badge>
           ))}
         </div>
       </div>
 
-      {/* Tabs: Editar / Preview / Enviar */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
         <TabsList className="mb-4">
-          <TabsTrigger value="edit" className="gap-2">
-            <Code className="h-4 w-4" />
-            Editar
-          </TabsTrigger>
-          <TabsTrigger value="preview" className="gap-2">
-            <Eye className="h-4 w-4" />
-            Vista previa
-          </TabsTrigger>
-          <TabsTrigger value="send" className="gap-2">
-            <Send className="h-4 w-4" />
-            Enviar
-          </TabsTrigger>
+          <TabsTrigger value="edit" className="gap-2"><Code className="h-4 w-4" />Editar</TabsTrigger>
+          <TabsTrigger value="preview" className="gap-2"><Eye className="h-4 w-4" />Vista previa</TabsTrigger>
+          <TabsTrigger value="send" className="gap-2"><Send className="h-4 w-4" />Enviar</TabsTrigger>
         </TabsList>
 
-        {/* Tab: Editar */}
         <TabsContent value="edit" className="space-y-4">
           <div className="flex items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploadingImage}
-            >
-              {isUploadingImage ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <ImageIcon className="h-4 w-4 mr-2" />
-              )}
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+            <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage}>
+              {isUploadingImage ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ImageIcon className="h-4 w-4 mr-2" />}
               Subir imagen
             </Button>
-            <span className="text-xs text-muted-foreground">
-              Máx. 2MB (JPG, PNG, GIF)
-            </span>
+            <span className="text-xs text-muted-foreground">Máx. 2MB</span>
           </div>
-
           <div>
             <Label htmlFor="html_body">Contenido del email</Label>
             <Textarea
               id="html_body"
               value={htmlBody}
               onChange={(e) => setHtmlBody(e.target.value)}
-              placeholder={`Estimado/a {nombre_cliente},
-
-Le recordamos que su póliza {poliza} vence el {fecha_vencimiento}.
-
-Atentamente,
-{tenant_nombre}`}
+              placeholder={`Estimado/a {nombre_cliente},\n\nLe recordamos que su póliza vence pronto.\n\nAtentamente,\n{tenant_nombre}`}
               rows={14}
               className="font-mono text-sm"
             />
-            <p className="text-xs text-muted-foreground mt-2">
-              Puedes usar HTML y variables entre llaves {`{variable}`}
-            </p>
           </div>
         </TabsContent>
 
-        {/* Tab: Preview */}
         <TabsContent value="preview">
           <div className="border rounded-lg overflow-hidden">
             <div className="bg-muted px-4 py-3 border-b">
@@ -544,16 +473,13 @@ Atentamente,
               <div 
                 className="prose prose-sm max-w-none"
                 dangerouslySetInnerHTML={{ 
-                  __html: previewBody.includes('<') 
-                    ? previewBody 
-                    : `<div style="white-space: pre-wrap;">${previewBody}</div>` 
+                  __html: previewBody.includes('<') ? previewBody : `<div style="white-space: pre-wrap;">${previewBody}</div>` 
                 }}
               />
             </div>
           </div>
         </TabsContent>
 
-        {/* Tab: Enviar */}
         <TabsContent value="send" className="space-y-4">
           <div className="border rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
@@ -561,49 +487,28 @@ Atentamente,
                 <Users className="h-5 w-5 text-muted-foreground" />
                 <span className="font-medium">Destinatarios</span>
                 <Badge variant="secondary">
-                  {recipientType === 'clients' ? 'Clientes' : 
-                   recipientType === 'allies' ? 'Aliados' : 'Todos'}
+                  {recipientType === 'clients' ? 'Clientes' : recipientType === 'allies' ? 'Aliados' : 'Todos'}
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
-                <Switch
-                  id="send_to_all"
-                  checked={sendToAll}
-                  onCheckedChange={setSendToAll}
-                />
-                <Label htmlFor="send_to_all" className="text-sm">
-                  Enviar a todos ({availableRecipients.length})
-                </Label>
+                <Switch id="send_to_all" checked={sendToAll} onCheckedChange={setSendToAll} />
+                <Label htmlFor="send_to_all" className="text-sm">Enviar a todos ({availableRecipients.length})</Label>
               </div>
             </div>
 
             {!sendToAll && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Seleccionados: {selectedRecipients.length}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={toggleAllRecipients}
-                  >
-                    {selectedRecipients.length === availableRecipients.length 
-                      ? 'Deseleccionar todos' 
-                      : 'Seleccionar todos'}
+                  <span className="text-sm text-muted-foreground">Seleccionados: {selectedRecipients.length}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={toggleAllRecipients}>
+                    {selectedRecipients.length === availableRecipients.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
                   </Button>
                 </div>
-
-                <ScrollArea className="h-[200px] border rounded-md p-2">
+                <div className="h-[200px] overflow-y-auto border rounded-md p-2">
                   {loadingRecipients ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin" />
-                    </div>
+                    <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
                   ) : availableRecipients.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">
-                      No hay destinatarios disponibles
-                    </p>
+                    <p className="text-center text-muted-foreground py-8">No hay destinatarios disponibles</p>
                   ) : (
                     <div className="space-y-1">
                       {availableRecipients.map((recipient) => (
@@ -612,22 +517,17 @@ Atentamente,
                           className="flex items-center gap-3 p-2 rounded hover:bg-muted cursor-pointer"
                           onClick={() => toggleRecipient(recipient.id)}
                         >
-                          <Checkbox
-                            checked={selectedRecipients.includes(recipient.id)}
-                            onCheckedChange={() => toggleRecipient(recipient.id)}
-                          />
+                          <Checkbox checked={selectedRecipients.includes(recipient.id)} onCheckedChange={() => toggleRecipient(recipient.id)} />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{recipient.name}</p>
                             <p className="text-xs text-muted-foreground truncate">{recipient.email}</p>
                           </div>
-                          <Badge variant="outline" className="text-xs">
-                            {recipient.type === 'client' ? 'Cliente' : 'Aliado'}
-                          </Badge>
+                          <Badge variant="outline" className="text-xs">{recipient.type === 'client' ? 'Cliente' : 'Aliado'}</Badge>
                         </div>
                       ))}
                     </div>
                   )}
-                </ScrollArea>
+                </div>
               </div>
             )}
 
@@ -639,15 +539,9 @@ Atentamente,
                 className="w-full"
               >
                 {isSending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Enviando...
-                  </>
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enviando...</>
                 ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    Enviar ahora ({sendToAll ? availableRecipients.length : selectedRecipients.length} emails)
-                  </>
+                  <><Send className="h-4 w-4 mr-2" />Enviar ahora ({sendToAll ? availableRecipients.length : selectedRecipients.length} emails)</>
                 )}
               </Button>
             </div>
@@ -655,15 +549,9 @@ Atentamente,
         </TabsContent>
       </Tabs>
 
-      {/* Botones de acción */}
       <div className="flex justify-end gap-3 pt-4 border-t">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancelar
-        </Button>
-        <Button 
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-        >
+        <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
+        <Button onClick={handleSubmit} disabled={isSubmitting}>
           {isSubmitting ? 'Guardando...' : (template ? 'Guardar cambios' : 'Crear plantilla')}
         </Button>
       </div>
