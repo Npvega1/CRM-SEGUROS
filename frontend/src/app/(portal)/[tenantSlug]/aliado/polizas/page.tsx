@@ -103,28 +103,22 @@ export default function AlliedPoliciesPage() {
     try {
       const supabase = getBrowserClient();
       
-      // Intentar obtener URL pública primero
-      const { data: publicData } = supabase.storage
+      // Crear URL firmada (válida por 1 hora) para bucket privado
+      const { data, error } = await supabase.storage
         .from(STORAGE_BUCKET)
-        .getPublicUrl(policy.document_url);
+        .createSignedUrl(policy.document_url, 3600); // 3600 segundos = 1 hora
 
-      if (publicData?.publicUrl) {
-        setDocumentUrl(publicData.publicUrl);
+      if (error) {
+        console.error('Error creating signed URL:', error);
+        toast.error('Error al acceder al documento');
+        setLoadingDocument(false);
+        return;
+      }
+
+      if (data?.signedUrl) {
+        setDocumentUrl(data.signedUrl);
       } else {
-        // Si no es público, crear URL firmada (válida por 1 hora)
-        const { data: signedData, error: signedError } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .createSignedUrl(policy.document_url, 3600);
-
-        if (signedError) {
-          console.error('Error creating signed URL:', signedError);
-          toast.error('Error al acceder al documento');
-          return;
-        }
-
-        if (signedData?.signedUrl) {
-          setDocumentUrl(signedData.signedUrl);
-        }
+        toast.error('No se pudo generar el enlace del documento');
       }
     } catch (error) {
       console.error('Error getting document URL:', error);
@@ -296,3 +290,25 @@ export default function AlliedPoliciesPage() {
     </div>
   );
 }
+Además, necesitamos agregar una política RLS en Storage para permitir que los aliados accedan a los documentos de sus clientes.
+
+Ejecuta este SQL en Supabase:
+
+-- Política para permitir a los aliados ver documentos de pólizas de sus clientes
+CREATE POLICY "Allied agents can view policy documents"
+ON storage.objects FOR SELECT
+USING (
+  bucket_id = 'policy-documents'
+  AND (
+    -- El usuario es un aliado y el documento pertenece a un cliente suyo
+    EXISTS (
+      SELECT 1 FROM allied_agents aa
+      JOIN clients c ON c.allied_agent_id = aa.id
+      JOIN policies p ON p.client_id = c.id
+      WHERE aa.auth_user_id = auth.uid()
+      AND storage.objects.name LIKE '%' || p.id::text || '%'
+    )
+    -- O el usuario pertenece al tenant del documento
+    OR (storage.objects.name LIKE (auth.jwt() -> 'app_metadata' ->> 'tenant_id') || '/%')
+  )
+);
