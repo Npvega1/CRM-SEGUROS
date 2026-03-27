@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
-import { Shield, Mail, Lock, User, Building2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Shield, Mail, Lock, User, Building2, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 
 // Schema de validación para registro
 const registroSchema = z.object({
@@ -56,12 +56,12 @@ export default function RegistroPage() {
     return name
       .toLowerCase()
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remover acentos
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   };
 
-  // Auto-generar slug cuando cambia el nombre de la agencia (si no fue editado manualmente)
+  // Auto-generar slug cuando cambia el nombre de la agencia
   useEffect(() => {
     if (watchAgencyName && !slugManuallyEdited) {
       const newSlug = generateSlug(watchAgencyName);
@@ -76,7 +76,6 @@ export default function RegistroPage() {
       setIsLoading(true);
       setError(null);
 
-      // Llamar a la API de registro que usa service role
       const response = await fetch('/registro-api', {
         method: 'POST',
         headers: {
@@ -98,7 +97,6 @@ export default function RegistroPage() {
         return;
       }
 
-      // Éxito - mostrar pantalla de éxito
       setSuccess(true);
 
     } catch (err) {
@@ -115,20 +113,25 @@ export default function RegistroPage() {
         <Card className="w-full max-w-md animate-fade-in">
           <CardContent className="pt-6">
             <div className="text-center space-y-4">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100">
-                <CheckCircle className="w-8 h-8 text-green-600" />
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100">
+                <Clock className="w-8 h-8 text-amber-600" />
               </div>
-              <h2 className="text-xl font-semibold">¡Registro exitoso!</h2>
+              <h2 className="text-xl font-semibold">¡Solicitud enviada!</h2>
               <p className="text-muted-foreground">
-                Tu agencia ha sido creada correctamente.
-                Ya puedes iniciar sesión con tus credenciales.
+                Tu solicitud de registro ha sido recibida correctamente. 
+                Nuestro equipo revisará tu información y te notificaremos 
+                por correo electrónico cuando tu agencia sea aprobada.
               </p>
+              <div className="bg-slate-50 rounded-lg p-4 text-sm text-muted-foreground">
+                <p>El proceso de aprobación puede tomar hasta 24-48 horas hábiles.</p>
+              </div>
               <Button 
-                onClick={() => router.push('/login')} 
+                onClick={() => router.push('/')}
+                variant="outline"
                 className="w-full mt-4"
-                data-testid="go-to-login-button"
+                data-testid="go-to-home-button"
               >
-                Ir a iniciar sesión
+                Volver al inicio
               </Button>
             </div>
           </CardContent>
@@ -153,10 +156,9 @@ export default function RegistroPage() {
           <CardHeader>
             <CardTitle>Datos de registro</CardTitle>
             <CardDescription>
-              Completa la información para crear tu agencia
+              Completa la información para solicitar tu agencia
             </CardDescription>
           </CardHeader>
-
           <form onSubmit={handleSubmit(onSubmit)}>
             <CardContent className="space-y-4">
               {/* Error general */}
@@ -291,19 +293,19 @@ export default function RegistroPage() {
             </CardContent>
 
             <CardFooter className="flex flex-col gap-4">
-              <Button 
-                type="submit" 
-                className="w-full" 
+              <Button
+                type="submit"
+                className="w-full"
                 disabled={isLoading}
                 data-testid="registro-submit-button"
               >
                 {isLoading ? (
                   <>
                     <Spinner size="sm" className="text-primary-foreground" />
-                    <span>Creando agencia...</span>
+                    <span>Enviando solicitud...</span>
                   </>
                 ) : (
-                  'Crear agencia'
+                  'Solicitar registro'
                 )}
               </Button>
 
