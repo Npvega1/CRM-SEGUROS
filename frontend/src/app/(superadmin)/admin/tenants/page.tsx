@@ -2,7 +2,7 @@
 
 // =====================================================
 // PAGE: Super Admin - Tenants Management
-// Lista global de todos los tenants con métricas
+// Lista global de todos los tenants con métricas y planes
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -26,6 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { TenantDetailDrawer } from '@/components/modules/superadmin/TenantDetailDrawer';
 import { CreateTenantModal } from '@/components/modules/superadmin/CreateTenantModal';
@@ -42,6 +50,9 @@ import {
   TrendingUp,
   Clock,
   XCircle,
+  Crown,
+  MoreVertical,
+  Sparkles,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -51,6 +62,7 @@ interface TenantWithStats {
   name: string;
   slug: string;
   status: 'pending' | 'active' | 'rejected' | 'suspended';
+  plan: 'basic' | 'premium' | 'trial';
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -66,6 +78,7 @@ export default function TenantsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'active' | 'rejected' | 'suspended'>('all');
+  const [planFilter, setPlanFilter] = useState<'all' | 'basic' | 'premium' | 'trial'>('all');
   const [selectedTenant, setSelectedTenant] = useState<TenantWithStats | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -129,6 +142,7 @@ export default function TenantsPage() {
           return {
             ...tenant,
             status: tenant.status || (tenant.is_active ? 'active' : 'suspended'),
+            plan: tenant.plan || 'basic',
             agents_count: agentsCount || 0,
             clients_count: clientsCount || 0,
             policies_count: policiesCount || 0,
@@ -151,6 +165,34 @@ export default function TenantsPage() {
     fetchTenants();
   }, [fetchTenants]);
 
+  // Cambiar plan del tenant
+  const handleChangePlan = async (tenantId: string, newPlan: 'basic' | 'premium' | 'trial') => {
+    try {
+      setProcessingTenantId(tenantId);
+      
+      const { error } = await supabase
+        .from('tenants')
+        .update({ plan: newPlan })
+        .eq('id', tenantId);
+
+      if (error) throw error;
+
+      // Log audit
+      await supabase.from('audit_logs').insert({
+        action: 'tenant.plan_changed',
+        entity_type: 'tenant',
+        entity_id: tenantId,
+        new_values: { plan: newPlan },
+      });
+
+      fetchTenants();
+    } catch (error) {
+      console.error('Error changing plan:', error);
+    } finally {
+      setProcessingTenantId(null);
+    }
+  };
+
   // Aprobar tenant
   const handleApproveTenant = async (tenantId: string) => {
     try {
@@ -163,7 +205,6 @@ export default function TenantsPage() {
 
       if (error) throw error;
 
-      // Log audit
       await supabase.from('audit_logs').insert({
         action: 'tenant.approved',
         entity_type: 'tenant',
@@ -171,7 +212,7 @@ export default function TenantsPage() {
         new_values: { status: 'active', is_active: true },
       });
 
-      // TODO: Enviar email de bienvenida aquí
+      // TODO: Enviar email de bienvenida
       
       fetchTenants();
     } catch (error) {
@@ -193,7 +234,6 @@ export default function TenantsPage() {
 
       if (error) throw error;
 
-      // Log audit
       await supabase.from('audit_logs').insert({
         action: 'tenant.rejected',
         entity_type: 'tenant',
@@ -271,13 +311,17 @@ export default function TenantsPage() {
     const matchesStatus =
       statusFilter === 'all' || tenant.status === statusFilter;
 
-    return matchesSearch && matchesStatus;
+    const matchesPlan =
+      planFilter === 'all' || tenant.plan === planFilter;
+
+    return matchesSearch && matchesStatus && matchesPlan;
   });
 
   // Stats cards
   const totalTenants = tenants.length;
   const pendingTenants = tenants.filter(t => t.status === 'pending').length;
   const activeTenants = tenants.filter(t => t.status === 'active').length;
+  const premiumTenants = tenants.filter(t => t.plan === 'premium').length;
   const totalAgents = tenants.reduce((acc, t) => acc + t.agents_count, 0);
   const totalClients = tenants.reduce((acc, t) => acc + t.clients_count, 0);
 
@@ -294,6 +338,29 @@ export default function TenantsPage() {
         return <Badge className="bg-zinc-500/20 text-zinc-400 border-zinc-500/30">Suspendido</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  // Helper para badge de plan
+  const getPlanBadge = (plan: string) => {
+    switch (plan) {
+      case 'premium':
+        return (
+          <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 flex items-center gap-1">
+            <Crown className="h-3 w-3" />
+            Premium
+          </Badge>
+        );
+      case 'trial':
+        return (
+          <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 flex items-center gap-1">
+            <Sparkles className="h-3 w-3" />
+            Trial
+          </Badge>
+        );
+      case 'basic':
+      default:
+        return <Badge className="bg-zinc-500/20 text-zinc-400 border-zinc-500/30">Básico</Badge>;
     }
   };
 
@@ -320,10 +387,10 @@ export default function TenantsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">Total Tenants</CardTitle>
+            <CardTitle className="text-sm font-medium text-zinc-400">Total</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
@@ -344,9 +411,6 @@ export default function TenantsPage() {
               <span className={`text-2xl font-bold ${pendingTenants > 0 ? 'text-amber-400' : 'text-white'}`}>
                 {pendingTenants}
               </span>
-              {pendingTenants > 0 && (
-                <span className="text-xs text-amber-400 ml-1">¡Requieren revisión!</span>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -363,9 +427,22 @@ export default function TenantsPage() {
           </CardContent>
         </Card>
 
+        {/* Premium Card */}
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">Total Agentes</CardTitle>
+            <CardTitle className="text-sm font-medium text-amber-400">Premium</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <Crown className="h-5 w-5 text-amber-500" />
+              <span className="text-2xl font-bold text-white">{premiumTenants}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-zinc-400">Agentes</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
@@ -377,7 +454,7 @@ export default function TenantsPage() {
 
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">Total Clientes</CardTitle>
+            <CardTitle className="text-sm font-medium text-zinc-400">Clientes</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
@@ -402,7 +479,7 @@ export default function TenantsPage() {
         </div>
 
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-          <SelectTrigger className="w-[180px] bg-zinc-900 border-zinc-800 text-white">
+          <SelectTrigger className="w-[150px] bg-zinc-900 border-zinc-800 text-white">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-800">
@@ -411,6 +488,18 @@ export default function TenantsPage() {
             <SelectItem value="active" className="text-green-400">Activos</SelectItem>
             <SelectItem value="suspended" className="text-zinc-400">Suspendidos</SelectItem>
             <SelectItem value="rejected" className="text-red-400">Rechazados</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={planFilter} onValueChange={(v) => setPlanFilter(v as typeof planFilter)}>
+          <SelectTrigger className="w-[150px] bg-zinc-900 border-zinc-800 text-white">
+            <SelectValue placeholder="Plan" />
+          </SelectTrigger>
+          <SelectContent className="bg-zinc-900 border-zinc-800">
+            <SelectItem value="all" className="text-white">Todos</SelectItem>
+            <SelectItem value="basic" className="text-zinc-400">Básico</SelectItem>
+            <SelectItem value="premium" className="text-amber-400">Premium</SelectItem>
+            <SelectItem value="trial" className="text-purple-400">Trial</SelectItem>
           </SelectContent>
         </Select>
 
@@ -432,11 +521,10 @@ export default function TenantsPage() {
             <TableHeader>
               <TableRow className="border-zinc-800 hover:bg-transparent">
                 <TableHead className="text-zinc-400">Nombre</TableHead>
-                <TableHead className="text-zinc-400">Slug</TableHead>
                 <TableHead className="text-zinc-400">Estado</TableHead>
+                <TableHead className="text-zinc-400">Plan</TableHead>
                 <TableHead className="text-zinc-400 text-center">Agentes</TableHead>
                 <TableHead className="text-zinc-400 text-center">Clientes</TableHead>
-                <TableHead className="text-zinc-400 text-center">Pólizas</TableHead>
                 <TableHead className="text-zinc-400">Última actividad</TableHead>
                 <TableHead className="text-zinc-400 text-right">Acciones</TableHead>
               </TableRow>
@@ -444,7 +532,7 @@ export default function TenantsPage() {
             <TableBody>
               {filteredTenants.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-zinc-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-zinc-500">
                     No se encontraron tenants
                   </TableCell>
                 </TableRow>
@@ -455,19 +543,21 @@ export default function TenantsPage() {
                     className={`border-zinc-800 hover:bg-zinc-800/50 ${tenant.status === 'pending' ? 'bg-amber-500/5' : ''}`}
                   >
                     <TableCell className="font-medium text-white">
-                      {tenant.name}
-                      {tenant.admin_email && (
-                        <p className="text-xs text-zinc-500 mt-0.5">{tenant.admin_email}</p>
-                      )}
+                      <div>
+                        {tenant.name}
+                        <p className="text-xs text-zinc-500 mt-0.5">{tenant.slug}</p>
+                        {tenant.admin_email && (
+                          <p className="text-xs text-zinc-600">{tenant.admin_email}</p>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell className="text-zinc-400 font-mono text-sm">{tenant.slug}</TableCell>
                     <TableCell>{getStatusBadge(tenant.status)}</TableCell>
+                    <TableCell>{getPlanBadge(tenant.plan)}</TableCell>
                     <TableCell className="text-center text-zinc-300">{tenant.agents_count}</TableCell>
                     <TableCell className="text-center text-zinc-300">{tenant.clients_count}</TableCell>
-                    <TableCell className="text-center text-zinc-300">{tenant.policies_count}</TableCell>
                     <TableCell className="text-zinc-400 text-sm">
                       {tenant.last_activity
-                        ? format(new Date(tenant.last_activity), "d MMM yyyy, HH:mm", { locale: es })
+                        ? format(new Date(tenant.last_activity), "d MMM yyyy", { locale: es })
                         : 'Sin actividad'}
                     </TableCell>
                     <TableCell className="text-right">
@@ -541,6 +631,48 @@ export default function TenantsPage() {
                             <CheckCircle className="h-4 w-4" />
                           </Button>
                         )}
+
+                        {/* Menú de más opciones (cambiar plan) */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-zinc-400 hover:text-white hover:bg-zinc-800"
+                              disabled={processingTenantId === tenant.id}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-800">
+                            <DropdownMenuLabel className="text-zinc-400">Cambiar Plan</DropdownMenuLabel>
+                            <DropdownMenuSeparator className="bg-zinc-800" />
+                            <DropdownMenuItem 
+                              onClick={() => handleChangePlan(tenant.id, 'basic')}
+                              className={`text-zinc-300 hover:bg-zinc-800 cursor-pointer ${tenant.plan === 'basic' ? 'bg-zinc-800' : ''}`}
+                            >
+                              <span className="w-2 h-2 rounded-full bg-zinc-500 mr-2" />
+                              Plan Básico
+                              {tenant.plan === 'basic' && <CheckCircle className="h-3 w-3 ml-auto text-green-400" />}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleChangePlan(tenant.id, 'premium')}
+                              className={`text-amber-400 hover:bg-zinc-800 cursor-pointer ${tenant.plan === 'premium' ? 'bg-zinc-800' : ''}`}
+                            >
+                              <Crown className="h-4 w-4 mr-2 text-amber-500" />
+                              Plan Premium
+                              {tenant.plan === 'premium' && <CheckCircle className="h-3 w-3 ml-auto text-green-400" />}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleChangePlan(tenant.id, 'trial')}
+                              className={`text-purple-400 hover:bg-zinc-800 cursor-pointer ${tenant.plan === 'trial' ? 'bg-zinc-800' : ''}`}
+                            >
+                              <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
+                              Plan Trial
+                              {tenant.plan === 'trial' && <CheckCircle className="h-3 w-3 ml-auto text-green-400" />}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
