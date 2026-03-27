@@ -48,13 +48,13 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function ClientClaimsPage() {
-  const { clientData } = usePortal();
+  const { client } = usePortal();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchClaims = async () => {
-      if (!clientData?.id) {
+      if (!client?.client_id) {
         setLoading(false);
         return;
       }
@@ -64,7 +64,7 @@ export default function ClientClaimsPage() {
         
         // Usar el RPC con SECURITY DEFINER
         const { data, error } = await supabase
-          .rpc('get_client_claims', { p_client_id: clientData.id });
+          .rpc('get_client_claims', { p_client_id: client.client_id });
 
         if (error) {
           console.error('Error fetching claims:', error);
@@ -79,7 +79,7 @@ export default function ClientClaimsPage() {
     };
 
     fetchClaims();
-  }, [clientData?.id]);
+  }, [client?.client_id]);
 
   if (loading) {
     return (
