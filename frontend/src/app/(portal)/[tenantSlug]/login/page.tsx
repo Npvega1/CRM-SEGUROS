@@ -6,7 +6,7 @@
 // Login simplificado con número de documento
 // =====================================================
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { Button } from '@/components/ui/button';
@@ -25,28 +25,32 @@ export default function PortalLoginPage() {
   const [docNumber, setDocNumber] = useState('');
   const [docError, setDocError] = useState<string | null>(null);
   const [tenantName, setTenantName] = useState<string>('');
+  const [tenantId, setTenantId] = useState<string>('');
 
   const supabase = useMemo(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   ), []);
 
-  // Cargar nombre del tenant al montar
-  useState(() => {
+  // Cargar info del tenant al montar
+  useEffect(() => {
     const loadTenant = async () => {
-      const { data } = await supabase
+      if (!tenantSlug) return;
+      
+      const { data, error } = await supabase
         .from('tenants')
-        .select('name')
+        .select('id, name')
         .eq('slug', tenantSlug)
+        .eq('is_active', true)
         .single();
       
-      const tenant = data as { name: string } | null;
-      if (tenant?.name) {
-        setTenantName(tenant.name);
+      if (data && !error) {
+        setTenantName(data.name);
+        setTenantId(data.id);
       }
     };
     loadTenant();
-  });
+  }, [supabase, tenantSlug]);
 
   const validateForm = (): boolean => {
     setDocError(null);
@@ -68,14 +72,7 @@ export default function PortalLoginPage() {
     setError(null);
 
     try {
-      // Obtener el tenant_id
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenants')
-        .select('id')
-        .eq('slug', tenantSlug)
-        .single();
-
-      if (tenantError || !tenantData) {
+      if (!tenantId) {
         setError('Portal no encontrado');
         setIsLoading(false);
         return;
@@ -85,30 +82,30 @@ export default function PortalLoginPage() {
       const { data: clientData, error: clientError } = await supabase
         .from('clients')
         .select('id, full_name, email, doc_number')
-        .eq('tenant_id', tenantData.id)
+        .eq('tenant_id', tenantId)
         .eq('doc_number', docNumber.trim())
         .eq('is_active', true)
         .single();
 
       if (clientError || !clientData) {
+        console.log('Client search error:', clientError);
         setError('No encontramos un cliente con este número de documento. Verifica el número o contacta a tu agente de seguros.');
         setIsLoading(false);
         return;
       }
 
-      // Cliente encontrado - guardar en sessionStorage y redirigir
+      // Cliente encontrado - guardar en sessionStorage
       sessionStorage.setItem('portal_client_id', clientData.id);
       sessionStorage.setItem('portal_client_name', clientData.full_name);
       sessionStorage.setItem('portal_client_email', clientData.email || '');
       sessionStorage.setItem('portal_tenant_slug', tenantSlug);
 
-      // Redirigir al dashboard
-      router.push(`/${tenantSlug}/dashboard`);
+      // Redirigir al dashboard usando window.location para forzar navegación
+      window.location.href = `/${tenantSlug}/dashboard`;
 
     } catch (e) {
       console.error('Login error:', e);
       setError('Error al verificar tu documento. Intenta de nuevo.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -163,7 +160,7 @@ export default function PortalLoginPage() {
             <Button
               type="submit"
               className="w-full h-12 text-base"
-              disabled={isLoading}
+              disabled={isLoading || !tenantId}
               data-testid="portal-login-submit"
             >
               {isLoading ? (
