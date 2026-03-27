@@ -2,7 +2,7 @@
 
 // =====================================================
 // LAYOUT: Tenant Layout con Sidebar y Permisos
-// Oculta secciones según los permisos del usuario
+// Oculta secciones según permisos Y plan del tenant
 // =====================================================
 
 import { useState } from 'react';
@@ -32,10 +32,18 @@ import {
   MessageSquare,
   Sparkles,
   Calculator,
-  Handshake
+  Handshake,
+  Lock,
+  Crown
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { UnreadMessagesBadge } from '@/components/ui/UnreadMessagesBadge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface NavItem {
   title: string;
@@ -45,20 +53,21 @@ interface NavItem {
   permissionKey?: 'clientes' | 'polizas' | 'pipeline' | 'siniestros' | 'facturacion' | 'reportes' | 'mensajes' | 'automatizaciones' | 'comparativos' | 'cotizador';
   adminOnly?: boolean;
   alwaysShow?: boolean;
+  premiumOnly?: boolean; // Nuevo: módulos solo para premium
 }
 
 const navItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, alwaysShow: true },
   { title: 'Clientes', href: '/clientes', icon: Users, permissionKey: 'clientes' },
   { title: 'Pólizas', href: '/polizas', icon: FileText, permissionKey: 'polizas' },
-  { title: 'Pipeline', href: '/pipeline', icon: TrendingUp, permissionKey: 'pipeline' },
+  { title: 'Pipeline', href: '/pipeline', icon: TrendingUp, permissionKey: 'pipeline', premiumOnly: true },
   { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle, permissionKey: 'siniestros' },
-  { title: 'Cotizador', href: '/cotizador', icon: Calculator, permissionKey: 'cotizador', badge: 'Nuevo' },
-  { title: 'Cotizaciones IA', href: '/ai-compare', icon: Sparkles, permissionKey: 'comparativos' },
-  { title: 'Mensajes', href: '/mensajes', icon: MessageSquare, permissionKey: 'mensajes' },
+  { title: 'Cotizador', href: '/cotizador', icon: Calculator, permissionKey: 'cotizador', badge: 'Nuevo', premiumOnly: true },
+  { title: 'Cotizaciones IA', href: '/ai-compare', icon: Sparkles, permissionKey: 'comparativos', premiumOnly: true },
+  { title: 'Mensajes', href: '/mensajes', icon: MessageSquare, permissionKey: 'mensajes', premiumOnly: true },
   { title: 'Aliados', href: '/aliados', icon: Handshake, adminOnly: true, badge: 'Nuevo' },
   { title: 'Facturación', href: '/billing', icon: Receipt, permissionKey: 'facturacion' },
-  { title: 'Automatizaciones', href: '/automations', icon: Zap, permissionKey: 'automatizaciones' },
+  { title: 'Automatizaciones', href: '/automations', icon: Zap, permissionKey: 'automatizaciones', premiumOnly: true },
   { title: 'Reportes', href: '/reports', icon: BarChart3, permissionKey: 'reportes' },
   { title: 'Configuración', href: '/settings', icon: Settings, adminOnly: true },
 ];
@@ -69,10 +78,13 @@ export default function TenantLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { tenantName, userFullName, role, isLoading, signOut } = useTenant();
+  const { tenantName, userFullName, role, isLoading, signOut, tenantPlan } = useTenant();
   const { canView, isAdmin, loading: loadingPermissions } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   useTenantBranding();
+
+  // Verificar si tiene acceso premium
+  const hasPremiumAccess = tenantPlan === 'premium' || tenantPlan === 'trial';
 
   // Mostrar loading solo en la carga inicial
   if (isLoading || loadingPermissions) {
@@ -86,7 +98,7 @@ export default function TenantLayout({
     return pathname.startsWith(href);
   };
 
-  // Filtrar items de navegación según permisos
+  // Filtrar items de navegación según permisos Y plan
   const filteredNavItems = navItems.filter((item) => {
     // Si siempre se muestra (Dashboard)
     if (item.alwaysShow) return true;
@@ -102,6 +114,63 @@ export default function TenantLayout({
     return true;
   });
 
+  // Renderizar item de navegación (con lógica de premium)
+  const renderNavItem = (item: NavItem, isMobile: boolean = false) => {
+    const isActive = isActiveRoute(item.href);
+    const isLocked = item.premiumOnly && !hasPremiumAccess;
+
+    if (isLocked) {
+      // Mostrar item bloqueado con tooltip
+      return (
+        <TooltipProvider key={item.href}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium cursor-not-allowed opacity-50',
+                  'text-muted-foreground'
+                )}
+              >
+                <item.icon className="h-5 w-5 flex-shrink-0" />
+                <span>{item.title}</span>
+                <Lock className="ml-auto h-4 w-4 text-amber-500" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="flex items-center gap-2">
+              <Crown className="h-4 w-4 text-amber-500" />
+              <span>Módulo Premium</span>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={isMobile ? () => setSidebarOpen(false) : undefined}
+        className={cn(
+          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+          isActive
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:bg-slate-100 hover:text-foreground'
+        )}
+        data-testid={`nav-${item.title.toLowerCase()}`}
+      >
+        <item.icon className="h-5 w-5 flex-shrink-0" />
+        <span>{item.title}</span>
+        {item.href === '/mensajes' && <UnreadMessagesBadge className="ml-auto" />}
+        {item.badge && (
+          <span className="ml-auto text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+            {item.badge}
+          </span>
+        )}
+        {isActive && !item.badge && item.href !== '/mensajes' && <ChevronRight className="ml-auto h-4 w-4" />}
+      </Link>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar - Desktop */}
@@ -113,40 +182,45 @@ export default function TenantLayout({
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-sm truncate">{tenantName || 'CRM Seguros'}</p>
-            <p className="text-xs text-muted-foreground truncate">{role === 'admin' ? 'Administrador' : 'Agente'}</p>
+            <div className="flex items-center gap-1">
+              <p className="text-xs text-muted-foreground truncate">
+                {role === 'admin' ? 'Administrador' : 'Agente'}
+              </p>
+              {hasPremiumAccess && (
+                <span className="inline-flex items-center gap-0.5 text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                  <Crown className="h-3 w-3" />
+                  Premium
+                </span>
+              )}
+            </div>
           </div>
           <NotificationBell />
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {filteredNavItems.map((item) => {
-            const isActive = isActiveRoute(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-slate-100 hover:text-foreground'
-                )}
-                data-testid={`nav-${item.title.toLowerCase()}`}
-              >
-                <item.icon className="h-5 w-5 flex-shrink-0" />
-                <span>{item.title}</span>
-                {item.href === '/mensajes' && <UnreadMessagesBadge className="ml-auto" />}
-                {item.badge && (
-                  <span className="ml-auto text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                    {item.badge}
-                  </span>
-                )}
-                {isActive && !item.badge && item.href !== '/mensajes' && <ChevronRight className="ml-auto h-4 w-4" />}
-              </Link>
-            );
-          })}
+          {filteredNavItems.map((item) => renderNavItem(item, false))}
         </nav>
+
+        {/* Upgrade Banner (solo para plan básico) */}
+        {!hasPremiumAccess && (
+          <div className="mx-3 mb-3 p-3 rounded-lg bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200">
+            <div className="flex items-center gap-2 mb-1">
+              <Crown className="h-4 w-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-800">Plan Básico</span>
+            </div>
+            <p className="text-xs text-amber-700 mb-2">
+              Desbloquea Pipeline, Cotizador IA y más.
+            </p>
+            <Button 
+              size="sm" 
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs"
+              onClick={() => window.open('mailto:contact@integratech.com.co?subject=Upgrade a Premium', '_blank')}
+            >
+              Actualizar a Premium
+            </Button>
+          </div>
+        )}
 
         {/* User Section */}
         <div className="border-t px-3 py-4">
@@ -189,6 +263,9 @@ export default function TenantLayout({
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-primary" />
               <span className="font-semibold text-sm">{tenantName || 'CRM'}</span>
+              {hasPremiumAccess && (
+                <Crown className="h-4 w-4 text-amber-500" />
+              )}
             </div>
           </div>
           <NotificationBell />
@@ -227,27 +304,21 @@ export default function TenantLayout({
 
         {/* Mobile Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {filteredNavItems.map((item) => {
-            const isActive = isActiveRoute(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-slate-100 hover:text-foreground'
-                )}
-              >
-                <item.icon className="h-5 w-5" />
-                <span>{item.title}</span>
-                {item.href === '/mensajes' && <UnreadMessagesBadge className="ml-auto" />}
-              </Link>
-            );
-          })}
+          {filteredNavItems.map((item) => renderNavItem(item, true))}
         </nav>
+
+        {/* Mobile Upgrade Banner */}
+        {!hasPremiumAccess && (
+          <div className="mx-3 mb-3 p-3 rounded-lg bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200">
+            <div className="flex items-center gap-2 mb-1">
+              <Crown className="h-4 w-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-800">Plan Básico</span>
+            </div>
+            <p className="text-xs text-amber-700">
+              Contacta para actualizar a Premium
+            </p>
+          </div>
+        )}
 
         {/* Mobile User Section */}
         <div className="border-t px-3 py-4">
@@ -278,7 +349,7 @@ export default function TenantLayout({
       <main className="flex-1 lg:pl-64">
         {/* Spacer for mobile header */}
         <div className="lg:hidden h-14" />
-        
+
         {/* Page Content */}
         <div className="min-h-screen">
           {children}
