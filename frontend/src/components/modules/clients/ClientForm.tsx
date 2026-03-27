@@ -20,7 +20,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CreateClientInputSchema, type DocType, type ClientSegment } from '@/lib/validations/clients';
+import { CreateClientInputSchema } from '@/lib/validations/clients';
 import { createClient } from '@/lib/supabase/client';
 import { Loader2, Check, ChevronsUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,20 +30,18 @@ interface AlliedAgent {
   full_name: string;
 }
 
-interface FormData {
-  id?: string;
-  full_name: string;
-  doc_type: DocType;
-  doc_number: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  segment: ClientSegment;
-  allied_agent_id?: string | null;
-}
-
 interface ClientFormProps {
-  initialData?: FormData;
+  initialData?: {
+    id?: string;
+    full_name: string;
+    doc_type: string;
+    doc_number: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    segment: string;
+    allied_agent_id?: string | null;
+  };
   tenantId: string;
   agentId: string;
 }
@@ -64,17 +62,17 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     formState: { errors },
     setValue,
     watch,
-  } = useForm<FormData>({
-    resolver: zodResolver(CreateClientInputSchema),
-    defaultValues: initialData || {
-      full_name: '',
-      doc_type: 'cedula',
-      doc_number: '',
-      email: '',
-      phone: '',
-      address: '',
-      segment: 'persona_natural',
-      allied_agent_id: null,
+  } = useForm({
+    resolver: zodResolver(CreateClientInputSchema) as any,
+    defaultValues: {
+      full_name: initialData?.full_name || '',
+      doc_type: initialData?.doc_type || 'cedula',
+      doc_number: initialData?.doc_number || '',
+      email: initialData?.email || '',
+      phone: initialData?.phone || '',
+      address: initialData?.address || '',
+      segment: initialData?.segment || 'persona_natural',
+      allied_agent_id: initialData?.allied_agent_id || null,
     },
   });
 
@@ -103,7 +101,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     loadAlliedAgents();
   }, [tenantId]);
 
-  const onSubmit = async (data: FormData) => {
+  const onSubmit = async (data: any) => {
     setIsSubmitting(true);
     try {
       const supabase = createClient();
@@ -171,7 +169,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               placeholder="Nombre del cliente"
             />
             {errors.full_name && (
-              <p className="text-sm text-red-500">{errors.full_name.message}</p>
+              <p className="text-sm text-red-500">{String(errors.full_name.message)}</p>
             )}
           </div>
 
@@ -180,7 +178,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               <Label htmlFor="doc_type">Tipo de Documento *</Label>
               <Select
                 defaultValue={initialData?.doc_type || 'cedula'}
-                onValueChange={(value) => setValue('doc_type', value as DocType)}
+                onValueChange={(value) => setValue('doc_type', value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar tipo" />
@@ -195,9 +193,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                   <SelectItem value="consorcio">Consorcio</SelectItem>
                 </SelectContent>
               </Select>
-              {errors.doc_type && (
-                <p className="text-sm text-red-500">{errors.doc_type.message}</p>
-              )}
             </div>
 
             <div className="space-y-2">
@@ -208,7 +203,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 placeholder="Numero de documento"
               />
               {errors.doc_number && (
-                <p className="text-sm text-red-500">{errors.doc_number.message}</p>
+                <p className="text-sm text-red-500">{String(errors.doc_number.message)}</p>
               )}
             </div>
           </div>
@@ -222,9 +217,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 {...register('email')}
                 placeholder="correo@ejemplo.com"
               />
-              {errors.email && (
-                <p className="text-sm text-red-500">{errors.email.message}</p>
-              )}
             </div>
 
             <div className="space-y-2">
@@ -234,9 +226,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 {...register('phone')}
                 placeholder="+593 999 999 999"
               />
-              {errors.phone && (
-                <p className="text-sm text-red-500">{errors.phone.message}</p>
-              )}
             </div>
           </div>
 
@@ -247,16 +236,13 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               {...register('address')}
               placeholder="Direccion del cliente"
             />
-            {errors.address && (
-              <p className="text-sm text-red-500">{errors.address.message}</p>
-            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="segment">Segmento *</Label>
             <Select
               defaultValue={initialData?.segment || 'persona_natural'}
-              onValueChange={(value) => setValue('segment', value as ClientSegment)}
+              onValueChange={(value) => setValue('segment', value)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Seleccionar segmento" />
@@ -266,9 +252,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 <SelectItem value="persona_juridica">Persona Juridica</SelectItem>
               </SelectContent>
             </Select>
-            {errors.segment && (
-              <p className="text-sm text-red-500">{errors.segment.message}</p>
-            )}
           </div>
 
           <div className="space-y-2">
