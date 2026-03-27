@@ -4,6 +4,7 @@
 // LAYOUT: Portal del Cliente (White-Label)
 // Módulo 07: Portal del Cliente
 // Inyecta branding dinámico basado en tenant_settings
+// NOTA: Excluye rutas de /aliado que tienen su propio layout
 // =====================================================
 
 import { useState, useEffect, useMemo } from 'react';
@@ -366,7 +367,6 @@ function PortalContent({ children }: { children: React.ReactNode }) {
 
 // =====================================================
 // COMPONENTE: StyleInjector
-// Inyecta CSS variables basadas en tenant_settings
 // =====================================================
 
 function StyleInjector({ settings }: { settings: TenantSettings | null }) {
@@ -375,10 +375,8 @@ function StyleInjector({ settings }: { settings: TenantSettings | null }) {
 
     const root = document.documentElement;
     
-    // Inyectar colores
     if (settings.primary_color) {
       root.style.setProperty('--portal-primary', settings.primary_color);
-      // Convertir hex a HSL para Tailwind
       const hsl = hexToHSL(settings.primary_color);
       if (hsl) {
         root.style.setProperty('--primary', `${hsl.h} ${hsl.s}% ${hsl.l}%`);
@@ -389,9 +387,7 @@ function StyleInjector({ settings }: { settings: TenantSettings | null }) {
       root.style.setProperty('--portal-secondary', settings.secondary_color);
     }
 
-    // Inyectar fuente
     if (settings.font_family && settings.font_family !== 'Inter') {
-      // Cargar fuente de Google Fonts
       const link = document.createElement('link');
       link.href = `https://fonts.googleapis.com/css2?family=${settings.font_family.replace(/\s+/g, '+')}:wght@400;500;600;700&display=swap`;
       link.rel = 'stylesheet';
@@ -400,12 +396,10 @@ function StyleInjector({ settings }: { settings: TenantSettings | null }) {
       root.style.setProperty('--font-sans', `"${settings.font_family}", system-ui, sans-serif`);
     }
 
-    // Inyectar tamaño de fuente base
     if (settings.font_size_base) {
       root.style.setProperty('--portal-font-size-base', `${settings.font_size_base}px`);
     }
 
-    // Limpiar al desmontar
     return () => {
       root.style.removeProperty('--portal-primary');
       root.style.removeProperty('--portal-secondary');
@@ -417,7 +411,6 @@ function StyleInjector({ settings }: { settings: TenantSettings | null }) {
   return null;
 }
 
-// Helper para convertir hex a HSL
 function hexToHSL(hex: string): { h: number; s: number; l: number } | null {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!result) return null;
@@ -451,7 +444,6 @@ function hexToHSL(hex: string): { h: number; s: number; l: number } | null {
 
 // =====================================================
 // COMPONENTE: TenantValidator
-// Valida que el tenant existe y está activo
 // =====================================================
 
 function TenantValidator({ 
@@ -463,7 +455,6 @@ function TenantValidator({
 }) {
   const [isValid, setIsValid] = useState<boolean | null>(null);
   const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
-  const [tenantName, setTenantName] = useState<string>('');
 
   const supabase = useMemo(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -482,10 +473,7 @@ function TenantValidator({
         setIsValid(false);
         return;
       }
-
-      setTenantName(tenant.name);
       
-      // Cargar settings
       const { data: settings } = await supabase
         .from('tenant_settings')
         .select('*')
@@ -527,7 +515,6 @@ function TenantValidator({
   return (
     <>
       <StyleInjector settings={tenantSettings} />
-      {/* Pasar settings al contexto si es necesario */}
       {children}
     </>
   );
@@ -546,14 +533,24 @@ export default function PortalLayout({
   const pathname = usePathname();
   const tenantSlug = params?.tenantSlug as string;
 
-  // Las páginas de login no necesitan autenticación del portal
+  // =====================================================
+  // IMPORTANTE: Excluir rutas de /aliado
+  // El portal de aliados tiene su propio layout
+  // =====================================================
+  const isAlliedRoute = pathname?.includes('/aliado');
+  
+  if (isAlliedRoute) {
+    // Para rutas de aliados, solo renderizar children
+    // El layout de aliados se encargará de todo
+    return <>{children}</>;
+  }
+
   const isLoginPage = pathname?.endsWith('/login');
 
   if (!tenantSlug) {
     return <LoadingScreen message="Cargando..." />;
   }
 
-  // Para página de login, solo validar tenant
   if (isLoginPage) {
     return (
       <TenantValidator tenantSlug={tenantSlug}>
@@ -562,7 +559,6 @@ export default function PortalLayout({
     );
   }
 
-  // Para otras páginas, usar el contexto completo
   return (
     <TenantValidator tenantSlug={tenantSlug}>
       <PortalProvider>
