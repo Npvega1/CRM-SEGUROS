@@ -23,7 +23,6 @@ export default function AlliedLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Form state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -61,51 +60,43 @@ export default function AlliedLoginPage() {
     setError(null);
 
     try {
-      // Primero verificar que el email pertenece a un aliado del tenant
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenants')
-        .select('id')
-        .eq('slug', tenantSlug)
-        .single();
-
-      if (tenantError || !tenantData) {
-        setError('Agencia no encontrada');
-        setIsLoading(false);
-        return;
-      }
-
-      // Verificar que existe un agente aliado con ese email en este tenant
-      const { data: alliedData, error: alliedError } = await supabase
-        .from('allied_agents')
-        .select('id, status')
-        .eq('tenant_id', tenantData.id)
-        .eq('email', email.toLowerCase())
-        .single();
-
-      if (alliedError || !alliedData) {
-        setError('Este email no está registrado como agente aliado en esta agencia.');
-        setIsLoading(false);
-        return;
-      }
-
-      if (alliedData.status !== 'active') {
-        setError('Tu cuenta de aliado no está activa. Contacta a la agencia.');
-        setIsLoading(false);
-        return;
-      }
-
-      // Intentar login con Supabase Auth
+      // Primero intentar login con Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: email,
+        email: email.toLowerCase().trim(),
         password: password
       });
 
       if (authError) {
         if (authError.message.includes('Invalid login credentials')) {
-          setError('Email o contraseña incorrectos. Si olvidaste tu contraseña, contacta a la agencia.');
+          setError('Email o contraseña incorrectos.');
         } else {
           setError('Error al iniciar sesión. Intenta de nuevo.');
         }
+        setIsLoading(false);
+        return;
+      }
+
+      // Verificar que el usuario es un aliado
+      const userRole = authData.user?.app_metadata?.role;
+      const userTenantId = authData.user?.app_metadata?.tenant_id;
+
+      if (userRole !== 'allied_agent') {
+        await supabase.auth.signOut();
+        setError('Esta cuenta no tiene acceso al portal de aliados.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Verificar que el tenant coincide
+      const { data: tenantData } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('slug', tenantSlug)
+        .single();
+
+      if (!tenantData || tenantData.id !== userTenantId) {
+        await supabase.auth.signOut();
+        setError('No tienes acceso a este portal. Verifica el enlace.');
         setIsLoading(false);
         return;
       }
@@ -115,7 +106,7 @@ export default function AlliedLoginPage() {
 
     } catch (e) {
       console.error('Login error:', e);
-      setError(e instanceof Error ? e.message : 'Error al iniciar sesión');
+      setError('Error al iniciar sesión. Intenta de nuevo.');
     } finally {
       setIsLoading(false);
     }
