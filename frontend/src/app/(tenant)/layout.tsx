@@ -50,19 +50,20 @@ interface NavItem {
   premiumOnly?: boolean;
 }
 
+// Orden actualizado de navegación
 const navItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, alwaysShow: true },
+  { title: 'Reportes', href: '/reports', icon: BarChart3, permissionKey: 'reportes' },
   { title: 'Clientes', href: '/clientes', icon: Users, permissionKey: 'clientes' },
+  { title: 'Aliados', href: '/aliados', icon: Handshake, adminOnly: true, badge: 'Nuevo' },
   { title: 'Pólizas', href: '/polizas', icon: FileText, permissionKey: 'polizas' },
-  { title: 'Pipeline', href: '/pipeline', icon: TrendingUp, permissionKey: 'pipeline', premiumOnly: true },
   { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle, permissionKey: 'siniestros' },
+  { title: 'Facturación', href: '/billing', icon: Receipt, permissionKey: 'facturacion' },
+  { title: 'Pipeline', href: '/pipeline', icon: TrendingUp, permissionKey: 'pipeline', premiumOnly: true },
+  { title: 'Mensajes', href: '/mensajes', icon: MessageSquare, permissionKey: 'mensajes', premiumOnly: true },
   { title: 'Cotizador', href: '/cotizador', icon: Calculator, permissionKey: 'cotizador', badge: 'Pro', premiumOnly: true },
   { title: 'Cotizaciones IA', href: '/ai-compare', icon: Sparkles, permissionKey: 'comparativos', premiumOnly: true },
-  { title: 'Mensajes', href: '/mensajes', icon: MessageSquare, permissionKey: 'mensajes', premiumOnly: true },
-  { title: 'Aliados', href: '/aliados', icon: Handshake, adminOnly: true, badge: 'Nuevo' },
-  { title: 'Facturación', href: '/billing', icon: Receipt, permissionKey: 'facturacion' },
   { title: 'Automatizaciones', href: '/automations', icon: Zap, permissionKey: 'automatizaciones', premiumOnly: true },
-  { title: 'Reportes', href: '/reports', icon: BarChart3, permissionKey: 'reportes' },
   { title: 'Configuración', href: '/settings', icon: Settings, adminOnly: true },
 ];
 
