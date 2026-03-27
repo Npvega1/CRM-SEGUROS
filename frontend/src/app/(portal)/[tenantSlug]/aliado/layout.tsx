@@ -35,6 +35,9 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
 
   const basePath = `/${tenantSlug}/aliado`;
 
+  // Rutas públicas que NO requieren autenticación
+  const isPublicRoute = pathname?.includes('/login') || pathname?.includes('/setup') || pathname?.includes('/auth');
+
   const navigation = [
     { name: 'Dashboard', href: basePath, icon: LayoutDashboard },
     { name: 'Mis Pólizas', href: `${basePath}/polizas`, icon: FileText },
@@ -43,8 +46,14 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
   ];
 
   useEffect(() => {
+    // Si es ruta pública, no verificar auth
+    if (isPublicRoute) {
+      setLoading(false);
+      return;
+    }
+    
     checkAuth();
-  }, []);
+  }, [isPublicRoute]);
 
   const checkAuth = async () => {
     try {
@@ -83,6 +92,11 @@ export default function AlliedPortalLayout({ children }: LayoutProps) {
     await supabase.auth.signOut();
     router.push(`/${tenantSlug}/aliado/login`);
   };
+
+  // Si es ruta pública (login, setup), renderizar solo el children sin layout
+  if (isPublicRoute) {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (
