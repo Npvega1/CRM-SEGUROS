@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { clientSchema, type ClientFormData } from '@/lib/validations/clients';
-import { createBrowserClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { Loader2, Check, ChevronsUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -70,7 +70,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   useEffect(() => {
     async function loadAlliedAgents() {
       try {
-        const supabase = createBrowserClient();
+        const supabase = createClient();
         const { data, error } = await (supabase as any)
           .from('allied_agents')
           .select('id, full_name')
@@ -93,7 +93,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   const onSubmit = async (data: ClientFormData) => {
     setIsSubmitting(true);
     try {
-      const supabase = createBrowserClient();
+      const supabase = createClient();
       
       const clientData = {
         full_name: data.full_name,
