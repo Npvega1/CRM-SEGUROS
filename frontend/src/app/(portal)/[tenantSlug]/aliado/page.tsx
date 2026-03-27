@@ -68,17 +68,17 @@ export default function AlliedPortalDashboard() {
           ¡Hola, {agent?.full_name?.split(' ')[0]}!
         </h1>
         <p className="text-muted-foreground mt-1">
-          Bienvenido a tu portal de aliado. Aquí puedes ver tus referidos y comisiones.
+          Bienvenido a tu portal de aliado. Aquí puedes ver tus clientes y comisiones.
         </p>
       </div>
 
-      {/* Tarjeta de información del aliado */}
+      {/* Tarjeta de información del aliado - Sin porcentaje de comisión */}
       <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
         <CardContent className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <p className="text-sm text-muted-foreground">Tu porcentaje de comisión</p>
-              <p className="text-3xl font-bold text-primary">{agent?.commission_percentage}%</p>
+              <p className="text-sm text-muted-foreground">Tu información de contacto</p>
+              <p className="text-lg font-semibold text-primary mt-1">{agent?.full_name}</p>
             </div>
             <div className="text-sm text-muted-foreground">
               <p><strong>Email:</strong> {agent?.email}</p>
@@ -92,12 +92,12 @@ export default function AlliedPortalDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Clientes Referidos</CardTitle>
+            <CardTitle className="text-sm font-medium">Tus Clientes</CardTitle>
             <Users className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.total_clients || 0}</div>
-            <p className="text-xs text-muted-foreground">Clientes que has referido</p>
+            <p className="text-xs text-muted-foreground">Clientes vinculados</p>
           </CardContent>
         </Card>
 
@@ -108,7 +108,7 @@ export default function AlliedPortalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.total_policies || 0}</div>
-            <p className="text-xs text-muted-foreground">Pólizas de tus referidos</p>
+            <p className="text-xs text-muted-foreground">Pólizas de tus clientes</p>
           </CardContent>
         </Card>
 
@@ -148,7 +148,7 @@ export default function AlliedPortalDashboard() {
         <CardContent>
           <div className="text-3xl font-bold">{formatCurrency(stats?.total_premium || 0)}</div>
           <p className="text-xs text-muted-foreground">
-            Suma de todas las primas de pólizas de tus clientes referidos
+            Suma de todas las primas de pólizas de tus clientes
           </p>
         </CardContent>
       </Card>
