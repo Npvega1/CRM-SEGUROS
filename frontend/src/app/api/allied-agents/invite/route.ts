@@ -25,10 +25,10 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Obtener el tenant_id basado en el slug
+    // Obtener el tenant_id y nombre basado en el slug
     const { data: tenantData, error: tenantError } = await supabaseAdmin
       .from('tenants')
-      .select('id')
+      .select('id, name')
       .eq('slug', tenantSlug)
       .single();
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Crear usuario e invitarlo con el tenant_id en el metadata
+    // Crear usuario e invitarlo - redirigir a la página de setup
     const { data: userData, error: userError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       email,
       {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
           role: 'allied_agent',
           tenant_id: tenantData.id,
         },
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/${tenantSlug}/aliado/login`,
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/${tenantSlug}/aliado/setup`,
       }
     );
 
@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       userId: userData.user.id,
+      tenantName: tenantData.name,
       message: 'Invitación enviada exitosamente'
     });
 
