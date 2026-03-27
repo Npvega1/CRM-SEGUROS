@@ -87,20 +87,27 @@ export default function ClientPoliciesPage() {
     
     setDownloading(policy.id);
     try {
-      const supabase = createClient();
-      
-      const { data, error } = await supabase
-        .storage
-        .from('policy-documents')
-        .createSignedUrl(policy.document_url, 60);
+      // Usar API Route para obtener URL firmada
+      const response = await fetch('/api/portal/document', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          document_url: policy.document_url,
+          client_id: client.client_id,
+        }),
+      });
 
-      if (error) {
-        console.error('Error getting signed URL:', error);
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Error:', data.error);
         alert('Error al descargar el documento');
         return;
       }
 
-      if (data?.signedUrl) {
+      if (data.signedUrl) {
         window.open(data.signedUrl, '_blank');
       }
     } catch (error) {
