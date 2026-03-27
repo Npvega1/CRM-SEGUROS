@@ -52,17 +52,18 @@ interface UserPermission {
   can_create: boolean;
   can_edit: boolean;
   can_download: boolean;
+  can_modify_allied: boolean;
 }
 
 const SECTIONS = [
-  { id: 'clientes', label: 'Clientes', hasCreate: true, hasEdit: true, hasDownload: true },
-  { id: 'polizas', label: 'Pólizas', hasCreate: true, hasEdit: true, hasDownload: true },
-  { id: 'pipeline', label: 'Pipeline', hasCreate: true, hasEdit: true, hasDownload: true },
-  { id: 'siniestros', label: 'Siniestros', hasCreate: true, hasEdit: true, hasDownload: true },
-  { id: 'facturacion', label: 'Facturación', hasCreate: true, hasEdit: true, hasDownload: true },
-  { id: 'reportes', label: 'Reportes', hasCreate: false, hasEdit: false, hasDownload: true },
-  { id: 'mensajes', label: 'Mensajes', hasCreate: true, hasEdit: false, hasDownload: false },
-  { id: 'automatizaciones', label: 'Automatizaciones', hasCreate: true, hasEdit: true, hasDownload: false },
+  { id: 'clientes', label: 'Clientes', hasCreate: true, hasEdit: true, hasDownload: true, hasModifyAllied: true },
+  { id: 'polizas', label: 'Polizas', hasCreate: true, hasEdit: true, hasDownload: true, hasModifyAllied: false },
+  { id: 'pipeline', label: 'Pipeline', hasCreate: true, hasEdit: true, hasDownload: true, hasModifyAllied: false },
+  { id: 'siniestros', label: 'Siniestros', hasCreate: true, hasEdit: true, hasDownload: true, hasModifyAllied: false },
+  { id: 'facturacion', label: 'Facturacion', hasCreate: true, hasEdit: true, hasDownload: true, hasModifyAllied: false },
+  { id: 'reportes', label: 'Reportes', hasCreate: false, hasEdit: false, hasDownload: true, hasModifyAllied: false },
+  { id: 'mensajes', label: 'Mensajes', hasCreate: true, hasEdit: false, hasDownload: false, hasModifyAllied: false },
+  { id: 'automatizaciones', label: 'Automatizaciones', hasCreate: true, hasEdit: true, hasDownload: false, hasModifyAllied: false },
 ];
 
 export default function SettingsPage() {
@@ -93,7 +94,7 @@ export default function SettingsPage() {
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
 
-  // Compañías
+  // Companias
   const [allCompanies, setAllCompanies] = useState<InsuranceCompany[]>([]);
   const [tenantCompanies, setTenantCompanies] = useState<TenantCompany[]>([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
@@ -147,13 +148,12 @@ export default function SettingsPage() {
     loadTeam();
   }, [tenantId, supabase]);
 
-  // Cargar compañías disponibles y las del tenant
+  // Cargar companias disponibles y las del tenant
   useEffect(() => {
     async function loadCompanies() {
       if (!tenantId) return;
       setLoadingCompanies(true);
       try {
-        // Cargar todas las compañías activas
         const { data: companiesData } = await (supabase.from('insurance_companies') as any)
           .select('id, name, slug, is_active')
           .eq('is_active', true)
@@ -163,7 +163,6 @@ export default function SettingsPage() {
           setAllCompanies(companiesData);
         }
 
-        // Cargar compañías del tenant
         const { data: tenantCompData } = await (supabase.from('tenant_companies') as any)
           .select('id, company_id, is_active, company_code')
           .eq('tenant_id', tenantId);
@@ -188,18 +187,18 @@ export default function SettingsPage() {
 
     try {
       const { data } = await (supabase.from('user_permissions') as any)
-        .select('section, can_view, can_create, can_edit, can_download')
+        .select('section, can_view, can_create, can_edit, can_download, can_modify_allied')
         .eq('user_id', agent.id);
 
-      // Crear permisos para todas las secciones
       const allPermissions: UserPermission[] = SECTIONS.map(section => {
-        const existing = data?.find((p: UserPermission) => p.section === section.id);
+        const existing = data?.find((p: any) => p.section === section.id);
         return {
           section: section.id,
           can_view: existing?.can_view || false,
           can_create: existing?.can_create || false,
           can_edit: existing?.can_edit || false,
           can_download: existing?.can_download || false,
+          can_modify_allied: existing?.can_modify_allied || false,
         };
       });
 
@@ -216,9 +215,8 @@ export default function SettingsPage() {
   const updatePermission = (section: string, field: keyof UserPermission, value: boolean) => {
     setPermissions(prev => prev.map(p => {
       if (p.section === section) {
-        // Si desactivan "Ver", desactivar todo lo demás
         if (field === 'can_view' && !value) {
-          return { ...p, can_view: false, can_create: false, can_edit: false, can_download: false };
+          return { ...p, can_view: false, can_create: false, can_edit: false, can_download: false, can_modify_allied: false };
         }
         return { ...p, [field]: value };
       }
@@ -232,12 +230,10 @@ export default function SettingsPage() {
     setSavingPermissions(true);
 
     try {
-      // Eliminar permisos existentes
       await (supabase.from('user_permissions') as any)
         .delete()
         .eq('user_id', selectedAgent.id);
 
-      // Insertar nuevos permisos
       const permissionsToInsert = permissions.map(p => ({
         user_id: selectedAgent.id,
         tenant_id: tenantId,
@@ -246,6 +242,7 @@ export default function SettingsPage() {
         can_create: p.can_create,
         can_edit: p.can_edit,
         can_download: p.can_download,
+        can_modify_allied: p.can_modify_allied,
       }));
 
       const { error } = await (supabase.from('user_permissions') as any)
@@ -276,8 +273,7 @@ export default function SettingsPage() {
           updated_at: new Date().toISOString() 
         }, { onConflict: 'tenant_id' });
       if (error) throw error;
-      toast({ title: 'Configuración guardada', description: 'Los colores y logo se han actualizado. Recargando...' });
-      // Recargar la página después de 1 segundo para aplicar los nuevos colores
+      toast({ title: 'Configuracion guardada', description: 'Los colores y logo se han actualizado. Recargando...' });
       setTimeout(() => { window.location.reload(); }, 1000);
     } catch (error) {
       toast({ title: 'Error', description: 'No se pudo guardar', variant: 'destructive' });
@@ -286,18 +282,15 @@ export default function SettingsPage() {
     }
   };
 
-  // Función para subir logo
   const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !tenantId) return;
 
-    // Validar tipo
     if (!file.type.startsWith('image/')) {
-      toast({ title: 'Error', description: 'Solo se permiten imágenes', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Solo se permiten imagenes', variant: 'destructive' });
       return;
     }
 
-    // Validar tamaño (máx 2MB)
     if (file.size > 2 * 1024 * 1024) {
       toast({ title: 'Error', description: 'La imagen no puede superar 2MB', variant: 'destructive' });
       return;
@@ -305,7 +298,6 @@ export default function SettingsPage() {
 
     setUploadingLogo(true);
     try {
-      // Convertir a base64 para guardar directamente (evita problemas de Storage)
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64 = reader.result as string;
@@ -331,7 +323,7 @@ export default function SettingsPage() {
       const { data: existing } = await (supabase.from('users') as any)
         .select('id').eq('tenant_id', tenantId).eq('email', inviteEmail.toLowerCase()).single();
       if (existing) {
-        toast({ title: 'Error', description: 'Este email ya está registrado', variant: 'destructive' });
+        toast({ title: 'Error', description: 'Este email ya esta registrado', variant: 'destructive' });
         setInviting(false);
         return;
       }
@@ -340,12 +332,11 @@ export default function SettingsPage() {
         .select('id').eq('tenant_id', tenantId).eq('email', inviteEmail.toLowerCase())
         .is('accepted_at', null).gt('expires_at', new Date().toISOString()).single();
       if (pendingInv) {
-        toast({ title: 'Error', description: 'Ya existe una invitación pendiente para este email', variant: 'destructive' });
+        toast({ title: 'Error', description: 'Ya existe una invitacion pendiente para este email', variant: 'destructive' });
         setInviting(false);
         return;
       }
 
-      // Siempre crear como "agent" - los permisos se configuran después
       const { data: newInv, error } = await (supabase.from('invitations') as any)
         .insert({
           tenant_id: tenantId,
@@ -357,11 +348,11 @@ export default function SettingsPage() {
       if (error) throw error;
 
       setInvitations([newInv, ...invitations]);
-      toast({ title: 'Invitación creada', description: `Se ha creado la invitación para ${inviteEmail}. Configura los permisos cuando el agente acepte.` });
+      toast({ title: 'Invitacion creada', description: `Se ha creado la invitacion para ${inviteEmail}. Configura los permisos cuando el agente acepte.` });
       setInviteEmail('');
     } catch (error) {
       console.error('Error:', error);
-      toast({ title: 'Error', description: 'No se pudo crear la invitación', variant: 'destructive' });
+      toast({ title: 'Error', description: 'No se pudo crear la invitacion', variant: 'destructive' });
     } finally {
       setInviting(false);
     }
@@ -371,7 +362,7 @@ export default function SettingsPage() {
     try {
       await (supabase.from('invitations') as any).delete().eq('id', invId);
       setInvitations(invitations.filter(i => i.id !== invId));
-      toast({ title: 'Invitación cancelada' });
+      toast({ title: 'Invitacion cancelada' });
     } catch (error) {
       toast({ title: 'Error', description: 'No se pudo cancelar', variant: 'destructive' });
     }
@@ -395,7 +386,6 @@ export default function SettingsPage() {
 
   const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
 
-  // Funciones para manejar compañías del tenant
   const isCompanyActive = (companyId: string): boolean => {
     const tc = tenantCompanies.find(tc => tc.company_id === companyId);
     return tc?.is_active || false;
@@ -414,7 +404,6 @@ export default function SettingsPage() {
       const existingTc = tenantCompanies.find(tc => tc.company_id === companyId);
       
       if (existingTc) {
-        // Actualizar
         const newStatus = !existingTc.is_active;
         const { error } = await (supabase.from('tenant_companies') as any)
           .update({ is_active: newStatus, updated_at: new Date().toISOString() })
@@ -426,7 +415,6 @@ export default function SettingsPage() {
           prev.map(tc => tc.id === existingTc.id ? { ...tc, is_active: newStatus } : tc)
         );
       } else {
-        // Crear nuevo
         const { data, error } = await (supabase.from('tenant_companies') as any)
           .insert({
             tenant_id: tenantId,
@@ -442,10 +430,10 @@ export default function SettingsPage() {
         setTenantCompanies(prev => [...prev, data]);
       }
 
-      toast({ title: 'Compañía actualizada', description: 'El estado de la compañía ha sido actualizado' });
+      toast({ title: 'Compania actualizada', description: 'El estado de la compania ha sido actualizado' });
     } catch (error) {
       console.error('Error toggling company:', error);
-      toast({ title: 'Error', description: 'No se pudo actualizar la compañía', variant: 'destructive' });
+      toast({ title: 'Error', description: 'No se pudo actualizar la compania', variant: 'destructive' });
     } finally {
       setSavingCompanies(false);
     }
@@ -469,7 +457,6 @@ export default function SettingsPage() {
           prev.map(tc => tc.id === existingTc.id ? { ...tc, company_code: tempCompanyCode || null } : tc)
         );
       } else {
-        // Crear con código
         const { data, error } = await (supabase.from('tenant_companies') as any)
           .insert({
             tenant_id: tenantId,
@@ -487,10 +474,10 @@ export default function SettingsPage() {
 
       setEditingCompanyCode(null);
       setTempCompanyCode('');
-      toast({ title: 'Código guardado', description: 'El código de la compañía ha sido actualizado' });
+      toast({ title: 'Codigo guardado', description: 'El codigo de la compania ha sido actualizado' });
     } catch (error) {
       console.error('Error saving company code:', error);
-      toast({ title: 'Error', description: 'No se pudo guardar el código', variant: 'destructive' });
+      toast({ title: 'Error', description: 'No se pudo guardar el codigo', variant: 'destructive' });
     } finally {
       setSavingCompanies(false);
     }
@@ -506,8 +493,8 @@ export default function SettingsPage() {
       <div className="flex items-center gap-3">
         <Settings className="h-8 w-8" />
         <div>
-          <h1 className="text-2xl font-bold">Configuración</h1>
-          <p className="text-muted-foreground">Administra tu organización</p>
+          <h1 className="text-2xl font-bold">Configuracion</h1>
+          <p className="text-muted-foreground">Administra tu organizacion</p>
         </div>
       </div>
 
@@ -523,15 +510,15 @@ export default function SettingsPage() {
             <Users className="h-4 w-4" /><span className="hidden sm:inline">Equipo</span>
           </TabsTrigger>
           <TabsTrigger value="companies" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3" data-testid="tab-companies">
-            <Building className="h-4 w-4" /><span className="hidden sm:inline">Compañías</span>
+            <Building className="h-4 w-4" /><span className="hidden sm:inline">Companias</span>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="account" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />Información de la Cuenta</CardTitle>
-              <CardDescription>Datos de tu organización</CardDescription>
+              <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />Informacion de la Cuenta</CardTitle>
+              <CardDescription>Datos de tu organizacion</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -546,7 +533,7 @@ export default function SettingsPage() {
         <TabsContent value="branding" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5" />Personalización Visual</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5" />Personalizacion Visual</CardTitle>
               <CardDescription>Personaliza los colores de tu CRM</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -554,10 +541,9 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
               ) : (
                 <>
-                  {/* Logo de la Agencia */}
                   <div className="space-y-3">
                     <Label>Logo de la Agencia</Label>
-                    <p className="text-xs text-muted-foreground">Este logo aparecerá en las cotizaciones y documentos PDF</p>
+                    <p className="text-xs text-muted-foreground">Este logo aparecera en las cotizaciones y documentos PDF</p>
                     <div className="flex items-center gap-4">
                       {logoUrl ? (
                         <div className="relative">
@@ -590,7 +576,7 @@ export default function SettingsPage() {
                             <>
                               <Upload className="h-6 w-6 text-muted-foreground mb-1" />
                               <span className="text-xs text-muted-foreground">Subir logo</span>
-                              <span className="text-xs text-muted-foreground">(máx 2MB)</span>
+                              <span className="text-xs text-muted-foreground">(max 2MB)</span>
                             </>
                           )}
                         </label>
@@ -636,7 +622,7 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><UserPlus className="h-5 w-5" />Invitar Agente</CardTitle>
-                <CardDescription>Envía una invitación para unirse a tu equipo. Podrás configurar sus permisos después.</CardDescription>
+                <CardDescription>Envia una invitacion para unirse a tu equipo. Podras configurar sus permisos despues.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -646,7 +632,7 @@ export default function SettingsPage() {
                     Invitar
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">El nuevo agente se creará sin permisos. Configúralos desde la lista de miembros.</p>
+                <p className="text-xs text-muted-foreground">El nuevo agente se creara sin permisos. Configuralos desde la lista de miembros.</p>
               </CardContent>
             </Card>
           )}
@@ -681,7 +667,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" />Miembros del Equipo ({agents.length})</CardTitle>
               <CardDescription>
-                {isAdmin ? 'Haz clic en un agente para configurar sus permisos' : 'Agentes activos en tu organización'}
+                {isAdmin ? 'Haz clic en un agente para configurar sus permisos' : 'Agentes activos en tu organizacion'}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -726,10 +712,10 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Building className="h-5 w-5" />
-                Compañías de Seguros
+                Companias de Seguros
               </CardTitle>
               <CardDescription>
-                Activa las compañías con las que trabajas y configura tu código de agente para cada una
+                Activa las companias con las que trabajas y configura tu codigo de agente para cada una
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -739,7 +725,7 @@ export default function SettingsPage() {
                 </div>
               ) : allCompanies.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">
-                  No hay compañías disponibles en el catálogo
+                  No hay companias disponibles en el catalogo
                 </p>
               ) : (
                 <div className="space-y-4">
@@ -764,7 +750,7 @@ export default function SettingsPage() {
                                 <p className="font-medium">{company.name}</p>
                                 {isActive && companyCode && !isEditing && (
                                   <p className="text-sm text-muted-foreground">
-                                    Código: <span className="font-mono">{companyCode}</span>
+                                    Codigo: <span className="font-mono">{companyCode}</span>
                                   </p>
                                 )}
                               </div>
@@ -777,7 +763,7 @@ export default function SettingsPage() {
                                       <Input
                                         value={tempCompanyCode}
                                         onChange={(e) => setTempCompanyCode(e.target.value)}
-                                        placeholder="Código de agente"
+                                        placeholder="Codigo de agente"
                                         className="w-40 h-8 text-sm"
                                         data-testid={`company-code-input-${company.slug}`}
                                       />
@@ -807,7 +793,7 @@ export default function SettingsPage() {
                                       onClick={() => startEditingCode(company.id)}
                                       data-testid={`edit-code-btn-${company.slug}`}
                                     >
-                                      {companyCode ? 'Editar código' : 'Agregar código'}
+                                      {companyCode ? 'Editar codigo' : 'Agregar codigo'}
                                     </Button>
                                   )}
                                 </>
@@ -826,7 +812,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="pt-4 border-t">
                     <p className="text-xs text-muted-foreground">
-                      <span className="font-medium">Nota:</span> Las compañías activas aparecerán disponibles al crear nuevas pólizas.
+                      <span className="font-medium">Nota:</span> Las companias activas apareceran disponibles al crear nuevas polizas.
                     </p>
                   </div>
                 </div>
@@ -838,14 +824,14 @@ export default function SettingsPage() {
 
       {/* Modal de Permisos */}
       <Dialog open={permissionsDialogOpen} onOpenChange={setPermissionsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5" />
               Permisos de {selectedAgent?.full_name || selectedAgent?.email}
             </DialogTitle>
             <DialogDescription>
-              Configura qué puede hacer este agente en cada sección del sistema
+              Configura que puede hacer este agente en cada seccion del sistema
             </DialogDescription>
           </DialogHeader>
 
@@ -856,19 +842,20 @@ export default function SettingsPage() {
           ) : (
             <div className="space-y-4">
               {/* Encabezado de la tabla */}
-              <div className="grid grid-cols-5 gap-2 text-xs font-medium text-muted-foreground border-b pb-2">
-                <div>Sección</div>
+              <div className="grid grid-cols-6 gap-2 text-xs font-medium text-muted-foreground border-b pb-2">
+                <div>Seccion</div>
                 <div className="text-center">Ver</div>
                 <div className="text-center">Crear</div>
                 <div className="text-center">Editar</div>
                 <div className="text-center">Descargar</div>
+                <div className="text-center">Mod. Aliado</div>
               </div>
 
               {/* Filas de permisos */}
               {SECTIONS.map((section) => {
                 const perm = permissions.find(p => p.section === section.id);
                 return (
-                  <div key={section.id} className="grid grid-cols-5 gap-2 items-center py-2 border-b">
+                  <div key={section.id} className="grid grid-cols-6 gap-2 items-center py-2 border-b">
                     <div className="font-medium text-sm">{section.label}</div>
                     <div className="flex justify-center">
                       <Switch
@@ -903,6 +890,17 @@ export default function SettingsPage() {
                         <Switch
                           checked={perm?.can_download || false}
                           onCheckedChange={(checked) => updatePermission(section.id, 'can_download', checked)}
+                          disabled={!perm?.can_view}
+                        />
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </div>
+                    <div className="flex justify-center">
+                      {section.hasModifyAllied ? (
+                        <Switch
+                          checked={perm?.can_modify_allied || false}
+                          onCheckedChange={(checked) => updatePermission(section.id, 'can_modify_allied', checked)}
                           disabled={!perm?.can_view}
                         />
                       ) : (
