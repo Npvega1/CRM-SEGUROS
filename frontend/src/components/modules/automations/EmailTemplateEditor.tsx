@@ -1,11 +1,11 @@
 'use client';
 
 // =====================================================
-// COMPONENTE: EmailTemplateEditor
-// Editor de plantillas de email con preview
+// COMPONENTE: EmailTemplateEditor (Mejorado)
+// Editor de plantillas con envío manual, destinatarios y preview
 // =====================================================
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { getBrowserClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -15,12 +15,28 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   AlertCircle,
   Eye,
   Code,
   Copy,
-  Check
+  Check,
+  Send,
+  Users,
+  Loader2,
+  Image as ImageIcon,
+  Upload,
+  X,
+  CheckCircle
 } from 'lucide-react';
 import {
   type EmailTemplate,
@@ -35,6 +51,13 @@ interface EmailTemplateEditorProps {
   onCancel: () => void;
 }
 
+interface Recipient {
+  id: string;
+  email: string;
+  name: string;
+  type: 'client' | 'ally';
+}
+
 export function EmailTemplateEditor({
   template,
   onSave,
@@ -42,19 +65,149 @@ export function EmailTemplateEditor({
 }: EmailTemplateEditorProps) {
   const { tenantId, userId } = useTenant();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [copiedVariable, setCopiedVariable] = useState<string | null>(null);
-  const [previewTab, setPreviewTab] = useState<'edit' | 'preview'>('edit');
+  const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'send'>('edit');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
   const [name, setName] = useState(template?.name || '');
   const [subject, setSubject] = useState(template?.subject || '');
   const [htmlBody, setHtmlBody] = useState(template?.html_body || '');
   const [isActive, setIsActive] = useState(template?.is_active ?? true);
+  const [recipientType, setRecipientType] = useState<'clients' | 'allies' | 'both'>(
+    (template?.recipient_type as 'clients' | 'allies' | 'both') || 'clients'
+  );
+
+  // Send state
+  const [sendToAll, setSendToAll] = useState(true);
+  const [availableRecipients, setAvailableRecipients] = useState<Recipient[]>([]);
+  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
+  const [loadingRecipients, setLoadingRecipients] = useState(false);
 
   const supabase = getBrowserClient();
 
-  // Copiar variable al portapapeles
+  // Cargar destinatarios cuando cambia el tipo
+  useEffect(() => {
+    const loadRecipients = async () => {
+      if (!tenantId) return;
+      
+      setLoadingRecipients(true);
+      const recipients: Recipient[] = [];
+
+      try {
+        if (recipientType === 'clients' || recipientType === 'both') {
+          const { data: clients } = await supabase
+            .from('clients')
+            .select('id, email, full_name')
+            .eq('tenant_id', tenantId)
+            .eq('is_active', true)
+            .not('email', 'is', null)
+            .order('full_name');
+
+          if (clients) {
+            clients.forEach(c => {
+              if (c.email) {
+                recipients.push({
+                  id: c.id,
+                  email: c.email,
+                  name: c.full_name || 'Sin nombre',
+                  type: 'client'
+                });
+              }
+            });
+          }
+        }
+
+        if (recipientType === 'allies' || recipientType === 'both') {
+          const { data: allies } = await supabase
+            .from('allied_agents')
+            .select('id, email, full_name')
+            .eq('tenant_id', tenantId)
+            .eq('is_active', true)
+            .not('email', 'is', null)
+            .order('full_name');
+
+          if (allies) {
+            allies.forEach(a => {
+              if (a.email) {
+                recipients.push({
+                  id: a.id,
+                  email: a.email,
+                  name: a.full_name || 'Sin nombre',
+                  type: 'ally'
+                });
+              }
+            });
+          }
+        }
+
+        setAvailableRecipients(recipients);
+      } catch (err) {
+        console.error('Error loading recipients:', err);
+      } finally {
+        setLoadingRecipients(false);
+      }
+    };
+
+    loadRecipients();
+  }, [tenantId, recipientType, supabase]);
+
+  // Subir imagen
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !tenantId) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Solo se permiten archivos de imagen');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError('La imagen no puede superar 2MB');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setError(null);
+
+    try {
+      const fileName = `${tenantId}/${Date.now()}_${file.name}`;
+      
+      const { data, error: uploadError } = await supabase
+        .storage
+        .from('email-images')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // Obtener URL pública
+      const { data: urlData } = supabase
+        .storage
+        .from('email-images')
+        .getPublicUrl(data.path);
+
+      // Insertar tag de imagen en el cuerpo
+      const imgTag = `\n<img src="${urlData.publicUrl}" alt="Imagen" style="max-width: 100%; height: auto;" />\n`;
+      setHtmlBody(prev => prev + imgTag);
+
+      setSuccess('Imagen subida correctamente');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Error uploading image:', err);
+      setError('Error al subir la imagen');
+    } finally {
+      setIsUploadingImage(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Copiar variable
   const handleCopyVariable = (variableName: string) => {
     const variableText = `{${variableName}}`;
     navigator.clipboard.writeText(variableText);
@@ -62,10 +215,28 @@ export function EmailTemplateEditor({
     setTimeout(() => setCopiedVariable(null), 2000);
   };
 
-  // Insertar variable en el cuerpo del email
+  // Insertar variable
   const insertVariable = (variableName: string) => {
     const variableText = `{${variableName}}`;
-    setHtmlBody(htmlBody + variableText);
+    setHtmlBody(prev => prev + variableText);
+  };
+
+  // Toggle selección de destinatario
+  const toggleRecipient = (id: string) => {
+    setSelectedRecipients(prev => 
+      prev.includes(id) 
+        ? prev.filter(r => r !== id)
+        : [...prev, id]
+    );
+  };
+
+  // Seleccionar/deseleccionar todos
+  const toggleAllRecipients = () => {
+    if (selectedRecipients.length === availableRecipients.length) {
+      setSelectedRecipients([]);
+    } else {
+      setSelectedRecipients(availableRecipients.map(r => r.id));
+    }
   };
 
   // Guardar plantilla
@@ -91,23 +262,20 @@ export function EmailTemplateEditor({
 
     try {
       if (template) {
-        // Actualizar plantilla existente
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase as any)
+        const { error: updateError } = await supabase
           .from('email_templates')
           .update({
             name,
             subject,
             html_body: htmlBody,
-            is_active: isActive
+            is_active: isActive,
+            recipient_type: recipientType
           })
           .eq('id', template.id);
 
         if (updateError) throw updateError;
       } else {
-        // Crear nueva plantilla
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: insertError } = await (supabase as any)
+        const { error: insertError } = await supabase
           .from('email_templates')
           .insert({
             tenant_id: tenantId,
@@ -115,6 +283,7 @@ export function EmailTemplateEditor({
             subject,
             html_body: htmlBody,
             is_active: isActive,
+            recipient_type: recipientType,
             created_by: userId
           });
 
@@ -130,31 +299,98 @@ export function EmailTemplateEditor({
     }
   };
 
-  // Generar preview con datos de ejemplo
+  // Enviar emails
+  const handleSendEmails = async () => {
+    if (!tenantId || !userId) return;
+
+    if (!sendToAll && selectedRecipients.length === 0) {
+      setError('Selecciona al menos un destinatario');
+      return;
+    }
+
+    if (!subject.trim() || !htmlBody.trim()) {
+      setError('El asunto y contenido son requeridos');
+      return;
+    }
+
+    setIsSending(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await fetch('/api/emails/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          template_id: template?.id || null,
+          template_name: name || 'Envío manual',
+          subject,
+          html_body: htmlBody,
+          recipient_type: recipientType,
+          recipient_ids: sendToAll ? null : selectedRecipients,
+          send_to_all: sendToAll,
+          sent_by: userId
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Error al enviar');
+      }
+
+      setSuccess(`Enviados: ${result.sent} de ${result.total} emails`);
+      
+      if (result.failed > 0) {
+        setError(`Fallaron: ${result.failed} emails`);
+      }
+
+    } catch (err) {
+      console.error('Error sending emails:', err);
+      setError(err instanceof Error ? err.message : 'Error al enviar emails');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // Preview con datos de ejemplo
   const exampleContext = getExampleContext();
   const previewSubject = replaceTemplateVariables(subject, exampleContext);
   const previewBody = replaceTemplateVariables(htmlBody, exampleContext);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="space-y-6">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
-          <AlertCircle className="h-4 w-4" />
-          {error}
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="ml-auto">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+          <CheckCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{success}</span>
+          <button onClick={() => setSuccess(null)} className="ml-auto">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
       {/* Información básica */}
       <div className="grid gap-4">
-        <div className="flex items-center justify-between">
-          <div className="flex-1 mr-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1">
             <Label htmlFor="name">Nombre de la plantilla</Label>
             <Input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ej: Recordatorio de renovación"
-              data-testid="template-name-input"
             />
           </div>
           <div className="flex items-center gap-2 pt-6">
@@ -167,19 +403,33 @@ export function EmailTemplateEditor({
           </div>
         </div>
 
-        <div>
-          <Label htmlFor="subject">Asunto del email</Label>
-          <Input
-            id="subject"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Ej: {nombre_cliente}, tu póliza vence pronto"
-            data-testid="template-subject-input"
-          />
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <Label htmlFor="subject">Asunto del email</Label>
+            <Input
+              id="subject"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="Ej: {nombre_cliente}, tu póliza vence pronto"
+            />
+          </div>
+          <div>
+            <Label htmlFor="recipient_type">Tipo de destinatarios</Label>
+            <Select value={recipientType} onValueChange={(v) => setRecipientType(v as typeof recipientType)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="clients">Solo Clientes</SelectItem>
+                <SelectItem value="allies">Solo Aliados</SelectItem>
+                <SelectItem value="both">Clientes y Aliados</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
-      {/* Panel de variables */}
+      {/* Variables disponibles */}
       <div className="border rounded-lg p-4 bg-muted/30">
         <Label className="text-sm font-medium mb-3 block">
           Variables disponibles (click para insertar)
@@ -211,13 +461,10 @@ export function EmailTemplateEditor({
             </Badge>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          Las variables serán reemplazadas con datos reales al enviar el email
-        </p>
       </div>
 
-      {/* Editor / Preview */}
-      <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as 'edit' | 'preview')}>
+      {/* Tabs: Editar / Preview / Enviar */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
         <TabsList className="mb-4">
           <TabsTrigger value="edit" className="gap-2">
             <Code className="h-4 w-4" />
@@ -227,9 +474,41 @@ export function EmailTemplateEditor({
             <Eye className="h-4 w-4" />
             Vista previa
           </TabsTrigger>
+          <TabsTrigger value="send" className="gap-2">
+            <Send className="h-4 w-4" />
+            Enviar
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="edit">
+        {/* Tab: Editar */}
+        <TabsContent value="edit" className="space-y-4">
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingImage}
+            >
+              {isUploadingImage ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <ImageIcon className="h-4 w-4 mr-2" />
+              )}
+              Subir imagen
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Máx. 2MB (JPG, PNG, GIF)
+            </span>
+          </div>
+
           <div>
             <Label htmlFor="html_body">Contenido del email</Label>
             <Textarea
@@ -238,38 +517,139 @@ export function EmailTemplateEditor({
               onChange={(e) => setHtmlBody(e.target.value)}
               placeholder={`Estimado/a {nombre_cliente},
 
-Le recordamos que su póliza {poliza} con {aseguradora} vence el {fecha_vencimiento}.
-
-Para renovar su póliza, por favor comuníquese con nosotros.
+Le recordamos que su póliza {poliza} vence el {fecha_vencimiento}.
 
 Atentamente,
-{agente}
 {tenant_nombre}`}
-              rows={12}
+              rows={14}
               className="font-mono text-sm"
-              data-testid="template-body-input"
             />
             <p className="text-xs text-muted-foreground mt-2">
-              Puedes usar las variables entre llaves {`{variable}`} que serán reemplazadas al enviar
+              Puedes usar HTML y variables entre llaves {`{variable}`}
             </p>
           </div>
         </TabsContent>
 
+        {/* Tab: Preview */}
         <TabsContent value="preview">
           <div className="border rounded-lg overflow-hidden">
             <div className="bg-muted px-4 py-3 border-b">
               <p className="text-sm text-muted-foreground">Vista previa con datos de ejemplo</p>
             </div>
-            <div className="p-4 bg-white">
+            <div className="p-4 bg-white min-h-[300px]">
               <div className="mb-4 pb-4 border-b">
                 <p className="text-sm text-muted-foreground">Asunto:</p>
                 <p className="font-medium">{previewSubject || '(Sin asunto)'}</p>
               </div>
-              <div className="prose prose-sm max-w-none">
-                <pre className="whitespace-pre-wrap font-sans text-sm bg-transparent p-0 m-0">
-                  {previewBody || '(Sin contenido)'}
-                </pre>
+              <div 
+                className="prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ 
+                  __html: previewBody.includes('<') 
+                    ? previewBody 
+                    : `<div style="white-space: pre-wrap;">${previewBody}</div>` 
+                }}
+              />
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Tab: Enviar */}
+        <TabsContent value="send" className="space-y-4">
+          <div className="border rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-muted-foreground" />
+                <span className="font-medium">Destinatarios</span>
+                <Badge variant="secondary">
+                  {recipientType === 'clients' ? 'Clientes' : 
+                   recipientType === 'allies' ? 'Aliados' : 'Todos'}
+                </Badge>
               </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="send_to_all"
+                  checked={sendToAll}
+                  onCheckedChange={setSendToAll}
+                />
+                <Label htmlFor="send_to_all" className="text-sm">
+                  Enviar a todos ({availableRecipients.length})
+                </Label>
+              </div>
+            </div>
+
+            {!sendToAll && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Seleccionados: {selectedRecipients.length}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleAllRecipients}
+                  >
+                    {selectedRecipients.length === availableRecipients.length 
+                      ? 'Deseleccionar todos' 
+                      : 'Seleccionar todos'}
+                  </Button>
+                </div>
+
+                <ScrollArea className="h-[200px] border rounded-md p-2">
+                  {loadingRecipients ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    </div>
+                  ) : availableRecipients.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      No hay destinatarios disponibles
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {availableRecipients.map((recipient) => (
+                        <div
+                          key={recipient.id}
+                          className="flex items-center gap-3 p-2 rounded hover:bg-muted cursor-pointer"
+                          onClick={() => toggleRecipient(recipient.id)}
+                        >
+                          <Checkbox
+                            checked={selectedRecipients.includes(recipient.id)}
+                            onCheckedChange={() => toggleRecipient(recipient.id)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{recipient.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{recipient.email}</p>
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {recipient.type === 'client' ? 'Cliente' : 'Aliado'}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </div>
+            )}
+
+            <div className="mt-4 pt-4 border-t">
+              <Button
+                type="button"
+                onClick={handleSendEmails}
+                disabled={isSending || (!sendToAll && selectedRecipients.length === 0)}
+                className="w-full"
+              >
+                {isSending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Enviar ahora ({sendToAll ? availableRecipients.length : selectedRecipients.length} emails)
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </TabsContent>
@@ -281,13 +661,12 @@ Atentamente,
           Cancelar
         </Button>
         <Button 
-          type="submit" 
+          onClick={handleSubmit}
           disabled={isSubmitting}
-          data-testid="save-template-btn"
         >
           {isSubmitting ? 'Guardando...' : (template ? 'Guardar cambios' : 'Crear plantilla')}
         </Button>
       </div>
-    </form>
+    </div>
   );
 }
