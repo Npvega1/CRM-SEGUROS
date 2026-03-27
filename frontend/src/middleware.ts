@@ -51,7 +51,7 @@ const PORTAL_LOGIN_REGEX = /^\/([a-z0-9-]+)\/(login|auth\/callback)$/;
 
 // Regex para detectar rutas del portal de ALIADOS: /[tenantSlug]/aliado/...
 const ALLIED_PORTAL_REGEX = /^\/([a-z0-9-]+)\/aliado(\/.*)?$/;
-const ALLIED_PUBLIC_ROUTES_REGEX = /^\/([a-z0-9-]+)\/aliado\/(login|setup)(\/.*)?$/;
+const ALLIED_PUBLIC_ROUTES_REGEX = /^\/([a-z0-9-]+)\/aliado\/(login|setup|auth)(\/.*)?$/;
 
 function matchesRoute(pathname: string, routes: string[]): boolean {
   return routes.some(route => {
