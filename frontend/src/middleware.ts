@@ -1,7 +1,7 @@
 // =====================================================
 // MIDDLEWARE: Optimizado para evitar full reloads
 // Solo modifica cookies cuando es necesario
-// Incluye soporte para Portal del Cliente (M07)
+// Incluye soporte para Portal del Cliente (M07) y Aliados (M12)
 // =====================================================
 
 import { NextResponse, type NextRequest } from 'next/server';
@@ -45,9 +45,13 @@ const WEBHOOK_ROUTES = [
   '/api/webhooks/'
 ];
 
-// Regex para detectar rutas del portal: /[tenantSlug]/...
+// Regex para detectar rutas del portal de CLIENTES: /[tenantSlug]/...
 const PORTAL_ROUTE_REGEX = /^\/([a-z0-9-]+)\/(login|dashboard|policies|claims|account|chat|auth)(\/.*)?$/;
 const PORTAL_LOGIN_REGEX = /^\/([a-z0-9-]+)\/(login|auth\/callback)$/;
+
+// Regex para detectar rutas del portal de ALIADOS: /[tenantSlug]/aliado/...
+const ALLIED_PORTAL_REGEX = /^\/([a-z0-9-]+)\/aliado(\/.*)?$/;
+const ALLIED_PUBLIC_ROUTES_REGEX = /^\/([a-z0-9-]+)\/aliado\/(login|setup)(\/.*)?$/;
 
 function matchesRoute(pathname: string, routes: string[]): boolean {
   return routes.some(route => {
@@ -64,6 +68,14 @@ function isPortalRoute(pathname: string): boolean {
 
 function isPortalLoginRoute(pathname: string): boolean {
   return PORTAL_LOGIN_REGEX.test(pathname);
+}
+
+function isAlliedPortalRoute(pathname: string): boolean {
+  return ALLIED_PORTAL_REGEX.test(pathname);
+}
+
+function isAlliedPublicRoute(pathname: string): boolean {
+  return ALLIED_PUBLIC_ROUTES_REGEX.test(pathname);
 }
 
 // =====================================================
@@ -85,6 +97,49 @@ export async function middleware(request: NextRequest) {
 
   // Rutas públicas: dejar pasar
   if (matchesRoute(pathname, PUBLIC_ROUTES)) {
+    return NextResponse.next();
+  }
+
+  // =====================================================
+  // PORTAL DE ALIADOS (M12)
+  // /[tenantSlug]/aliado/...
+  // =====================================================
+  if (isAlliedPortalRoute(pathname)) {
+    // Rutas públicas del portal de aliados: login y setup
+    if (isAlliedPublicRoute(pathname)) {
+      return NextResponse.next();
+    }
+
+    // Otras rutas del portal de aliados: verificar sesión
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.next();
+    }
+
+    const supabase = createServerClient(
+      supabaseUrl,
+      supabaseKey,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll() {},
+        },
+      }
+    );
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    // Sin sesión: redirigir al login del portal de aliados
+    if (!session) {
+      const tenantSlug = pathname.split('/')[1];
+      return NextResponse.redirect(new URL(`/${tenantSlug}/aliado/login`, request.url));
+    }
+
+    // Con sesión: permitir acceso
     return NextResponse.next();
   }
 
