@@ -48,12 +48,13 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
         setTenantId(userTenantId);
         
         // Obtener el slug del tenant
-        const { data: tenant } = await supabase
+        const { data: tenantData } = await supabase
           .from('tenants')
           .select('slug')
           .eq('id', userTenantId)
           .single();
         
+        const tenant = tenantData as { slug: string } | null;
         if (tenant?.slug) {
           setTenantSlug(tenant.slug);
         }
