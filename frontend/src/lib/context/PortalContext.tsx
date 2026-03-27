@@ -92,14 +92,7 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
       // Obtener datos completos del cliente desde la base de datos
       const { data: clientData, error: clientError } = await supabase
         .from('clients')
-        .select(`
-          id,
-          full_name,
-          email,
-          tenant_id,
-          agent_id,
-          tenants:tenant_id (name)
-        `)
+        .select('id, full_name, email, tenant_id, agent_id')
         .eq('id', storedClientId)
         .eq('is_active', true)
         .single();
@@ -116,7 +109,14 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const tenantInfo = clientData.tenants as { name: string } | null;
+      // Obtener nombre del tenant por separado
+      const { data: tenantData } = await supabase
+        .from('tenants')
+        .select('name')
+        .eq('id', clientData.tenant_id)
+        .single();
+
+      const tenantInfo = tenantData as { name: string } | null;
 
       // Cargar settings del tenant y resumen en paralelo
       const [settingsResult, summaryResult, agentResult] = await Promise.all([
