@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useParams } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,10 +23,9 @@ interface AlliedAgentFormProps {
 }
 
 export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormProps) {
-  const params = useParams();
-  const tenantSlug = params.tenantSlug as string || '';
-  
   const [saving, setSaving] = useState(false);
+  const [tenantSlug, setTenantSlug] = useState<string>('');
+  const [tenantId, setTenantId] = useState<string>('');
   const isEditing = !!agent;
 
   const [formData, setFormData] = useState({
@@ -39,6 +37,32 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
     commission_percentage: agent?.commission_percentage || 60,
   });
 
+  // Obtener el tenant del usuario actual
+  useEffect(() => {
+    const loadTenantInfo = async () => {
+      const supabase = getBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const userTenantId = user?.app_metadata?.tenant_id;
+      
+      if (userTenantId) {
+        setTenantId(userTenantId);
+        
+        // Obtener el slug del tenant
+        const { data: tenant } = await supabase
+          .from('tenants')
+          .select('slug')
+          .eq('id', userTenantId)
+          .single();
+        
+        if (tenant?.slug) {
+          setTenantSlug(tenant.slug);
+        }
+      }
+    };
+    
+    loadTenantInfo();
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -49,12 +73,12 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
     setSaving(true);
 
     try {
-      const supabase = getBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      const tenantId = user?.app_metadata?.tenant_id;
-
       if (!tenantId) {
         throw new Error('No se encontró el tenant');
+      }
+
+      if (!tenantSlug) {
+        throw new Error('No se encontró el slug del tenant');
       }
 
       if (isEditing && agent?.id) {
@@ -207,7 +231,7 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={saving || !tenantSlug}>
           {saving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
