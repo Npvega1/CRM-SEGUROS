@@ -15,7 +15,6 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Slider } from '@/components/ui/slider';
 import {
   Select,
   SelectContent,
@@ -33,9 +32,6 @@ import {
 import {
   AlertCircle,
   Eye,
-  Code,
-  Copy,
-  Check,
   Send,
   Users,
   Loader2,
@@ -49,14 +45,12 @@ import {
   FileText,
   Palette,
   Settings,
-  Type,
   AlignLeft,
   AlignCenter,
   AlignRight
 } from 'lucide-react';
 import {
   type EmailTemplate,
-  EMAIL_TEMPLATE_VARIABLES,
   replaceTemplateVariables,
   getExampleContext
 } from '@/lib/validations/automations';
@@ -72,8 +66,10 @@ interface TemplateSettings {
   fontSize: string;
   textAlign: 'left' | 'center' | 'right';
   headerText: string;
+  headerImage: string;
   greeting: string;
   mainContent: string;
+  contentImage: string;
   ctaText: string;
   ctaUrl: string;
   footerText: string;
@@ -87,8 +83,10 @@ const DEFAULT_SETTINGS: TemplateSettings = {
   fontSize: '16px',
   textAlign: 'left',
   headerText: '{tenant_nombre}',
+  headerImage: '',
   greeting: 'Hola, {nombre_cliente}',
   mainContent: 'Escribe aquí el contenido de tu mensaje...',
+  contentImage: '',
   ctaText: 'Ver más',
   ctaUrl: '#',
   footerText: '{tenant_nombre} - Tu tranquilidad es nuestra prioridad',
@@ -213,6 +211,18 @@ function generateEmailHTML(settings: TemplateSettings): string {
     ? contentLines.replace(/<li/g, '<ul style="padding-left: 20px; margin: 15px 0;"><li').replace(/<\/li>(?![\s\S]*<li)/g, '</li></ul>')
     : contentLines;
 
+  const headerImageHTML = settings.headerImage 
+    ? `<div style="text-align: center; padding: 20px 0 0 0;">
+        <img src="${settings.headerImage}" alt="Logo" style="max-width: 200px; max-height: 80px; height: auto;" />
+       </div>` 
+    : '';
+
+  const contentImageHTML = settings.contentImage 
+    ? `<div style="text-align: center; margin: 25px 0;">
+        <img src="${settings.contentImage}" alt="Imagen" style="max-width: 100%; height: auto; border-radius: 8px;" />
+       </div>` 
+    : '';
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -226,8 +236,9 @@ function generateEmailHTML(settings: TemplateSettings): string {
         <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, ${settings.headerColor} 0%, ${adjustColor(settings.headerColor, -20)} 100%); padding: 40px; text-align: center;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; font-family: ${settings.fontFamily};">${settings.headerText}</h1>
+            <td style="background: linear-gradient(135deg, ${settings.headerColor} 0%, ${adjustColor(settings.headerColor, -20)} 100%); padding: 30px 40px; text-align: center;">
+              ${headerImageHTML}
+              <h1 style="color: #ffffff; margin: ${settings.headerImage ? '15px' : '0'} 0 0 0; font-size: 26px; font-weight: 700; font-family: ${settings.fontFamily};">${settings.headerText}</h1>
             </td>
           </tr>
           <!-- Content -->
@@ -235,6 +246,7 @@ function generateEmailHTML(settings: TemplateSettings): string {
             <td style="padding: 40px; font-family: ${settings.fontFamily};">
               <h2 style="color: #1f2937; margin: 0 0 25px 0; font-size: 22px; text-align: ${settings.textAlign};">${settings.greeting}</h2>
               ${contentHTML}
+              ${contentImageHTML}
               ${settings.showButton ? `
               <div style="text-align: center; margin-top: 30px;">
                 <a href="${settings.ctaUrl}" style="display: inline-block; background: linear-gradient(135deg, ${settings.buttonColor} 0%, ${adjustColor(settings.buttonColor, -20)} 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-weight: 600; font-size: 16px; font-family: ${settings.fontFamily};">
@@ -295,10 +307,9 @@ export function EmailTemplateEditor({
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'design' | 'preview' | 'code' | 'send'>('design');
+  const [activeTab, setActiveTab] = useState<'design' | 'preview' | 'send'>('design');
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
   const [name, setName] = useState(template?.name || '');
@@ -313,8 +324,6 @@ export function EmailTemplateEditor({
 
   // Visual editor settings
   const [settings, setSettings] = useState<TemplateSettings>(DEFAULT_SETTINGS);
-  const [useVisualEditor, setUseVisualEditor] = useState(true);
-  const [rawHtml, setRawHtml] = useState('');
 
   // Send state
   const [sendToAll, setSendToAll] = useState(true);
@@ -325,15 +334,7 @@ export function EmailTemplateEditor({
   const supabase = getBrowserClient();
 
   // Generate HTML from settings
-  const generatedHtml = useVisualEditor ? generateEmailHTML(settings) : rawHtml;
-
-  // Load existing template
-  useEffect(() => {
-    if (template?.html_body) {
-      setRawHtml(template.html_body);
-      setUseVisualEditor(false);
-    }
-  }, [template]);
+  const generatedHtml = generateEmailHTML(settings);
 
   // Load recipients
   useEffect(() => {
@@ -402,21 +403,13 @@ export function EmailTemplateEditor({
   const handleSelectPredesignedTemplate = (predesigned: PredesignedTemplate) => {
     setSubject(predesigned.subject);
     setSettings({ ...DEFAULT_SETTINGS, ...predesigned.settings });
-    setUseVisualEditor(true);
     if (!name) setName(predesigned.name);
     setShowTemplateSelector(false);
     setActiveTab('design');
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleImageUpload = async (file: File, type: 'header' | 'content') => {
     if (!file || !tenantId) return;
-
-    if (!file.type.startsWith('image/')) {
-      setError('Solo se permiten archivos de imagen');
-      return;
-    }
-
     if (file.size > 2 * 1024 * 1024) {
       setError('La imagen no puede superar 2MB');
       return;
@@ -426,14 +419,19 @@ export function EmailTemplateEditor({
     setError(null);
 
     try {
-      const fileName = `${tenantId}/${Date.now()}_${file.name}`;
+      const fileName = `${tenantId}/${Date.now()}_${type}_${file.name}`;
       const { data, error: uploadError } = await supabase.storage.from('email-images').upload(fileName, file);
+      
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from('email-images').getPublicUrl(data.path);
-      const imgTag = `\n\n<img src="${urlData.publicUrl}" alt="Imagen" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0;" />\n\n`;
       
-      updateSettings('mainContent', settings.mainContent + imgTag);
+      if (type === 'header') {
+        updateSettings('headerImage', urlData.publicUrl);
+      } else {
+        updateSettings('contentImage', urlData.publicUrl);
+      }
+
       setSuccess('Imagen subida correctamente');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -441,7 +439,6 @@ export function EmailTemplateEditor({
       setError('Error al subir la imagen');
     } finally {
       setIsUploadingImage(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -466,7 +463,7 @@ export function EmailTemplateEditor({
     setError(null);
 
     try {
-      const htmlToSave = useVisualEditor ? generateEmailHTML(settings) : rawHtml;
+      const htmlToSave = generateEmailHTML(settings);
 
       if (template) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -502,7 +499,7 @@ export function EmailTemplateEditor({
     setSuccess(null);
 
     try {
-      const htmlToSend = useVisualEditor ? generateEmailHTML(settings) : rawHtml;
+      const htmlToSend = generateEmailHTML(settings);
       
       const response = await fetch('/api/emails/send', {
         method: 'POST',
@@ -555,8 +552,8 @@ export function EmailTemplateEditor({
         </div>
       )}
 
-      {/* Template Selector for new templates */}
-      {!template && useVisualEditor && (
+      {/* Template Selector */}
+      {!template && (
         <div className="border-2 border-dashed border-primary/30 rounded-lg p-4 bg-primary/5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -628,7 +625,6 @@ export function EmailTemplateEditor({
         <TabsList className="mb-4">
           <TabsTrigger value="design" className="gap-2"><Settings className="h-4 w-4" />Diseño</TabsTrigger>
           <TabsTrigger value="preview" className="gap-2"><Eye className="h-4 w-4" />Vista previa</TabsTrigger>
-          <TabsTrigger value="code" className="gap-2"><Code className="h-4 w-4" />Código</TabsTrigger>
           <TabsTrigger value="send" className="gap-2"><Send className="h-4 w-4" />Enviar</TabsTrigger>
         </TabsList>
 
@@ -720,6 +716,86 @@ export function EmailTemplateEditor({
             </div>
           </div>
 
+          {/* Images */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label className="mb-2 block">Logo/Imagen del Header</Label>
+              <div className="flex items-center gap-2">
+                {settings.headerImage ? (
+                  <div className="relative inline-block">
+                    <img src={settings.headerImage} alt="Header" className="h-16 w-auto rounded border" />
+                    <button
+                      type="button"
+                      onClick={() => updateSettings('headerImage', '')}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImageUpload(file, 'header');
+                        e.target.value = '';
+                      }}
+                      className="hidden"
+                      id="header-image-upload"
+                    />
+                    <label htmlFor="header-image-upload" className="cursor-pointer">
+                      <div className="flex items-center gap-2 px-3 py-2 border rounded-md hover:bg-muted text-sm">
+                        {isUploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                        Subir logo
+                      </div>
+                    </label>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Aparece en el header del email</p>
+            </div>
+            <div>
+              <Label className="mb-2 block">Imagen del Contenido</Label>
+              <div className="flex items-center gap-2">
+                {settings.contentImage ? (
+                  <div className="relative inline-block">
+                    <img src={settings.contentImage} alt="Content" className="h-16 w-auto rounded border" />
+                    <button
+                      type="button"
+                      onClick={() => updateSettings('contentImage', '')}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImageUpload(file, 'content');
+                        e.target.value = '';
+                      }}
+                      className="hidden"
+                      id="content-image-upload"
+                    />
+                    <label htmlFor="content-image-upload" className="cursor-pointer">
+                      <div className="flex items-center gap-2 px-3 py-2 border rounded-md hover:bg-muted text-sm">
+                        {isUploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                        Subir imagen
+                      </div>
+                    </label>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Aparece en el cuerpo del email</p>
+            </div>
+          </div>
+
           {/* Content */}
           <div className="space-y-4">
             <div>
@@ -731,22 +807,14 @@ export function EmailTemplateEditor({
               <Input value={settings.greeting} onChange={(e) => updateSettings('greeting', e.target.value)} placeholder="Hola, {nombre_cliente}" />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <Label>Contenido principal</Label>
-                <div className="flex gap-2">
-                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                  <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage}>
-                    {isUploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
+              <Label>Contenido principal</Label>
               <Textarea
                 value={settings.mainContent}
                 onChange={(e) => updateSettings('mainContent', e.target.value)}
                 rows={8}
                 placeholder="Escribe el contenido de tu email..."
               />
-              <p className="text-xs text-muted-foreground mt-1">Usa • al inicio de línea para crear listas</p>
+              <p className="text-xs text-muted-foreground mt-1">Usa • al inicio de línea para crear listas. Variables: {'{nombre_cliente}'}, {'{tenant_nombre}'}, {'{poliza}'}, {'{fecha}'}</p>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
@@ -782,29 +850,6 @@ export function EmailTemplateEditor({
             <div className="bg-gray-200 p-4">
               <div className="max-w-[600px] mx-auto" dangerouslySetInnerHTML={{ __html: previewHtml }} />
             </div>
-          </div>
-        </TabsContent>
-
-        {/* Code Tab */}
-        <TabsContent value="code">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Código HTML</Label>
-              <Button type="button" variant="ghost" size="sm" onClick={() => { setRawHtml(generatedHtml); setUseVisualEditor(false); }}>
-                Copiar del editor visual
-              </Button>
-            </div>
-            <Textarea
-              value={useVisualEditor ? generatedHtml : rawHtml}
-              onChange={(e) => { setRawHtml(e.target.value); setUseVisualEditor(false); }}
-              rows={16}
-              className="font-mono text-xs"
-            />
-            {!useVisualEditor && (
-              <Button type="button" variant="outline" size="sm" onClick={() => setUseVisualEditor(true)}>
-                Volver al editor visual
-              </Button>
-            )}
           </div>
         </TabsContent>
 
