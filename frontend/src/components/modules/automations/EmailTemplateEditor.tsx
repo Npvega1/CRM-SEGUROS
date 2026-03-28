@@ -1,8 +1,7 @@
 'use client';
 
 // =====================================================
-// COMPONENTE: EmailTemplateEditor (Mejorado)
-// Editor de plantillas con envío manual, destinatarios y preview
+// COMPONENTE: EmailTemplateEditor (Con Plantillas Prediseñadas)
 // =====================================================
 
 import { useState, useEffect, useRef } from 'react';
@@ -24,6 +23,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
   AlertCircle,
   Eye,
   Code,
@@ -34,7 +40,13 @@ import {
   Loader2,
   Image as ImageIcon,
   X,
-  CheckCircle
+  CheckCircle,
+  LayoutTemplate,
+  Megaphone,
+  Bell,
+  PartyPopper,
+  FileText,
+  Palette
 } from 'lucide-react';
 import {
   type EmailTemplate,
@@ -42,6 +54,292 @@ import {
   replaceTemplateVariables,
   getExampleContext
 } from '@/lib/validations/automations';
+
+// =====================================================
+// PLANTILLAS PREDISEÑADAS
+// =====================================================
+
+interface PredesignedTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  subject: string;
+  html: string;
+}
+
+const PREDESIGNED_TEMPLATES: PredesignedTemplate[] = [
+  {
+    id: 'comunicado',
+    name: 'Comunicado General',
+    description: 'Header con color, mensaje y footer',
+    icon: <Megaphone className="h-5 w-5" />,
+    subject: 'Comunicado importante de {tenant_nombre}',
+    html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 40px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">{tenant_nombre}</h1>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 22px;">Hola, {nombre_cliente}</h2>
+              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                Queremos informarte sobre las últimas novedades de nuestra agencia.
+              </p>
+              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                [Escribe aquí tu mensaje principal]
+              </p>
+              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0;">
+                Si tienes alguna pregunta, no dudes en contactarnos.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 30px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
+              <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;">
+                <strong>{tenant_nombre}</strong>
+              </p>
+              <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                Este correo fue enviado a {email_cliente}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+  },
+  {
+    id: 'renovacion',
+    name: 'Recordatorio de Renovación',
+    description: 'Aviso de vencimiento con botón de acción',
+    icon: <Bell className="h-5 w-5" />,
+    subject: '{nombre_cliente}, tu póliza está próxima a vencer',
+    html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 40px; text-align: center;">
+              <div style="font-size: 48px; margin-bottom: 10px;">⏰</div>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700;">Recordatorio de Renovación</h1>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 22px;">Hola, {nombre_cliente}</h2>
+              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                Te recordamos que tu póliza <strong>{poliza}</strong> está próxima a vencer.
+              </p>
+              <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+                <p style="color: #92400e; font-size: 16px; margin: 0;">
+                  <strong>Fecha de vencimiento:</strong> {fecha_vencimiento}
+                </p>
+              </div>
+              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+                Para renovar tu póliza y mantener tu protección activa, contáctanos lo antes posible.
+              </p>
+              <div style="text-align: center;">
+                <a href="#" style="display: inline-block; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                  Renovar Ahora
+                </a>
+              </div>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 30px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
+              <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;">
+                <strong>{tenant_nombre}</strong>
+              </p>
+              <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                ¿Preguntas? Responde a este correo o llámanos.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+  },
+  {
+    id: 'bienvenida',
+    name: 'Bienvenida',
+    description: 'Para nuevos clientes o aliados',
+    icon: <PartyPopper className="h-5 w-5" />,
+    subject: '¡Bienvenido/a a {tenant_nombre}!',
+    html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 50px 40px; text-align: center;">
+              <div style="font-size: 56px; margin-bottom: 15px;">🎉</div>
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">¡Bienvenido/a!</h1>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 22px;">Hola, {nombre_cliente}</h2>
+              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                Nos complace darte la bienvenida a <strong>{tenant_nombre}</strong>. Estamos muy contentos de que formes parte de nuestra familia.
+              </p>
+              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                A partir de ahora, contarás con nuestro respaldo y asesoría profesional en todos tus seguros.
+              </p>
+              <div style="background-color: #ecfdf5; padding: 25px; border-radius: 8px; margin: 25px 0;">
+                <h3 style="color: #065f46; margin: 0 0 15px 0; font-size: 18px;">¿Qué puedes hacer ahora?</h3>
+                <ul style="color: #047857; font-size: 15px; line-height: 1.8; margin: 0; padding-left: 20px;">
+                  <li>Consultar tus pólizas activas</li>
+                  <li>Reportar un siniestro</li>
+                  <li>Contactar a tu asesor</li>
+                </ul>
+              </div>
+              <div style="text-align: center; margin-top: 30px;">
+                <a href="#" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                  Acceder a Mi Portal
+                </a>
+              </div>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 30px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
+              <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;">
+                <strong>{tenant_nombre}</strong>
+              </p>
+              <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                Tu tranquilidad es nuestra prioridad.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+  },
+  {
+    id: 'siniestro',
+    name: 'Notificación de Siniestro',
+    description: 'Actualización de estado de reclamación',
+    icon: <FileText className="h-5 w-5" />,
+    subject: 'Actualización de tu siniestro - {tenant_nombre}',
+    html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 40px; text-align: center;">
+              <div style="font-size: 48px; margin-bottom: 10px;">📋</div>
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700;">Actualización de Siniestro</h1>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 22px;">Hola, {nombre_cliente}</h2>
+              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                Queremos informarte sobre el estado de tu siniestro.
+              </p>
+              <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 25px; border-radius: 8px; margin: 25px 0;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="padding: 8px 0;">
+                      <span style="color: #6b7280; font-size: 14px;">Póliza:</span>
+                      <span style="color: #1f2937; font-size: 14px; font-weight: 600; float: right;">{poliza}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; border-top: 1px solid #e5e7eb;">
+                      <span style="color: #6b7280; font-size: 14px;">Estado:</span>
+                      <span style="color: #1d4ed8; font-size: 14px; font-weight: 600; float: right;">En revisión</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; border-top: 1px solid #e5e7eb;">
+                      <span style="color: #6b7280; font-size: 14px;">Fecha de reporte:</span>
+                      <span style="color: #1f2937; font-size: 14px; font-weight: 600; float: right;">{fecha}</span>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                [Escribe aquí los detalles de la actualización]
+              </p>
+              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0;">
+                Si tienes alguna pregunta sobre tu caso, no dudes en contactarnos.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 30px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
+              <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;">
+                <strong>{tenant_nombre}</strong>
+              </p>
+              <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                Estamos aquí para ayudarte.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+  }
+];
+
+// =====================================================
+// COMPONENTE PRINCIPAL
+// =====================================================
 
 interface EmailTemplateEditorProps {
   template: EmailTemplate | null;
@@ -69,6 +367,7 @@ export function EmailTemplateEditor({
   const [copiedVariable, setCopiedVariable] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'send'>('edit');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
@@ -91,7 +390,7 @@ export function EmailTemplateEditor({
 
   const supabase = getBrowserClient();
 
-  // Cargar destinatarios cuando cambia el tipo
+  // Cargar destinatarios
   useEffect(() => {
     const loadRecipients = async () => {
       if (!tenantId) return;
@@ -161,6 +460,17 @@ export function EmailTemplateEditor({
     loadRecipients();
   }, [tenantId, recipientType, supabase]);
 
+  // Seleccionar plantilla prediseñada
+  const handleSelectPredesignedTemplate = (predesigned: PredesignedTemplate) => {
+    setSubject(predesigned.subject);
+    setHtmlBody(predesigned.html);
+    if (!name) {
+      setName(predesigned.name);
+    }
+    setShowTemplateSelector(false);
+    setActiveTab('preview');
+  };
+
   // Subir imagen
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -194,7 +504,7 @@ export function EmailTemplateEditor({
         .from('email-images')
         .getPublicUrl(data.path);
 
-      const imgTag = `\n<img src="${urlData.publicUrl}" alt="Imagen" style="max-width: 100%; height: auto;" />\n`;
+      const imgTag = `\n\n<div style="text-align: center; margin: 20px 0;">\n  <img src="${urlData.publicUrl}" alt="Imagen" style="max-width: 100%; height: auto; border-radius: 8px;" />\n</div>\n\n`;
       setHtmlBody(prev => prev + imgTag);
 
       setSuccess('Imagen subida correctamente');
@@ -375,6 +685,53 @@ export function EmailTemplateEditor({
         </div>
       )}
 
+      {/* Selector de plantillas prediseñadas */}
+      {!template && (
+        <div className="border-2 border-dashed border-primary/30 rounded-lg p-4 bg-primary/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <LayoutTemplate className="h-5 w-5 text-primary" />
+              <div>
+                <p className="font-medium text-sm">¿Comenzar con una plantilla?</p>
+                <p className="text-xs text-muted-foreground">Selecciona un diseño profesional como base</p>
+              </div>
+            </div>
+            <Dialog open={showTemplateSelector} onOpenChange={setShowTemplateSelector}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Palette className="h-4 w-4 mr-2" />
+                  Ver Plantillas
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Plantillas Prediseñadas</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 md:grid-cols-2 mt-4">
+                  {PREDESIGNED_TEMPLATES.map((pt) => (
+                    <div
+                      key={pt.id}
+                      className="border rounded-lg p-4 hover:border-primary hover:bg-primary/5 cursor-pointer transition-all"
+                      onClick={() => handleSelectPredesignedTemplate(pt)}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                          {pt.icon}
+                        </div>
+                        <div>
+                          <h4 className="font-medium">{pt.name}</h4>
+                          <p className="text-xs text-muted-foreground">{pt.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex-1">
@@ -457,13 +814,13 @@ export function EmailTemplateEditor({
             <span className="text-xs text-muted-foreground">Máx. 2MB</span>
           </div>
           <div>
-            <Label htmlFor="html_body">Contenido del email</Label>
+            <Label htmlFor="html_body">Contenido del email (HTML)</Label>
             <Textarea
               id="html_body"
               value={htmlBody}
               onChange={(e) => setHtmlBody(e.target.value)}
-              placeholder={`Estimado/a {nombre_cliente},\n\nLe recordamos que su póliza vence pronto.\n\nAtentamente,\n{tenant_nombre}`}
-              rows={14}
+              placeholder={`Escribe el contenido de tu email aquí...`}
+              rows={16}
               className="font-mono text-sm"
             />
           </div>
@@ -471,18 +828,18 @@ export function EmailTemplateEditor({
 
         <TabsContent value="preview">
           <div className="border rounded-lg overflow-hidden">
-            <div className="bg-muted px-4 py-3 border-b">
+            <div className="bg-muted px-4 py-3 border-b flex items-center justify-between">
               <p className="text-sm text-muted-foreground">Vista previa con datos de ejemplo</p>
             </div>
-            <div className="p-4 bg-white min-h-[300px]">
-              <div className="mb-4 pb-4 border-b">
+            <div className="bg-gray-100 p-4">
+              <div className="mb-3 bg-white rounded-lg p-3 border">
                 <p className="text-sm text-muted-foreground">Asunto:</p>
                 <p className="font-medium">{previewSubject || '(Sin asunto)'}</p>
               </div>
               <div 
-                className="prose prose-sm max-w-none"
+                className="bg-white rounded-lg overflow-hidden"
                 dangerouslySetInnerHTML={{ 
-                  __html: previewBody.includes('<') ? previewBody : `<div style="white-space: pre-wrap;">${previewBody}</div>` 
+                  __html: previewBody.includes('<') ? previewBody : `<div style="padding: 20px; white-space: pre-wrap;">${previewBody}</div>` 
                 }}
               />
             </div>
