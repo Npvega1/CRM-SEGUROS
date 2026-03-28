@@ -4,7 +4,7 @@
 // COMPONENTE: EmailTemplateEditor (Editor Visual)
 // =====================================================
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { getBrowserClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -67,9 +67,11 @@ interface TemplateSettings {
   textAlign: 'left' | 'center' | 'right';
   headerText: string;
   headerImage: string;
+  headerImageAlign: 'left' | 'center' | 'right';
   greeting: string;
   mainContent: string;
   contentImage: string;
+  contentImagePosition: 'above' | 'below';
   ctaText: string;
   ctaUrl: string;
   footerText: string;
@@ -84,9 +86,11 @@ const DEFAULT_SETTINGS: TemplateSettings = {
   textAlign: 'left',
   headerText: '{tenant_nombre}',
   headerImage: '',
+  headerImageAlign: 'center',
   greeting: 'Hola, {nombre_cliente}',
   mainContent: 'Escribe aquí el contenido de tu mensaje...',
   contentImage: '',
+  contentImagePosition: 'below',
   ctaText: 'Ver más',
   ctaUrl: '#',
   footerText: '{tenant_nombre} - Tu tranquilidad es nuestra prioridad',
@@ -212,7 +216,7 @@ function generateEmailHTML(settings: TemplateSettings): string {
     : contentLines;
 
   const headerImageHTML = settings.headerImage 
-    ? `<div style="text-align: center; padding: 20px 0 0 0;">
+    ? `<div style="text-align: ${settings.headerImageAlign}; padding: 20px 0 0 0;">
         <img src="${settings.headerImage}" alt="Logo" style="max-width: 200px; max-height: 80px; height: auto;" />
        </div>` 
     : '';
@@ -245,8 +249,9 @@ function generateEmailHTML(settings: TemplateSettings): string {
           <tr>
             <td style="padding: 40px; font-family: ${settings.fontFamily};">
               <h2 style="color: #1f2937; margin: 0 0 25px 0; font-size: 22px; text-align: ${settings.textAlign};">${settings.greeting}</h2>
+              ${settings.contentImagePosition === 'above' ? contentImageHTML : ''}
               ${contentHTML}
-              ${contentImageHTML}
+              ${settings.contentImagePosition === 'below' ? contentImageHTML : ''}
               ${settings.showButton ? `
               <div style="text-align: center; margin-top: 30px;">
                 <a href="${settings.ctaUrl}" style="display: inline-block; background: linear-gradient(135deg, ${settings.buttonColor} 0%, ${adjustColor(settings.buttonColor, -20)} 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-weight: 600; font-size: 16px; font-family: ${settings.fontFamily};">
@@ -697,7 +702,7 @@ export function EmailTemplateEditor({
               </Select>
             </div>
             <div>
-              <Label>Alineación</Label>
+              <Label>Alineación del texto</Label>
               <div className="flex gap-1 mt-1">
                 {(['left', 'center', 'right'] as const).map(align => (
                   <Button
@@ -718,8 +723,8 @@ export function EmailTemplateEditor({
 
           {/* Images */}
           <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label className="mb-2 block">Logo/Imagen del Header</Label>
+            <div className="space-y-3">
+              <Label className="block">Logo/Imagen del Header</Label>
               <div className="flex items-center gap-2">
                 {settings.headerImage ? (
                   <div className="relative inline-block">
@@ -754,10 +759,29 @@ export function EmailTemplateEditor({
                   </>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Aparece en el header del email</p>
+              {settings.headerImage && (
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Alineación del logo</Label>
+                  <div className="flex gap-1">
+                    {(['left', 'center', 'right'] as const).map(align => (
+                      <Button
+                        key={align}
+                        type="button"
+                        variant={settings.headerImageAlign === align ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => updateSettings('headerImageAlign', align)}
+                      >
+                        {align === 'left' && <AlignLeft className="h-4 w-4" />}
+                        {align === 'center' && <AlignCenter className="h-4 w-4" />}
+                        {align === 'right' && <AlignRight className="h-4 w-4" />}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div>
-              <Label className="mb-2 block">Imagen del Contenido</Label>
+            <div className="space-y-3">
+              <Label className="block">Imagen del Contenido</Label>
               <div className="flex items-center gap-2">
                 {settings.contentImage ? (
                   <div className="relative inline-block">
@@ -792,7 +816,20 @@ export function EmailTemplateEditor({
                   </>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Aparece en el cuerpo del email</p>
+              {settings.contentImage && (
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Posición de la imagen</Label>
+                  <Select value={settings.contentImagePosition} onValueChange={(v) => updateSettings('contentImagePosition', v)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="above">Arriba del contenido</SelectItem>
+                      <SelectItem value="below">Abajo del contenido</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </div>
 
