@@ -9,41 +9,43 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { getUntypedClient } from '@/lib/supabase/untyped-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { LoadingScreen } from '@/components/ui/spinner';
 import {
   Building,
   Layers,
   FolderTree,
   ChevronRight,
-  Plus,
   Percent,
+  BadgePercent,
 } from 'lucide-react';
 
 interface CatalogStats {
   companies: number;
   lines: number;
   groups: number;
+  commissions: number;
 }
 
 export default function CatalogosPage() {
   const [stats, setStats] = useState<CatalogStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   const supabase = getUntypedClient();
 
   const fetchStats = useCallback(async () => {
     try {
-      const [companiesRes, linesRes, groupsRes] = await Promise.all([
+      const [companiesRes, linesRes, groupsRes, commissionsRes] = await Promise.all([
         supabase.from('insurance_companies').select('id', { count: 'exact', head: true }),
         supabase.from('insurance_lines').select('id', { count: 'exact', head: true }),
         supabase.from('insurance_groups').select('id', { count: 'exact', head: true }),
+        supabase.from('company_group_commissions').select('id', { count: 'exact', head: true }),
       ]);
 
       setStats({
         companies: companiesRes.count || 0,
         lines: linesRes.count || 0,
         groups: groupsRes.count || 0,
+        commissions: commissionsRes.count || 0,
       });
     } catch (error) {
       console.error('Error fetching catalog stats:', error);
@@ -89,6 +91,16 @@ export default function CatalogosPage() {
       bgColor: 'bg-green-500/10',
     },
     {
+      title: 'Comisiones',
+      description: 'Configura el % de comisión por Compañía y Ramo',
+      icon: BadgePercent,
+      href: '/admin/catalogos/comisiones',
+      count: stats?.commissions || 0,
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-500/10',
+      badge: 'Nuevo',
+    },
+    {
       title: 'Tasas Cotizador',
       description: 'Configura tasas y factores para el cotizador determinista',
       icon: Percent,
@@ -96,7 +108,6 @@ export default function CatalogosPage() {
       count: 0,
       color: 'text-amber-500',
       bgColor: 'bg-amber-500/10',
-      badge: 'Nuevo',
     },
   ];
 
@@ -111,7 +122,7 @@ export default function CatalogosPage() {
       </div>
 
       {/* Catalog Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {catalogItems.map((item) => (
           <Link key={item.href} href={item.href}>
             <Card className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer h-full">
@@ -164,7 +175,11 @@ export default function CatalogosPage() {
             (Auto individual, Hogar, Vida Grupo, etc.).
           </p>
           <p>
-            <strong className="text-white">4. Tasas:</strong> Configura las tasas del cotizador determinista 
+            <strong className="text-orange-400">4. Comisiones:</strong> Define el porcentaje de comisión específico 
+            para cada combinación de Compañía + Ramo. Ej: Automóviles de SURA = 12%, Automóviles de Bolívar = 15%.
+          </p>
+          <p>
+            <strong className="text-white">5. Tasas:</strong> Configura las tasas del cotizador determinista 
             para PYME, Hogar, Copropiedad y TRE. Incluye factores de ajuste por zona, antigüedad, etc.
           </p>
           <p className="pt-2 border-t border-zinc-800">
