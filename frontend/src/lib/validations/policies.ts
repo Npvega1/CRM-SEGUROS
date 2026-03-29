@@ -1,7 +1,7 @@
 // =====================================================
 // VALIDACIONES ZOD - Pólizas
 // Módulo 01: Gestión de Pólizas
-// TypeScript estricto - NO usar 'any'
+// Incluye campos: anexo, gastos_expedicion, iva, total_a_pagar, fecha_expedicion
 // =====================================================
 
 import { z } from 'zod';
@@ -22,6 +22,12 @@ export type PolicyLine = z.infer<typeof PolicyLineEnum>;
 export const PolicyStatusEnum = z.enum(['cotizacion', 'activa', 'vencida', 'cancelada', 'renovacion']);
 export type PolicyStatus = z.infer<typeof PolicyStatusEnum>;
 
+/**
+ * Tipo de póliza
+ */
+export const PolicyTypeEnum = z.enum(['original', 'anexo', 'renovacion']);
+export type PolicyType = z.infer<typeof PolicyTypeEnum>;
+
 // =====================================================
 // SCHEMAS ZOD
 // =====================================================
@@ -34,15 +40,26 @@ export const PolicySchema = z.object({
   tenant_id: z.string().uuid(),
   client_id: z.string().uuid(),
   policy_number: z.string().min(1).max(50),
+  anexo: z.string().max(10).default('00'),
   insurer: z.string().min(1).max(100),
-  line: PolicyLineEnum,
+  insurer_id: z.string().uuid().nullable().optional(),
+  line: z.string(),
+  line_id: z.string().uuid().nullable().optional(),
+  group_id: z.string().uuid().nullable().optional(),
   status: PolicyStatusEnum,
   premium: z.number().min(0),
+  gastos_expedicion: z.number().min(0).default(0),
+  iva: z.number().min(0).default(0),
+  total_a_pagar: z.number().min(0).default(0),
   currency: z.string().length(3).default('COP'),
   start_date: z.string().nullable().optional(),
   end_date: z.string().nullable().optional(),
+  fecha_expedicion: z.string().nullable().optional(),
   document_url: z.string().url().nullable().optional(),
   commission_pct: z.number().min(0).max(100).default(0),
+  policy_type: PolicyTypeEnum.nullable().optional(),
+  parent_policy_id: z.string().uuid().nullable().optional(),
+  renewed_from_policy_id: z.string().uuid().nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).default({}),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime()
@@ -57,6 +74,7 @@ export const CreatePolicyInputSchema = z.object({
     .min(1, 'El número de póliza es requerido')
     .max(50, 'Máximo 50 caracteres')
     .transform(val => val.trim().toUpperCase()),
+  anexo: z.string().max(10).default('00'),
   insurer: z.string()
     .min(1, 'La aseguradora es requerida')
     .max(100, 'Máximo 100 caracteres')
@@ -65,16 +83,29 @@ export const CreatePolicyInputSchema = z.object({
   line: z.string().min(1, 'La línea es requerida').default('otro'),
   line_id: z.string().uuid().optional().nullable(),
   group_id: z.string().uuid().optional().nullable(),
-  status: PolicyStatusEnum.default('cotizacion'),
+  status: PolicyStatusEnum.default('activa'),
   premium: z.coerce.number()
     .min(0, 'La prima debe ser mayor o igual a 0'),
+  gastos_expedicion: z.coerce.number()
+    .min(0, 'Los gastos deben ser mayor o igual a 0')
+    .default(0),
+  iva: z.coerce.number()
+    .min(0, 'El IVA debe ser mayor o igual a 0')
+    .default(0),
+  total_a_pagar: z.coerce.number()
+    .min(0, 'El total debe ser mayor o igual a 0')
+    .default(0),
   currency: z.string().length(3).default('COP'),
   start_date: z.string().optional().nullable(),
   end_date: z.string().optional().nullable(),
+  fecha_expedicion: z.string().optional().nullable(),
   commission_pct: z.coerce.number()
     .min(0, 'La comisión debe ser mayor o igual a 0')
     .max(100, 'La comisión no puede ser mayor a 100%')
     .default(0),
+  policy_type: PolicyTypeEnum.optional().nullable(),
+  parent_policy_id: z.string().uuid().optional().nullable(),
+  renewed_from_policy_id: z.string().uuid().optional().nullable(),
   metadata: z.record(z.string(), z.unknown()).default({})
 });
 
