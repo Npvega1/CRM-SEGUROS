@@ -257,7 +257,7 @@ function NewPolicyContent() {
                   id: selectedClient.id,
                   full_name: selectedClient.full_name,
                   document_number: selectedClient.doc_number,
-                  email: selectedClient.email
+                  email: selectedClient.email || undefined
                 } : undefined}
                 onSubmit={handleSubmit}
                 onCancel={() => router.back()}
