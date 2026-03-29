@@ -63,6 +63,7 @@ interface InsuranceGroup {
   operation_type: 'comparison' | 'quotation';
   min_files: number;
   display_order: number;
+  commission_pct: number;
   line_name?: string;
   line_unit?: string;
 }
@@ -84,8 +85,13 @@ export default function GruposPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<InsuranceGroup | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({ name: '', slug: '', line_id: '' });
-  
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    slug: '', 
+    line_id: '',
+    commission_pct: 10
+  });
+
   const supabase = getUntypedClient();
 
   const fetchLines = useCallback(async () => {
@@ -94,6 +100,7 @@ export default function GruposPage() {
       .select('id, name, slug, unit')
       .eq('is_active', true)
       .order('display_order');
+
     setLines((data as InsuranceLine[]) || []);
   }, [supabase]);
 
@@ -114,6 +121,7 @@ export default function GruposPage() {
             .select('name, unit')
             .eq('id', group.line_id)
             .single();
+
           return {
             ...group,
             line_name: lineData?.name || 'Sin ramo',
@@ -155,10 +163,20 @@ export default function GruposPage() {
   const openModal = (group?: InsuranceGroup) => {
     if (group) {
       setEditingGroup(group);
-      setFormData({ name: group.name, slug: group.slug, line_id: group.line_id });
+      setFormData({ 
+        name: group.name, 
+        slug: group.slug, 
+        line_id: group.line_id,
+        commission_pct: group.commission_pct || 10
+      });
     } else {
       setEditingGroup(null);
-      setFormData({ name: '', slug: '', line_id: lines[0]?.id || '' });
+      setFormData({ 
+        name: '', 
+        slug: '', 
+        line_id: lines[0]?.id || '',
+        commission_pct: 10
+      });
     }
     setIsModalOpen(true);
   };
@@ -171,8 +189,14 @@ export default function GruposPage() {
       if (editingGroup) {
         const { error } = await supabase
           .from('insurance_groups')
-          .update({ name: formData.name, slug: formData.slug, line_id: formData.line_id })
+          .update({ 
+            name: formData.name, 
+            slug: formData.slug, 
+            line_id: formData.line_id,
+            commission_pct: formData.commission_pct
+          })
           .eq('id', editingGroup.id);
+
         if (error) throw error;
       } else {
         // Obtener el siguiente display_order para este ramo
@@ -187,8 +211,10 @@ export default function GruposPage() {
             name: formData.name,
             slug: formData.slug,
             line_id: formData.line_id,
+            commission_pct: formData.commission_pct,
             display_order: (count || 0) + 1,
           });
+
         if (error) throw error;
       }
 
@@ -207,6 +233,7 @@ export default function GruposPage() {
         .from('insurance_groups')
         .update({ is_active: !group.is_active })
         .eq('id', group.id);
+
       if (error) throw error;
       fetchGroups();
     } catch (error) {
@@ -222,6 +249,7 @@ export default function GruposPage() {
         .from('insurance_groups')
         .delete()
         .eq('id', group.id);
+
       if (error) throw error;
       fetchGroups();
     } catch (error) {
@@ -235,6 +263,7 @@ export default function GruposPage() {
         .from('insurance_groups')
         .update({ has_ai_prompt: !group.has_ai_prompt })
         .eq('id', group.id);
+
       if (error) throw error;
       fetchGroups();
     } catch (error) {
@@ -246,11 +275,12 @@ export default function GruposPage() {
     try {
       const newType = group.operation_type === 'comparison' ? 'quotation' : 'comparison';
       const newMinFiles = newType === 'quotation' ? 1 : 2;
-      
+
       const { error } = await supabase
         .from('insurance_groups')
         .update({ operation_type: newType, min_files: newMinFiles })
         .eq('id', group.id);
+
       if (error) throw error;
       fetchGroups();
     } catch (error) {
@@ -360,8 +390,8 @@ export default function GruposPage() {
                 <p className="text-xs text-zinc-500">{lineGroups.length} ramos</p>
               </div>
               <Badge
-                className={line_unit === 'generales' 
-                  ? 'bg-blue-500/20 text-blue-400' 
+                className={line_unit === 'generales'
+                  ? 'bg-blue-500/20 text-blue-400'
                   : 'bg-pink-500/20 text-pink-400'
                 }
               >
@@ -374,6 +404,7 @@ export default function GruposPage() {
                   <TableRow className="border-zinc-800 hover:bg-transparent">
                     <TableHead className="text-zinc-400">Ramo</TableHead>
                     <TableHead className="text-zinc-400">Slug</TableHead>
+                    <TableHead className="text-zinc-400 text-center">Comisión %</TableHead>
                     <TableHead className="text-zinc-400 text-center">IA</TableHead>
                     <TableHead className="text-zinc-400 text-center">Tipo</TableHead>
                     <TableHead className="text-zinc-400">Estado</TableHead>
@@ -391,11 +422,16 @@ export default function GruposPage() {
                       </TableCell>
                       <TableCell className="text-zinc-400 font-mono text-sm">{group.slug}</TableCell>
                       <TableCell className="text-center">
+                        <Badge className="bg-amber-500/20 text-amber-400">
+                          {group.commission_pct || 0}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => toggleAiPrompt(group)}
-                          className={group.has_ai_prompt 
+                          className={group.has_ai_prompt
                             ? "text-green-400 hover:text-green-300 hover:bg-green-500/10"
                             : "text-zinc-500 hover:text-zinc-400 hover:bg-zinc-800"
                           }
@@ -413,11 +449,11 @@ export default function GruposPage() {
                             ? "text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
                             : "text-purple-400 hover:text-purple-300 hover:bg-purple-500/10"
                           }
-                          title={group.operation_type === 'quotation' 
-                            ? 'Cotización (1 archivo)' 
+                          title={group.operation_type === 'quotation'
+                            ? 'Cotización (1 archivo)'
                             : 'Comparativo (2+ archivos)'}
                         >
-                          {group.operation_type === 'quotation' 
+                          {group.operation_type === 'quotation'
                             ? <FileText className="h-4 w-4" />
                             : <Files className="h-4 w-4" />
                           }
@@ -444,7 +480,7 @@ export default function GruposPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => toggleActive(group)}
-                            className={group.is_active 
+                            className={group.is_active
                               ? "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
                               : "text-green-400 hover:text-green-300 hover:bg-green-500/10"
                             }
@@ -479,7 +515,6 @@ export default function GruposPage() {
               {editingGroup ? 'Editar Ramo' : 'Nuevo Ramo'}
             </DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4 py-4">
             <div>
               <Label className="text-zinc-300">Grupo</Label>
@@ -517,8 +552,21 @@ export default function GruposPage() {
                 className="mt-1.5 bg-zinc-800 border-zinc-700 text-white font-mono"
               />
             </div>
+            <div>
+              <Label className="text-zinc-300">Comisión %</Label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={formData.commission_pct}
+                onChange={(e) => setFormData({ ...formData, commission_pct: parseFloat(e.target.value) || 0 })}
+                placeholder="10"
+                className="mt-1.5 bg-zinc-800 border-zinc-700 text-white"
+              />
+              <p className="text-xs text-zinc-500 mt-1">Porcentaje de comisión predeterminado para este ramo</p>
+            </div>
           </div>
-
           <DialogFooter>
             <Button
               variant="outline"
