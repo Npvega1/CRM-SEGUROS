@@ -74,7 +74,6 @@ interface PolicyDocument {
 }
 
 interface PolicyWithClient extends Policy {
-  notas?: string;
   client?: {
     id: string;
     full_name: string;
@@ -345,8 +344,10 @@ export default function PolicyDetailPage() {
 
   const polizaDocs = documents.filter(d => d.document_type === 'poliza');
   const soporteDocs = documents.filter(d => d.document_type === 'soporte');
-  const calculatedTotal = (policy.premium || 0) + ((policy as any).gastos_expedicion || 0) + ((policy as any).iva || 0);
-  const displayTotal = (policy as any).total_a_pagar || calculatedTotal;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const policyAny = policy as any;
+  const calculatedTotal = (policy.premium || 0) + (policyAny.gastos_expedicion || 0) + (policyAny.iva || 0);
+  const displayTotal = policyAny.total_a_pagar || calculatedTotal;
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -363,8 +364,8 @@ export default function PolicyDetailPage() {
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
                 Póliza {policy.policy_number}
-                {(policy as any).anexo && (policy as any).anexo !== '00' && (
-                  <Badge variant="outline">Anexo {(policy as any).anexo}</Badge>
+                {policyAny.anexo && policyAny.anexo !== '00' && (
+                  <Badge variant="outline">Anexo {policyAny.anexo}</Badge>
                 )}
               </h1>
               <Badge className={getStatusColor(policy.status as PolicyStatus)}>
@@ -408,11 +409,11 @@ export default function PolicyDetailPage() {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                 <div><span className="text-muted-foreground">Número</span><p className="font-medium">{policy.policy_number}</p></div>
-                <div><span className="text-muted-foreground">Anexo</span><p className="font-medium">{(policy as any).anexo || '00'}</p></div>
+                <div><span className="text-muted-foreground">Anexo</span><p className="font-medium">{policyAny.anexo || '00'}</p></div>
                 <div><span className="text-muted-foreground">Aseguradora</span><p className="font-medium">{policy.insurance_company?.name || policy.insurer}</p></div>
                 <div><span className="text-muted-foreground">Grupo</span><p className="font-medium">{policy.insurance_line?.name || '-'}</p></div>
                 <div><span className="text-muted-foreground">Ramo</span><p className="font-medium">{policy.insurance_group?.name || '-'}</p></div>
-                <div><span className="text-muted-foreground">Comisión</span><p className="font-medium">{(policy as any).commission_pct || 0}%</p></div>
+                <div><span className="text-muted-foreground">Comisión</span><p className="font-medium">{policyAny.commission_pct || 0}%</p></div>
               </div>
             </CardContent>
           </Card>
@@ -424,7 +425,7 @@ export default function PolicyDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-3 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Expedición</span><p className="font-medium">{formatDate((policy as any).fecha_expedicion)}</p></div>
+                <div><span className="text-muted-foreground">Expedición</span><p className="font-medium">{formatDate(policyAny.fecha_expedicion)}</p></div>
                 <div><span className="text-muted-foreground">Inicio</span><p className="font-medium">{formatDate(policy.start_date)}</p></div>
                 <div><span className="text-muted-foreground">Vencimiento</span><p className="font-medium">{formatDate(policy.end_date)}</p></div>
               </div>
@@ -439,8 +440,8 @@ export default function PolicyDetailPage() {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div><span className="text-muted-foreground">Prima</span><p className="font-medium text-lg">{formatCurrency(policy.premium)}</p></div>
-                <div><span className="text-muted-foreground">Gastos Exp.</span><p className="font-medium text-lg">{formatCurrency((policy as any).gastos_expedicion)}</p></div>
-                <div><span className="text-muted-foreground">IVA</span><p className="font-medium text-lg">{formatCurrency((policy as any).iva)}</p></div>
+                <div><span className="text-muted-foreground">Gastos Exp.</span><p className="font-medium text-lg">{formatCurrency(policyAny.gastos_expedicion)}</p></div>
+                <div><span className="text-muted-foreground">IVA</span><p className="font-medium text-lg">{formatCurrency(policyAny.iva)}</p></div>
                 <div><span className="text-muted-foreground">Total</span><p className="font-semibold text-lg text-green-600">{formatCurrency(displayTotal)}</p></div>
               </div>
             </CardContent>
@@ -452,9 +453,9 @@ export default function PolicyDetailPage() {
               <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5" />Notas y Comentarios</CardTitle>
             </CardHeader>
             <CardContent>
-              {policy.notas ? (
+              {policyAny.notas ? (
                 <div className="p-4 bg-slate-50 rounded-lg">
-                  <p className="text-sm whitespace-pre-wrap">{policy.notas}</p>
+                  <p className="text-sm whitespace-pre-wrap">{policyAny.notas}</p>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground italic">No hay comentarios registrados para esta póliza.</p>
@@ -562,8 +563,8 @@ export default function PolicyDetailPage() {
             <CardContent>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Prima</span><span className="font-medium">{formatCurrency(policy.premium)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Gastos</span><span className="font-medium">{formatCurrency((policy as any).gastos_expedicion)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">IVA</span><span className="font-medium">{formatCurrency((policy as any).iva)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Gastos</span><span className="font-medium">{formatCurrency(policyAny.gastos_expedicion)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">IVA</span><span className="font-medium">{formatCurrency(policyAny.iva)}</span></div>
                 <div className="flex justify-between pt-2 border-t"><span className="font-medium">Total</span><span className="font-bold text-green-600">{formatCurrency(displayTotal)}</span></div>
               </div>
             </CardContent>
