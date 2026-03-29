@@ -4,6 +4,7 @@
 // COMPONENTE: PolicyForm
 // Formulario para crear/editar pólizas
 // Con selección en cascada y carga automática de comisión
+// Layout mejorado: Cliente arriba, formulario más amplio
 // =====================================================
 
 import { useEffect, useState } from 'react';
@@ -24,17 +25,9 @@ import {
   type Policy,
   type PolicyStatus
 } from '@/lib/validations/policies';
-import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Calendar } from 'lucide-react';
+import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Calendar, User } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
-
-// Labels para estados (sin cotización)
-const POLICY_STATUS_OPTIONS: { value: PolicyStatus; label: string }[] = [
-  { value: 'activa', label: 'Activa' },
-  { value: 'vencida', label: 'Vencida' },
-  { value: 'cancelada', label: 'Cancelada' },
-  { value: 'renovacion', label: 'En Renovación' },
-];
 
 // Tipos para catálogos de seguros
 interface InsuranceCompany {
@@ -97,9 +90,18 @@ interface PolicyFormData {
   metadata?: Record<string, unknown>;
 }
 
+// Tipo para cliente (para mostrar info)
+interface ClientInfo {
+  id: string;
+  full_name: string;
+  document_number?: string;
+  email?: string;
+}
+
 interface PolicyFormProps {
   policy?: Policy;
   clientId?: string;
+  clientInfo?: ClientInfo;
   onSubmit: (data: PolicyFormData) => Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
@@ -108,6 +110,7 @@ interface PolicyFormProps {
 export function PolicyForm({
   policy,
   clientId,
+  clientInfo,
   onSubmit,
   onCancel,
   isLoading = false
@@ -193,7 +196,7 @@ export function PolicyForm({
   useEffect(() => {
     async function loadCommission() {
       if (!selectedCompanyId || !selectedGroupId) return;
-
+      
       setLoadingCommission(true);
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -422,386 +425,411 @@ export function PolicyForm({
   const loading = isLoading || isSubmitting;
 
   // Generar opciones de anexo (00-99)
-  const anexoOptions = Array.from({ length: 100 }, (_, i) => 
+  const anexoOptions = Array.from({ length: 100 }, (_, i) =>
     i.toString().padStart(2, '0')
   );
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
+    <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6 max-w-4xl mx-auto">
       {/* Client ID (oculto) */}
       <input type="hidden" {...register('client_id')} />
 
-      {/* Número de Póliza + Anexo */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="md:col-span-3 space-y-2">
-          <Label htmlFor="policy_number">Número de Póliza *</Label>
-          <Input
-            id="policy_number"
-            placeholder="Ej: POL-2024-001"
-            {...register('policy_number')}
-            disabled={loading}
-            data-testid="policy-number-input"
-          />
-          {errors.policy_number && (
-            <p className="text-sm text-red-500">{errors.policy_number.message}</p>
-          )}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="anexo">Anexo</Label>
-          <Select
-            value={watch('anexo') || '00'}
-            onValueChange={(value) => setValue('anexo', value)}
-            disabled={loading}
-          >
-            <SelectTrigger id="anexo" data-testid="policy-anexo-select">
-              <SelectValue placeholder="00" />
-            </SelectTrigger>
-            <SelectContent className="max-h-[200px]">
-              {anexoOptions.map((num) => (
-                <SelectItem key={num} value={num}>
-                  {num}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Selección en cascada: Compañía → Grupo → Ramo */}
-      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-          <Building className="h-4 w-4" />
-          Selección de Producto
-        </div>
-
-        {loadingCatalogs ? (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-sm text-muted-foreground">Cargando catálogos...</span>
-          </div>
-        ) : tenantCompanies.length === 0 ? (
-          <div className="text-center py-4 text-amber-600 bg-amber-50 rounded-lg">
-            <p className="text-sm">No tienes compañías activas configuradas.</p>
-            <p className="text-xs mt-1">Ve a Configuración → Compañías para activarlas.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Compañía */}
-            <div className="space-y-2">
-              <Label htmlFor="company" className="flex items-center gap-1">
-                <Building className="h-3 w-3" />
-                Compañía *
-              </Label>
-              <Select
-                value={selectedCompanyId}
-                onValueChange={(value) => {
-                  setSelectedCompanyId(value);
-                  setSelectedLineId('');
-                  setSelectedGroupId('');
-                }}
-                disabled={loading}
-              >
-                <SelectTrigger id="company" data-testid="policy-company-select">
-                  <SelectValue placeholder="Seleccionar compañía" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenantCompanies.map((tc) => (
-                    <SelectItem key={tc.company_id} value={tc.company_id}>
-                      {tc.company.name}
-                      {tc.company_code && (
-                        <span className="text-muted-foreground ml-2">({tc.company_code})</span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* ========== CLIENTE SELECCIONADO (ARRIBA) ========== */}
+      {clientInfo && (
+        <div className="p-4 border rounded-lg bg-gradient-to-r from-blue-50 to-slate-50 border-blue-200">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600">
+              <User className="h-6 w-6" />
             </div>
-
-            {/* Grupo (Línea de seguro) */}
-            <div className="space-y-2">
-              <Label htmlFor="line" className="flex items-center gap-1">
-                <Layers className="h-3 w-3" />
-                Grupo *
-              </Label>
-              <Select
-                value={selectedLineId}
-                onValueChange={(value) => {
-                  setSelectedLineId(value);
-                  setSelectedGroupId('');
-                }}
-                disabled={loading || !selectedCompanyId || availableLines.length === 0}
-              >
-                <SelectTrigger id="line" data-testid="policy-line-select">
-                  <SelectValue placeholder={!selectedCompanyId ? "Primero selecciona compañía" : "Seleccionar grupo"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableLines.map((line) => (
-                    <SelectItem key={line.id} value={line.id}>
-                      {line.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Ramo (Grupo de seguro) */}
-            <div className="space-y-2">
-              <Label htmlFor="group" className="flex items-center gap-1">
-                <FileText className="h-3 w-3" />
-                Ramo *
-              </Label>
-              <Select
-                value={selectedGroupId}
-                onValueChange={setSelectedGroupId}
-                disabled={loading || !selectedLineId || availableGroups.length === 0}
-              >
-                <SelectTrigger id="group" data-testid="policy-group-select">
-                  <SelectValue placeholder={!selectedLineId ? "Primero selecciona grupo" : "Seleccionar ramo"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableGroups.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {group.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex-1">
+              <p className="text-sm text-slate-500 font-medium">Cliente seleccionado</p>
+              <p className="text-lg font-semibold text-slate-800">{clientInfo.full_name}</p>
+              {clientInfo.document_number && (
+                <p className="text-sm text-slate-600">Doc: {clientInfo.document_number}</p>
+              )}
             </div>
           </div>
-        )}
-
-        {/* Campos ocultos */}
-        <input type="hidden" {...register('insurer')} />
-        <input type="hidden" {...register('line')} />
-      </div>
-
-      {/* Estado */}
-      <div className="space-y-2">
-        <Label htmlFor="status">Estado *</Label>
-        <Select
-          value={status}
-          onValueChange={(value: PolicyStatus) => setValue('status', value)}
-          disabled={loading || isEditing}
-        >
-          <SelectTrigger id="status" data-testid="policy-status-select" className="w-full md:w-1/3">
-            <SelectValue placeholder="Seleccionar estado" />
-          </SelectTrigger>
-          <SelectContent>
-            {POLICY_STATUS_OPTIONS.map(({ value, label }) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {isEditing && (
-          <p className="text-xs text-muted-foreground">
-            Para cambiar el estado, usa el stepper de estados
-          </p>
-        )}
-      </div>
-
-      {/* Valores de la Póliza */}
-      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-          Valores de la Póliza
         </div>
+      )}
 
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 items-end">
-          {/* Moneda */}
+      {/* ========== DATOS DE LA PÓLIZA ========== */}
+      <div className="p-6 border rounded-lg bg-white shadow-sm">
+        <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2">
+          <FileText className="h-5 w-5 text-blue-600" />
+          Datos de la Póliza
+        </h3>
+
+        {/* Número de Póliza + Anexo */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="md:col-span-3 space-y-2">
+            <Label htmlFor="policy_number">Número de Póliza *</Label>
+            <Input
+              id="policy_number"
+              placeholder="Ej: POL-2024-001"
+              {...register('policy_number')}
+              disabled={loading}
+              data-testid="policy-number-input"
+              className="h-11"
+            />
+            {errors.policy_number && (
+              <p className="text-sm text-red-500">{errors.policy_number.message}</p>
+            )}
+          </div>
           <div className="space-y-2">
-            <Label htmlFor="currency">Moneda</Label>
+            <Label htmlFor="anexo">Anexo</Label>
             <Select
-              value={watch('currency') || 'COP'}
-              onValueChange={(value) => setValue('currency', value)}
+              value={watch('anexo') || '00'}
+              onValueChange={(value) => setValue('anexo', value)}
               disabled={loading}
             >
-              <SelectTrigger id="currency">
-                <SelectValue />
+              <SelectTrigger id="anexo" data-testid="policy-anexo-select" className="h-11">
+                <SelectValue placeholder="00" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="COP">COP</SelectItem>
-                <SelectItem value="USD">USD</SelectItem>
+                {anexoOptions.map((num) => (
+                  <SelectItem key={num} value={num}>
+                    {num}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
+        </div>
 
-          {/* Prima */}
-          <div className="space-y-2">
-            <Label htmlFor="premium">Prima *</Label>
-            <Input
-              id="premium"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              {...register('premium', { valueAsNumber: true })}
-              disabled={loading}
-              data-testid="policy-premium-input"
-            />
+        {/* Selección en cascada: Compañía → Grupo → Ramo */}
+        <div className="space-y-4 p-5 border rounded-lg bg-slate-50 mb-6">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            <Building className="h-4 w-4" />
+            Selección de Producto
           </div>
+          
+          {loadingCatalogs ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-sm text-muted-foreground">Cargando catálogos...</span>
+            </div>
+          ) : tenantCompanies.length === 0 ? (
+            <div className="text-center py-4 text-amber-600 bg-amber-50 rounded-lg">
+              <p className="text-sm">No tienes compañías activas configuradas.</p>
+              <p className="text-xs mt-1">Ve a Configuración → Compañías para activarlas.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Compañía */}
+              <div className="space-y-2">
+                <Label htmlFor="company" className="flex items-center gap-1">
+                  <Building className="h-3 w-3" />
+                  Compañía *
+                </Label>
+                <Select
+                  value={selectedCompanyId}
+                  onValueChange={(value) => {
+                    setSelectedCompanyId(value);
+                    setSelectedLineId('');
+                    setSelectedGroupId('');
+                  }}
+                  disabled={loading}
+                >
+                  <SelectTrigger id="company" data-testid="policy-company-select" className="h-11">
+                    <SelectValue placeholder="Seleccionar..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tenantCompanies.map((tc) => (
+                      <SelectItem key={tc.company_id} value={tc.company_id}>
+                        {tc.company.name}
+                        {tc.company_code && (
+                          <span className="text-muted-foreground ml-2">({tc.company_code})</span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {/* Gastos Expedición */}
-          <div className="space-y-2">
-            <Label htmlFor="gastos_expedicion">Gastos Exp.</Label>
-            <Input
-              id="gastos_expedicion"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              {...register('gastos_expedicion', { valueAsNumber: true })}
-              disabled={loading}
-              data-testid="policy-gastos-input"
-            />
-          </div>
+              {/* Grupo (Línea de seguro) */}
+              <div className="space-y-2">
+                <Label htmlFor="line" className="flex items-center gap-1">
+                  <Layers className="h-3 w-3" />
+                  Grupo *
+                </Label>
+                <Select
+                  value={selectedLineId}
+                  onValueChange={(value) => {
+                    setSelectedLineId(value);
+                    setSelectedGroupId('');
+                  }}
+                  disabled={loading || !selectedCompanyId || availableLines.length === 0}
+                >
+                  <SelectTrigger id="line" data-testid="policy-line-select" className="h-11">
+                    <SelectValue placeholder={!selectedCompanyId ? "Primero selecciona compañía" : "Seleccionar..."} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableLines.map((line) => (
+                      <SelectItem key={line.id} value={line.id}>
+                        {line.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {/* IVA */}
-          <div className="space-y-2">
-            <Label htmlFor="iva">IVA</Label>
-            <Input
-              id="iva"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              {...register('iva', { valueAsNumber: true })}
-              disabled={loading}
-              data-testid="policy-iva-input"
-            />
-          </div>
+              {/* Ramo (Grupo de seguro) */}
+              <div className="space-y-2">
+                <Label htmlFor="group" className="flex items-center gap-1">
+                  <FileText className="h-3 w-3" />
+                  Ramo *
+                </Label>
+                <Select
+                  value={selectedGroupId}
+                  onValueChange={setSelectedGroupId}
+                  disabled={loading || !selectedLineId || availableGroups.length === 0}
+                >
+                  <SelectTrigger id="group" data-testid="policy-group-select" className="h-11">
+                    <SelectValue placeholder={!selectedLineId ? "Primero selecciona grupo" : "Seleccionar..."} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableGroups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
 
-          {/* Total */}
-          <div className="space-y-2">
-            <Label htmlFor="total_a_pagar">Total</Label>
-            <Input
-              id="total_a_pagar"
-              type="number"
-              value={watch('total_a_pagar') || 0}
-              disabled
-              className="bg-slate-200 font-semibold"
-              data-testid="policy-total-input"
-            />
-          </div>
+          {/* Campos ocultos */}
+          <input type="hidden" {...register('insurer')} />
+          <input type="hidden" {...register('line')} />
+        </div>
 
-          {/* Comisión */}
-          <div className="space-y-2">
-            <Label htmlFor="commission_pct" className="flex items-center gap-1">
-              Comisión %
-              {loadingCommission && <Loader2 className="h-3 w-3 animate-spin" />}
-            </Label>
-            <Input
-              id="commission_pct"
-              type="number"
-              step="0.5"
-              min="0"
-              max="100"
-              placeholder="0"
-              {...register('commission_pct', { valueAsNumber: true })}
-              disabled={loading}
-              data-testid="policy-commission-input"
-            />
+        {/* Estado - SOLO ACTIVA */}
+        <div className="mb-6">
+          <div className="space-y-2 max-w-xs">
+            <Label htmlFor="status">Estado *</Label>
+            <Select
+              value={status}
+              onValueChange={(value: PolicyStatus) => setValue('status', value)}
+              disabled={loading || isEditing}
+            >
+              <SelectTrigger id="status" data-testid="policy-status-select" className="h-11">
+                <SelectValue placeholder="Seleccionar estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="activa">Activa</SelectItem>
+              </SelectContent>
+            </Select>
+            {isEditing && (
+              <p className="text-xs text-muted-foreground">
+                Para cambiar el estado, usa el stepper de estados
+              </p>
+            )}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados (modificable).
-        </p>
+
+        {/* Valores de la Póliza */}
+        <div className="space-y-4 p-5 border rounded-lg bg-slate-50 mb-6">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            Valores de la Póliza
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            {/* Moneda */}
+            <div className="space-y-2">
+              <Label htmlFor="currency">Moneda</Label>
+              <Select
+                value={watch('currency') || 'COP'}
+                onValueChange={(value) => setValue('currency', value)}
+                disabled={loading}
+              >
+                <SelectTrigger id="currency" className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="COP">COP</SelectItem>
+                  <SelectItem value="USD">USD</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Prima */}
+            <div className="space-y-2">
+              <Label htmlFor="premium">Prima *</Label>
+              <Input
+                id="premium"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0"
+                {...register('premium', { valueAsNumber: true })}
+                disabled={loading}
+                data-testid="policy-premium-input"
+                className="h-11"
+              />
+            </div>
+
+            {/* Gastos Expedición */}
+            <div className="space-y-2">
+              <Label htmlFor="gastos_expedicion">Gastos Exp.</Label>
+              <Input
+                id="gastos_expedicion"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0"
+                {...register('gastos_expedicion', { valueAsNumber: true })}
+                disabled={loading}
+                className="h-11"
+              />
+            </div>
+
+            {/* IVA */}
+            <div className="space-y-2">
+              <Label htmlFor="iva">IVA</Label>
+              <Input
+                id="iva"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0"
+                {...register('iva', { valueAsNumber: true })}
+                disabled={loading}
+                className="h-11"
+              />
+            </div>
+
+            {/* Total */}
+            <div className="space-y-2">
+              <Label htmlFor="total_a_pagar">Total</Label>
+              <Input
+                id="total_a_pagar"
+                type="number"
+                {...register('total_a_pagar', { valueAsNumber: true })}
+                disabled
+                className="bg-blue-50 font-semibold h-11"
+              />
+            </div>
+
+            {/* Comisión */}
+            <div className="space-y-2">
+              <Label htmlFor="commission_pct" className="flex items-center gap-1">
+                Comisión %
+                {loadingCommission && <Loader2 className="h-3 w-3 animate-spin" />}
+              </Label>
+              <Input
+                id="commission_pct"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                placeholder="0"
+                {...register('commission_pct', { valueAsNumber: true })}
+                disabled={loading}
+                className="h-11"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados (modificable).
+          </p>
+        </div>
+
+        {/* Fechas: Expedición, Inicio, Vencimiento */}
+        <div className="space-y-4 p-5 border rounded-lg bg-slate-50 mb-6">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            <Calendar className="h-4 w-4" />
+            Fechas
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
+              <Input
+                id="fecha_expedicion"
+                type="date"
+                {...register('fecha_expedicion')}
+                disabled={loading}
+                className="h-11"
+              />
+              <p className="text-xs text-muted-foreground">Fecha en que se expide la póliza</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="start_date">Fecha de Inicio</Label>
+              <Input
+                id="start_date"
+                type="date"
+                value={startDate || ''}
+                onChange={handleStartDateChange}
+                disabled={loading}
+                data-testid="policy-start-date-input"
+                className="h-11"
+              />
+              <p className="text-xs text-muted-foreground">Al cambiar, se calcula el vencimiento a 1 año</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="end_date">Fecha de Vencimiento</Label>
+              <Input
+                id="end_date"
+                type="date"
+                {...register('end_date')}
+                disabled={loading}
+                data-testid="policy-end-date-input"
+                className="h-11"
+              />
+              <p className="text-xs text-muted-foreground">Puedes ajustar manualmente</p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Fechas: Expedición, Inicio, Vencimiento */}
-      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-          <Calendar className="h-4 w-4" />
-          Fechas
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
-            <Input
-              id="fecha_expedicion"
-              type="date"
-              {...register('fecha_expedicion')}
-              disabled={loading}
-              data-testid="policy-expedition-date-input"
-            />
-            <p className="text-xs text-muted-foreground">
-              Fecha en que se expide la póliza
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="start_date">Fecha de Inicio</Label>
-            <Input
-              id="start_date"
-              type="date"
-              value={startDate || ''}
-              onChange={handleStartDateChange}
-              disabled={loading}
-              data-testid="policy-start-date-input"
-            />
-            <p className="text-xs text-muted-foreground">
-              Al cambiar, se calcula el vencimiento a 1 año
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="end_date">Fecha de Vencimiento</Label>
-            <Input
-              id="end_date"
-              type="date"
-              {...register('end_date')}
-              disabled={loading}
-              data-testid="policy-end-date-input"
-            />
-            <p className="text-xs text-muted-foreground">
-              Puedes ajustar manualmente
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Documentos Adjuntos */}
-      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-          <FileText className="h-4 w-4" />
+      {/* ========== DOCUMENTOS ADJUNTOS ========== */}
+      <div className="p-6 border rounded-lg bg-white shadow-sm">
+        <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2">
+          <FileText className="h-5 w-5 text-blue-600" />
           Documentos Adjuntos
-        </div>
+        </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Documentos de Póliza */}
-          <div className="space-y-3 p-4 bg-white rounded-lg border">
-            <div className="flex items-center justify-between">
-              <Label className="text-base font-medium">Documentos de Póliza</Label>
-              <span className="text-sm text-muted-foreground bg-slate-100 px-2 py-1 rounded">
+          <div className="space-y-3 p-4 border rounded-lg bg-slate-50">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="font-medium text-slate-700">Documentos de Póliza</p>
+              </div>
+              <span className="text-xs text-slate-500 bg-slate-200 px-2 py-1 rounded">
                 {polizaDocuments.length} / 5
               </span>
             </div>
-            
+
+            <input
+              type="file"
+              id="poliza-upload"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+              multiple
+              onChange={handlePolizaFileChange}
+              className="hidden"
+              disabled={loading || polizaDocuments.length >= 5}
+            />
+
             {polizaDocuments.length < 5 && (
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                  multiple
-                  onChange={handlePolizaFileChange}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  disabled={loading}
-                />
-                <div className="flex items-center justify-center gap-2 p-6 border-2 border-dashed border-blue-300 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer">
-                  <Upload className="h-5 w-5 text-blue-500" />
-                  <span className="text-sm text-blue-600 font-medium">Subir documento de póliza</span>
-                </div>
-              </div>
+              <label
+                htmlFor="poliza-upload"
+                className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-blue-300 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors"
+              >
+                <Upload className="h-6 w-6 text-blue-500 mb-1" />
+                <span className="text-sm text-blue-600 font-medium">Subir documento de póliza</span>
+              </label>
             )}
 
             {polizaDocuments.length > 0 && (
               <div className="space-y-2 mt-3">
                 {polizaDocuments.map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="flex items-center gap-2">
-                      <File className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm truncate max-w-[200px]">{doc.file_name}</span>
+                  <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <File className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                      <span className="text-sm truncate">{doc.file_name}</span>
                     </div>
                     <Button
                       type="button"
@@ -809,7 +837,7 @@ export function PolicyForm({
                       size="sm"
                       onClick={() => removePolizaDoc(index)}
                       disabled={loading}
-                      className="h-8 w-8 p-0 hover:bg-red-100"
+                      className="h-8 w-8 p-0 hover:bg-red-100 flex-shrink-0"
                     >
                       <Trash2 className="h-4 w-4 text-red-500" />
                     </Button>
@@ -820,43 +848,44 @@ export function PolicyForm({
           </div>
 
           {/* Documentos de Soporte */}
-          <div className="space-y-3 p-4 bg-white rounded-lg border">
-            <div className="flex items-center justify-between">
+          <div className="space-y-3 p-4 border rounded-lg bg-slate-50">
+            <div className="flex justify-between items-center">
               <div>
-                <Label className="text-base font-medium">Documentos de Soporte</Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Sarlaft, Cédula, CCB, RUT, Estados Financieros
-                </p>
+                <p className="font-medium text-slate-700">Documentos de Soporte</p>
+                <p className="text-xs text-slate-500">Sarlaft, Cédula, CCB, RUT, Estados Financieros</p>
               </div>
-              <span className="text-sm text-muted-foreground bg-slate-100 px-2 py-1 rounded">
+              <span className="text-xs text-slate-500 bg-slate-200 px-2 py-1 rounded">
                 {soporteDocuments.length} / 8
               </span>
             </div>
-            
+
+            <input
+              type="file"
+              id="soporte-upload"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+              multiple
+              onChange={handleSoporteFileChange}
+              className="hidden"
+              disabled={loading || soporteDocuments.length >= 8}
+            />
+
             {soporteDocuments.length < 8 && (
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                  multiple
-                  onChange={handleSoporteFileChange}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  disabled={loading}
-                />
-                <div className="flex items-center justify-center gap-2 p-6 border-2 border-dashed border-green-300 rounded-lg hover:bg-green-50 transition-colors cursor-pointer">
-                  <Upload className="h-5 w-5 text-green-500" />
-                  <span className="text-sm text-green-600 font-medium">Subir documentos soporte</span>
-                </div>
-              </div>
+              <label
+                htmlFor="soporte-upload"
+                className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-emerald-300 rounded-lg cursor-pointer hover:bg-emerald-50 transition-colors"
+              >
+                <Upload className="h-6 w-6 text-emerald-500 mb-1" />
+                <span className="text-sm text-emerald-600 font-medium">Subir documentos soporte</span>
+              </label>
             )}
 
             {soporteDocuments.length > 0 && (
               <div className="space-y-2 mt-3">
                 {soporteDocuments.map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
-                    <div className="flex items-center gap-2">
-                      <File className="h-4 w-4 text-green-600" />
-                      <span className="text-sm truncate max-w-[200px]">{doc.file_name}</span>
+                  <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <File className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                      <span className="text-sm truncate">{doc.file_name}</span>
                     </div>
                     <Button
                       type="button"
@@ -864,7 +893,7 @@ export function PolicyForm({
                       size="sm"
                       onClick={() => removeSoporteDoc(index)}
                       disabled={loading}
-                      className="h-8 w-8 p-0 hover:bg-red-100"
+                      className="h-8 w-8 p-0 hover:bg-red-100 flex-shrink-0"
                     >
                       <Trash2 className="h-4 w-4 text-red-500" />
                     </Button>
