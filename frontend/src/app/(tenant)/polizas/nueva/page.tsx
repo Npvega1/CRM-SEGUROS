@@ -1,14 +1,9 @@
 'use client';
 
-// =====================================================
-// PÁGINA: Nueva Póliza
-// /polizas/nueva
-// =====================================================
-
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PolicyForm, type PolicyDocument, type PolicySubmitData } from '@/components/modules/policies/PolicyForm';
+import { PolicyForm, type PolicyFormData } from '@/components/modules/policies/PolicyForm';
 import type { Client } from '@/lib/validations/clients';
 import { ArrowLeft, Shield, AlertCircle, Search, Loader2, User, Check } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
@@ -33,7 +28,6 @@ function NewPolicyContent() {
   useEffect(() => {
     async function loadClients() {
       if (!tenantId) return;
-
       setIsLoadingClients(true);
       try {
         const supabase = getBrowserClient();
@@ -43,7 +37,6 @@ function NewPolicyContent() {
           .eq('tenant_id', tenantId)
           .order('full_name', { ascending: true })
           .limit(100);
-
         setClients((data || []) as Client[]);
       } catch (err) {
         console.error('Error loading clients:', err);
@@ -60,61 +53,11 @@ function NewPolicyContent() {
     client.doc_number.includes(clientSearch)
   );
 
-  // Función para subir documentos a Supabase Storage
-  const uploadDocuments = async (
-    policyId: string,
-    documents: PolicyDocument[]
-  ): Promise<void> => {
-    const supabase = getBrowserClient();
-    
-    for (const doc of documents) {
-      if (!doc.file) continue;
-
-      const fileExt = doc.file.name.split('.').pop();
-      const fileName = `${policyId}/${doc.document_type}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('policy-documents')
-        .upload(fileName, doc.file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (uploadError) {
-        console.error('Error uploading file:', uploadError);
-        throw new Error(`Error al subir ${doc.file.name}: ${uploadError.message}`);
-      }
-
-      const { data: urlData } = supabase.storage
-        .from('policy-documents')
-        .getPublicUrl(fileName);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: dbError } = await (supabase as any)
-        .from('policy_documents')
-        .insert({
-          tenant_id: tenantId,
-          policy_id: policyId,
-          document_type: doc.document_type,
-          document_name: doc.document_name,
-          file_url: urlData.publicUrl,
-          file_name: fileName
-        });
-
-      if (dbError) {
-        console.error('Error saving document reference:', dbError);
-        throw new Error(`Error al guardar referencia: ${dbError.message}`);
-      }
-    }
-  };
-
-  // Handler del formulario
-  const handleSubmit = async (data: PolicySubmitData) => {
+  const handleSubmit = async (data: PolicyFormData) => {
     if (!selectedClientId) {
       setError('Debes seleccionar un cliente');
       return;
     }
-
     if (!tenantId || !userId) {
       setError('No hay sesión activa');
       return;
@@ -149,6 +92,7 @@ function NewPolicyContent() {
           fecha_expedicion: data.fecha_expedicion || null,
           start_date: data.start_date || null,
           end_date: data.end_date || null,
+          notas: data.notas || null,
           metadata: data.metadata || {}
         })
         .select()
@@ -158,17 +102,6 @@ function NewPolicyContent() {
         setError(insertError.message || 'Error al crear la póliza');
         setIsLoading(false);
         return;
-      }
-
-      const allDocuments = [...(data.polizaDocuments || []), ...(data.soporteDocuments || [])];
-      if (allDocuments.length > 0) {
-        try {
-          await uploadDocuments(newPolicy.id, allDocuments);
-        } catch (uploadErr) {
-          console.error('Error uploading documents:', uploadErr);
-          router.push(`/polizas/${newPolicy.id}?warning=documents`);
-          return;
-        }
       }
 
       router.push(`/polizas/${newPolicy.id}`);
@@ -246,7 +179,7 @@ function NewPolicyContent() {
                     className={`w-full text-left p-3 rounded-lg border transition-all ${
                       selectedClientId === client.id
                         ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                        : 'border-border hover:bg-muted/50 hover:border-muted-foreground/30'
+                        : 'border-border hover:bg-muted/50'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -254,9 +187,7 @@ function NewPolicyContent() {
                         <p className="font-medium text-sm">{client.full_name}</p>
                         <p className="text-xs text-muted-foreground">{client.doc_number}</p>
                       </div>
-                      {selectedClientId === client.id && (
-                        <Check className="h-5 w-5 text-primary" />
-                      )}
+                      {selectedClientId === client.id && <Check className="h-5 w-5 text-primary" />}
                     </div>
                   </button>
                 ))}
