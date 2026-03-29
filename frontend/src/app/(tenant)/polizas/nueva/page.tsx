@@ -3,7 +3,6 @@
 // =====================================================
 // PÁGINA: Nueva Póliza
 // /polizas/nueva
-// Usa Supabase Client directo (evita API Routes con problemas de proxy)
 // =====================================================
 
 import { useState, useEffect, Suspense } from 'react';
@@ -13,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { PolicyForm, type PolicyDocument } from '@/components/modules/policies/PolicyForm';
 import type { Client } from '@/lib/validations/clients';
-import { ArrowLeft, Shield, AlertCircle, Search, Loader2 } from 'lucide-react';
+import { ArrowLeft, Shield, AlertCircle, Search, Loader2, User, Check } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
@@ -85,7 +84,7 @@ function NewPolicyContent() {
     client.doc_number.includes(clientSearch)
   );
 
-  // ✅ FUNCIÓN PARA SUBIR DOCUMENTOS A SUPABASE STORAGE
+  // Función para subir documentos a Supabase Storage
   const uploadDocuments = async (
     policyId: string,
     documents: PolicyDocument[]
@@ -102,7 +101,6 @@ function NewPolicyContent() {
         const sanitizedFileName = doc.file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
         const filePath = `${tenantId}/policies/${policyId}/${doc.document_type}/${timestamp}_${sanitizedFileName}`;
 
-        // Subir archivo a Storage
         const { error: uploadError } = await supabase.storage
           .from('policy-documents')
           .upload(filePath, doc.file, {
@@ -116,12 +114,10 @@ function NewPolicyContent() {
           continue;
         }
 
-        // Obtener URL pública
         const { data: publicUrlData } = supabase.storage
           .from('policy-documents')
           .getPublicUrl(filePath);
 
-        // Insertar registro en policy_documents
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: insertError } = await (supabase as any)
           .from('policy_documents')
@@ -151,7 +147,7 @@ function NewPolicyContent() {
     return { success: errors.length === 0, uploadedCount, errors };
   };
 
-  // ✅ HANDLESUBMIT ACTUALIZADO PARA RECIBIR DOCUMENTOS
+  // handleSubmit para recibir documentos
   const handleSubmit = async (
     data: PolicyFormData,
     polizaDocuments: PolicyDocument[],
@@ -174,7 +170,6 @@ function NewPolicyContent() {
     try {
       const supabase = getBrowserClient();
 
-      // 1. Insertar la póliza con todos los campos nuevos
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: newPolicy, error: insertError } = await (supabase as any)
         .from('policies')
@@ -209,22 +204,18 @@ function NewPolicyContent() {
         return;
       }
 
-      // 2. Subir documentos si hay alguno
+      // Subir documentos si hay alguno
       const allDocuments = [...polizaDocuments, ...soporteDocuments];
       
       if (allDocuments.length > 0) {
         setUploadProgress('Subiendo documentos...');
-        
         const uploadResult = await uploadDocuments(newPolicy.id, allDocuments);
         
         if (!uploadResult.success) {
           console.warn('Algunos documentos no se subieron:', uploadResult.errors);
         }
-        
-        console.log(`Documentos subidos: ${uploadResult.uploadedCount}/${allDocuments.length}`);
       }
 
-      // 3. Redirigir al detalle de la póliza
       router.push(`/polizas/${newPolicy.id}`);
       
     } catch (err) {
@@ -241,7 +232,8 @@ function NewPolicyContent() {
   const selectedClient = clients.find(c => c.id === selectedClientId);
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-6xl">
+    <div className="container mx-auto px-4 py-6 max-w-5xl">
+      {/* Header */}
       <div className="mb-6">
         <Link href="/polizas">
           <Button variant="ghost" size="sm">
@@ -265,85 +257,115 @@ function NewPolicyContent() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Client Selection */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle>Seleccionar Cliente</CardTitle>
-            <CardDescription>Busca y selecciona el cliente</CardDescription>
+      {/* ✅ NUEVO LAYOUT: Cliente arriba, formulario abajo */}
+      <div className="space-y-6">
+        
+        {/* Sección 1: Selección de Cliente (arriba, ancho completo) */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <User className="h-5 w-5 text-primary" />
+              Seleccionar Cliente
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="relative mb-4">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nombre o documento..."
-                value={clientSearch}
-                onChange={(e) => setClientSearch(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            {isLoadingClients ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-muted-foreground">Cargando clientes...</span>
+            {selectedClient ? (
+              // Cliente seleccionado - mostrar resumen compacto
+              <div className="flex items-center justify-between p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <User className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-lg">{selectedClient.full_name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedClient.doc_type}: {selectedClient.doc_number}
+                      {selectedClient.email && ` • ${selectedClient.email}`}
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setSelectedClientId('')}
+                >
+                  Cambiar
+                </Button>
               </div>
             ) : (
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {filteredClients.map((client) => (
-                  <button
-                    key={client.id}
-                    type="button"
-                    onClick={() => setSelectedClientId(client.id)}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                      selectedClientId === client.id
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <p className="font-medium">{client.full_name}</p>
-                    <p className="text-sm text-muted-foreground">{client.doc_number}</p>
-                  </button>
-                ))}
-                {filteredClients.length === 0 && (
-                  <p className="text-center text-muted-foreground py-4">
-                    No se encontraron clientes
-                  </p>
+              // Buscador de clientes
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nombre o documento..."
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+
+                {isLoadingClients ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Cargando clientes...</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[200px] overflow-y-auto">
+                    {filteredClients.map((client) => (
+                      <button
+                        key={client.id}
+                        type="button"
+                        onClick={() => setSelectedClientId(client.id)}
+                        className="text-left p-3 rounded-lg border transition-colors hover:bg-muted/50 hover:border-primary"
+                      >
+                        <p className="font-medium truncate">{client.full_name}</p>
+                        <p className="text-sm text-muted-foreground">{client.doc_number}</p>
+                      </button>
+                    ))}
+                    {filteredClients.length === 0 && (
+                      <p className="col-span-full text-center text-muted-foreground py-4">
+                        No se encontraron clientes
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Policy Form */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" />
-              Datos de la Póliza
-            </CardTitle>
-            <CardDescription>
-              {selectedClient
-                ? `Póliza para: ${selectedClient.full_name}`
-                : 'Selecciona un cliente primero'
-              }
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!selectedClientId ? (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <Shield className="h-12 w-12 mb-4" />
-                <p>Selecciona un cliente para crear la póliza</p>
-              </div>
-            ) : (
+        {/* Sección 2: Formulario de Póliza (abajo, ancho completo) */}
+        {selectedClientId && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Shield className="h-5 w-5 text-primary" />
+                Datos de la Póliza
+              </CardTitle>
+              <CardDescription>
+                Nueva póliza para {selectedClient?.full_name}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <PolicyForm
                 clientId={selectedClientId}
                 onSubmit={handleSubmit}
                 isLoading={isLoading}
               />
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Mensaje si no hay cliente seleccionado */}
+        {!selectedClientId && (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <Shield className="h-12 w-12 mb-4 opacity-50" />
+              <p>Selecciona un cliente para crear la póliza</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
