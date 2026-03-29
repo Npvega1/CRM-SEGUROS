@@ -124,6 +124,9 @@ export function PolicyForm({
   const [premiumDisplay, setPremiumDisplay] = useState('');
   const [gastosDisplay, setGastosDisplay] = useState('');
   const [ivaDisplay, setIvaDisplay] = useState('');
+  
+  // Estado separado para notas (para evitar problemas con Zod)
+  const [notasValue, setNotasValue] = useState<string>('');
 
   const {
     register,
@@ -156,8 +159,6 @@ export function PolicyForm({
       fecha_expedicion: (policy as any).fecha_expedicion || '',
       start_date: policy.start_date || '',
       end_date: policy.end_date || '',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      notas: (policy as any).notas || '',
     } : {
       client_id: clientId || '',
       anexo: '00',
@@ -168,8 +169,7 @@ export function PolicyForm({
       gastos_expedicion: 0,
       iva: 0,
       total_a_pagar: 0,
-      commission_pct: 0,
-      notas: ''
+      commission_pct: 0
     }
   });
 
@@ -179,8 +179,11 @@ export function PolicyForm({
   const status = watch('status');
   const startDate = watch('start_date');
 
+  // Inicializar notas si existe la póliza
   useEffect(() => {
     if (policy) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setNotasValue((policy as any).notas || '');
       setPremiumDisplay(formatCurrency(policy.premium || 0));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setGastosDisplay(formatCurrency((policy as any).gastos_expedicion || 0));
@@ -364,7 +367,12 @@ export function PolicyForm({
   };
 
   const handleFormSubmit = async (data: PolicyFormData) => {
-    await onSubmit(data);
+    // Agregar notas manualmente al objeto de datos
+    const dataWithNotas = {
+      ...data,
+      notas: notasValue || null
+    };
+    await onSubmit(dataWithNotas);
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -540,7 +548,8 @@ export function PolicyForm({
           <Textarea
             id="notas"
             placeholder="Ingresa cualquier nota o comentario importante sobre esta póliza..."
-            {...register('notas')}
+            value={notasValue}
+            onChange={(e) => setNotasValue(e.target.value)}
             disabled={loading}
             rows={4}
             className="resize-none"
