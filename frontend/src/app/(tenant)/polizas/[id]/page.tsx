@@ -1,11 +1,5 @@
 'use client';
 
-// =====================================================
-// PÁGINA: Detalle de Póliza
-// /polizas/[id]
-// Vista completa con acciones y gestión de documentos
-// =====================================================
-
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -49,13 +43,13 @@ import {
   DollarSign,
   Upload,
   Trash2,
-  File
+  File,
+  MessageSquare
 } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { getBrowserClient } from '@/lib/supabase/client';
 
-// Función para formatear números con separadores de miles
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '$0';
   return '$' + value.toLocaleString('es-CO', { maximumFractionDigits: 0 });
@@ -80,6 +74,7 @@ interface PolicyDocument {
 }
 
 interface PolicyWithClient extends Policy {
+  notas?: string;
   client?: {
     id: string;
     full_name: string;
@@ -118,8 +113,6 @@ export default function PolicyDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
-  
-  // Estados para upload de documentos
   const [isUploadingPoliza, setIsUploadingPoliza] = useState(false);
   const [isUploadingSoporte, setIsUploadingSoporte] = useState(false);
   const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
@@ -169,7 +162,6 @@ export default function PolicyDetailPage() {
         } as PolicyWithClient);
       }
 
-      // Cargar documentos
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: docsData } = await (supabase as any)
         .from('policy_documents')
@@ -204,9 +196,9 @@ export default function PolicyDetailPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: updateError } = await (supabase as any)
         .from('policies')
-        .update({ 
-          status: 'cancelada', 
-          updated_at: new Date().toISOString() 
+        .update({
+          status: 'cancelada',
+          updated_at: new Date().toISOString()
         })
         .eq('id', policyId)
         .eq('tenant_id', tenantId);
@@ -223,7 +215,6 @@ export default function PolicyDetailPage() {
     setIsCanceling(false);
   };
 
-  // Subir documento
   const handleUploadDocument = async (file: File, documentType: 'poliza' | 'soporte') => {
     if (!tenantId || !policyId) return;
 
@@ -233,7 +224,6 @@ export default function PolicyDetailPage() {
     try {
       const supabase = getBrowserClient();
 
-      // Subir archivo a storage
       const timestamp = Date.now();
       const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const path = `${tenantId}/policies/${policyId}/${documentType}/${timestamp}_${safeName}`;
@@ -248,7 +238,6 @@ export default function PolicyDetailPage() {
         return;
       }
 
-      // Crear registro en policy_documents
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: newDoc, error: insertError } = await (supabase as any)
         .from('policy_documents')
@@ -274,11 +263,10 @@ export default function PolicyDetailPage() {
     setUploading(false);
   };
 
-  // Ver documento
   const handleViewDocument = async (doc: PolicyDocument) => {
     try {
       const supabase = getBrowserClient();
-      
+
       if (doc.file_url.startsWith('http')) {
         window.open(doc.file_url, '_blank');
       } else {
@@ -295,7 +283,6 @@ export default function PolicyDetailPage() {
     }
   };
 
-  // Eliminar documento
   const handleDeleteDocument = async () => {
     if (!deleteDocId || !tenantId) return;
 
@@ -304,14 +291,12 @@ export default function PolicyDetailPage() {
       const supabase = getBrowserClient();
       const docToDelete = documents.find(d => d.id === deleteDocId);
 
-      // Eliminar de storage
       if (docToDelete && !docToDelete.file_url.startsWith('http')) {
         await supabase.storage
           .from('policy-documents')
           .remove([docToDelete.file_url]);
       }
 
-      // Eliminar registro
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: deleteError } = await (supabase as any)
         .from('policy_documents')
@@ -349,149 +334,85 @@ export default function PolicyDetailPage() {
   if (error || !policy) {
     return (
       <div className="container mx-auto py-12 text-center">
-        <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-        <p className="text-lg text-muted-foreground mb-4">{error || 'Póliza no encontrada'}</p>
-        <Button asChild>
-          <Link href="/polizas">Volver a Pólizas</Link>
-        </Button>
+        <AlertCircle className="h-12 w-12 mx-auto text-red-500 mb-4" />
+        <p className="text-lg text-red-600 mb-4">{error || 'Póliza no encontrada'}</p>
+        <Link href="/polizas">
+          <Button variant="outline">Volver a Pólizas</Button>
+        </Link>
       </div>
     );
   }
 
   const polizaDocs = documents.filter(d => d.document_type === 'poliza');
   const soporteDocs = documents.filter(d => d.document_type === 'soporte');
-
-  // Calcular total si no existe
-  const calculatedTotal = (policy.premium || 0) + (policy.gastos_expedicion || 0) + (policy.iva || 0);
-  const displayTotal = policy.total_a_pagar || calculatedTotal;
+  const calculatedTotal = (policy.premium || 0) + ((policy as any).gastos_expedicion || 0) + ((policy as any).iva || 0);
+  const displayTotal = (policy as any).total_a_pagar || calculatedTotal;
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-6xl">
+    <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-3">
+          <button onClick={() => router.back()} className="p-2 hover:bg-muted rounded-lg">
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Shield className="h-6 w-6 text-primary" />
+            </div>
+            <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Shield className="h-6 w-6 text-primary" />
                 Póliza {policy.policy_number}
-                {policy.anexo && policy.anexo !== '00' && (
-                  <Badge variant="outline" className="ml-2">Anexo {policy.anexo}</Badge>
+                {(policy as any).anexo && (policy as any).anexo !== '00' && (
+                  <Badge variant="outline">Anexo {(policy as any).anexo}</Badge>
                 )}
               </h1>
               <Badge className={getStatusColor(policy.status as PolicyStatus)}>
                 {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground">{tenantName}</p>
           </div>
         </div>
 
-        {/* Menú de Acciones */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline">
-              Acciones
-              <MoreVertical className="h-4 w-4 ml-2" />
-            </Button>
+            <Button variant="outline"><MoreVertical className="h-4 w-4 mr-2" />Acciones</Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem 
-              onClick={() => router.push(`/polizas/${policyId}/editar`)}
-              className="cursor-pointer"
-            >
-              <Edit className="h-4 w-4 mr-2" />
-              Editar Póliza {policy.anexo || '00'}
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => router.push(`/polizas/${policyId}/editar`)} className="cursor-pointer">
+              <Edit className="h-4 w-4 mr-2" />Editar Póliza
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push(`/polizas/nueva?modificacion=${policyId}`)} className="cursor-pointer">
+              <FilePlus className="h-4 w-4 mr-2" />Incluir Modificación
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push(`/polizas/nueva?renovacion=${policyId}`)} className="cursor-pointer">
+              <RefreshCw className="h-4 w-4 mr-2" />Renovar Póliza
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              onClick={() => router.push(`/polizas/nueva?modificacion=${policyId}`)}
-              className="cursor-pointer"
-            >
-              <FilePlus className="h-4 w-4 mr-2" />
-              Incluir Modificación (Anexo)
-            </DropdownMenuItem>
-            <DropdownMenuItem 
-              onClick={() => router.push(`/polizas/nueva?renovacion=${policyId}`)}
-              className="cursor-pointer"
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Renovar Póliza
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              onClick={() => setShowCancelDialog(true)}
-              className="cursor-pointer text-red-600 focus:text-red-600"
-              disabled={policy.status === 'cancelada'}
-            >
-              <XCircle className="h-4 w-4 mr-2" />
-              Cancelar Póliza
+            <DropdownMenuItem onClick={() => setShowCancelDialog(true)} className="cursor-pointer text-red-600" disabled={policy.status === 'cancelada'}>
+              <XCircle className="h-4 w-4 mr-2" />Cancelar Póliza
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
+      {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          
-          {/* Estado Actual */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Estado de la Póliza</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4">
-                <div className={`px-4 py-2 rounded-lg font-medium ${getStatusColor(policy.status as PolicyStatus)}`}>
-                  {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
-                </div>
-                {policy.policy_type === 'anexo' && (
-                  <Badge variant="outline">Modificación</Badge>
-                )}
-                {policy.policy_type === 'renovacion' && (
-                  <Badge variant="outline">Renovación</Badge>
-                )}
-              </div>
-            </CardContent>
-          </Card>
 
           {/* Detalles de la Póliza */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Detalles de la Póliza
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" />Detalles de la Póliza</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                <div>
-                  <p className="text-sm text-muted-foreground">Número de Póliza</p>
-                  <p className="font-semibold">{policy.policy_number}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Anexo</p>
-                  <p className="font-semibold">{policy.anexo || '00'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Aseguradora</p>
-                  <p className="font-semibold">{policy.insurance_company?.name || policy.insurer}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Grupo</p>
-                  <p className="font-semibold">{policy.insurance_line?.name || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Ramo</p>
-                  <p className="font-semibold">{policy.insurance_group?.name || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Comisión</p>
-                  <p className="font-semibold">{policy.commission_pct || 0}%</p>
-                </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                <div><span className="text-muted-foreground">Número</span><p className="font-medium">{policy.policy_number}</p></div>
+                <div><span className="text-muted-foreground">Anexo</span><p className="font-medium">{(policy as any).anexo || '00'}</p></div>
+                <div><span className="text-muted-foreground">Aseguradora</span><p className="font-medium">{policy.insurance_company?.name || policy.insurer}</p></div>
+                <div><span className="text-muted-foreground">Grupo</span><p className="font-medium">{policy.insurance_line?.name || '-'}</p></div>
+                <div><span className="text-muted-foreground">Ramo</span><p className="font-medium">{policy.insurance_group?.name || '-'}</p></div>
+                <div><span className="text-muted-foreground">Comisión</span><p className="font-medium">{(policy as any).commission_pct || 0}%</p></div>
               </div>
             </CardContent>
           </Card>
@@ -499,219 +420,117 @@ export default function PolicyDetailPage() {
           {/* Vigencia */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Vigencia
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" />Vigencia</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <p className="text-sm text-muted-foreground">Fecha de Expedición</p>
-                  <p className="font-semibold">{formatDate(policy.fecha_expedicion)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Fecha de Inicio</p>
-                  <p className="font-semibold">{formatDate(policy.start_date)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Fecha de Vencimiento</p>
-                  <p className="font-semibold">{formatDate(policy.end_date)}</p>
-                </div>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div><span className="text-muted-foreground">Expedición</span><p className="font-medium">{formatDate((policy as any).fecha_expedicion)}</p></div>
+                <div><span className="text-muted-foreground">Inicio</span><p className="font-medium">{formatDate(policy.start_date)}</p></div>
+                <div><span className="text-muted-foreground">Vencimiento</span><p className="font-medium">{formatDate(policy.end_date)}</p></div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Valores de la Póliza */}
+          {/* Valores */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Valores de la Póliza
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" />Valores de la Póliza</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-muted-foreground">Prima</p>
-                  <p className="font-semibold text-lg">{formatCurrency(policy.premium)}</p>
-                </div>
-                <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-muted-foreground">Gastos Exp.</p>
-                  <p className="font-semibold text-lg">{formatCurrency(policy.gastos_expedicion)}</p>
-                </div>
-                <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-muted-foreground">IVA</p>
-                  <p className="font-semibold text-lg">{formatCurrency(policy.iva)}</p>
-                </div>
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <p className="text-xs text-blue-600">Total a Pagar</p>
-                  <p className="font-bold text-xl text-blue-700">{formatCurrency(displayTotal)}</p>
-                </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div><span className="text-muted-foreground">Prima</span><p className="font-medium text-lg">{formatCurrency(policy.premium)}</p></div>
+                <div><span className="text-muted-foreground">Gastos Exp.</span><p className="font-medium text-lg">{formatCurrency((policy as any).gastos_expedicion)}</p></div>
+                <div><span className="text-muted-foreground">IVA</span><p className="font-medium text-lg">{formatCurrency((policy as any).iva)}</p></div>
+                <div><span className="text-muted-foreground">Total</span><p className="font-semibold text-lg text-green-600">{formatCurrency(displayTotal)}</p></div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Notas y Comentarios */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5" />Notas y Comentarios</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {policy.notas ? (
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <p className="text-sm whitespace-pre-wrap">{policy.notas}</p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">No hay comentarios registrados para esta póliza.</p>
+              )}
             </CardContent>
           </Card>
 
           {/* Documentos */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Documentos
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" />Documentos</CardTitle>
               <CardDescription>Documentos adjuntos de la póliza</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Documentos de Póliza */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-medium text-sm text-slate-700">Documentos de Póliza</h4>
-                    <span className="text-xs text-slate-500">{polizaDocs.length} / 5</span>
-                  </div>
-                  
-                  {/* Upload */}
-                  {polizaDocs.length < 5 && (
-                    <div>
-                      <input
-                        type="file"
-                        id="poliza-upload-detail"
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleUploadDocument(file, 'poliza');
-                          e.target.value = '';
-                        }}
-                        className="hidden"
-                        disabled={isUploadingPoliza}
-                      />
-                      <label
-                        htmlFor="poliza-upload-detail"
-                        className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors"
-                      >
-                        {isUploadingPoliza ? (
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                        ) : (
-                          <Upload className="h-4 w-4 text-blue-500" />
-                        )}
-                        <span className="text-sm text-blue-600">
-                          {isUploadingPoliza ? 'Subiendo...' : 'Subir documento'}
-                        </span>
-                      </label>
-                    </div>
-                  )}
-
-                  {/* Lista de documentos */}
-                  {polizaDocs.length > 0 ? (
-                    <div className="space-y-2">
-                      {polizaDocs.map((doc) => (
-                        <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <File className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                            <span className="text-sm truncate">{doc.file_name}</span>
-                          </div>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewDocument(doc)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setDeleteDocId(doc.id)}
-                              className="h-8 w-8 p-0 hover:bg-red-100"
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground py-2 text-center">
-                      No hay documentos de póliza
-                    </p>
-                  )}
+            <CardContent className="space-y-6">
+              {/* Documentos de Póliza */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium flex items-center gap-2"><File className="h-4 w-4 text-blue-600" />Documentos de Póliza</h4>
+                  <span className="text-xs text-muted-foreground">{polizaDocs.length} / 5</span>
                 </div>
 
-                {/* Documentos de Soporte */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-medium text-sm text-slate-700">Documentos de Soporte</h4>
-                    <span className="text-xs text-slate-500">{soporteDocs.length} / 8</span>
+                {polizaDocs.length < 5 && (
+                  <div className="border-2 border-dashed border-blue-200 rounded-lg p-4 bg-blue-50/50">
+                    <label className="flex flex-col items-center justify-center cursor-pointer">
+                      <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDocument(file, 'poliza'); e.target.value = ''; }} className="hidden" disabled={isUploadingPoliza} />
+                      {isUploadingPoliza ? <Loader2 className="h-8 w-8 text-blue-400 mb-2 animate-spin" /> : <Upload className="h-8 w-8 text-blue-400 mb-2" />}
+                      <span className="text-sm text-blue-600 font-medium">{isUploadingPoliza ? 'Subiendo...' : 'Subir documento'}</span>
+                    </label>
                   </div>
-                  
-                  {/* Upload */}
-                  {soporteDocs.length < 8 && (
-                    <div>
-                      <input
-                        type="file"
-                        id="soporte-upload-detail"
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleUploadDocument(file, 'soporte');
-                          e.target.value = '';
-                        }}
-                        className="hidden"
-                        disabled={isUploadingSoporte}
-                      />
-                      <label
-                        htmlFor="soporte-upload-detail"
-                        className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-emerald-300 rounded-lg cursor-pointer hover:bg-emerald-50 transition-colors"
-                      >
-                        {isUploadingSoporte ? (
-                          <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
-                        ) : (
-                          <Upload className="h-4 w-4 text-emerald-500" />
-                        )}
-                        <span className="text-sm text-emerald-600">
-                          {isUploadingSoporte ? 'Subiendo...' : 'Subir documento'}
-                        </span>
-                      </label>
-                    </div>
-                  )}
+                )}
 
-                  {/* Lista de documentos */}
-                  {soporteDocs.length > 0 ? (
-                    <div className="space-y-2">
-                      {soporteDocs.map((doc) => (
-                        <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <File className="h-4 w-4 text-emerald-500 flex-shrink-0" />
-                            <span className="text-sm truncate">{doc.file_name}</span>
-                          </div>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewDocument(doc)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setDeleteDocId(doc.id)}
-                              className="h-8 w-8 p-0 hover:bg-red-100"
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </div>
+                {polizaDocs.length > 0 ? (
+                  <div className="space-y-2">
+                    {polizaDocs.map((doc) => (
+                      <div key={doc.id} className="flex items-center justify-between p-2 bg-white border rounded-lg">
+                        <div className="flex items-center gap-2 min-w-0"><File className="h-4 w-4 text-blue-600" /><span className="text-sm truncate">{doc.file_name}</span></div>
+                        <div className="flex items-center gap-1">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => handleViewDocument(doc)} className="h-8 w-8 p-0"><Eye className="h-4 w-4" /></Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setDeleteDocId(doc.id)} className="h-8 w-8 p-0 hover:bg-red-100"><Trash2 className="h-4 w-4 text-red-500" /></Button>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground py-2 text-center">
-                      No hay documentos de soporte
-                    </p>
-                  )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (<p className="text-sm text-muted-foreground text-center py-4">No hay documentos de póliza</p>)}
+              </div>
+
+              {/* Documentos de Soporte */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium flex items-center gap-2"><File className="h-4 w-4 text-green-600" />Documentos de Soporte</h4>
+                  <span className="text-xs text-muted-foreground">{soporteDocs.length} / 8</span>
                 </div>
+
+                {soporteDocs.length < 8 && (
+                  <div className="border-2 border-dashed border-green-200 rounded-lg p-4 bg-green-50/50">
+                    <label className="flex flex-col items-center justify-center cursor-pointer">
+                      <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDocument(file, 'soporte'); e.target.value = ''; }} className="hidden" disabled={isUploadingSoporte} />
+                      {isUploadingSoporte ? <Loader2 className="h-8 w-8 text-green-400 mb-2 animate-spin" /> : <Upload className="h-8 w-8 text-green-400 mb-2" />}
+                      <span className="text-sm text-green-600 font-medium">{isUploadingSoporte ? 'Subiendo...' : 'Subir documento'}</span>
+                    </label>
+                  </div>
+                )}
+
+                {soporteDocs.length > 0 ? (
+                  <div className="space-y-2">
+                    {soporteDocs.map((doc) => (
+                      <div key={doc.id} className="flex items-center justify-between p-2 bg-white border rounded-lg">
+                        <div className="flex items-center gap-2 min-w-0"><File className="h-4 w-4 text-green-600" /><span className="text-sm truncate">{doc.file_name}</span></div>
+                        <div className="flex items-center gap-1">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => handleViewDocument(doc)} className="h-8 w-8 p-0"><Eye className="h-4 w-4" /></Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setDeleteDocId(doc.id)} className="h-8 w-8 p-0 hover:bg-red-100"><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (<p className="text-sm text-muted-foreground text-center py-4">No hay documentos de soporte</p>)}
               </div>
             </CardContent>
           </Card>
@@ -719,125 +538,66 @@ export default function PolicyDetailPage() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Cliente */}
           {policy.client && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <User className="h-4 w-4" />
-                  Cliente
-                </CardTitle>
+                <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" />Cliente</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="font-semibold">{policy.client.full_name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {policy.client.doc_type.toUpperCase()}: {policy.client.doc_number}
-                  </p>
+              <CardContent>
+                <div className="space-y-2">
+                  <p className="font-medium">{policy.client.full_name}</p>
+                  <p className="text-sm text-muted-foreground">{policy.client.doc_type.toUpperCase()}: {policy.client.doc_number}</p>
+                  {policy.client.email && <p className="text-sm">{policy.client.email}</p>}
+                  {policy.client.phone && <p className="text-sm">{policy.client.phone}</p>}
                 </div>
-                {policy.client.email && (
-                  <p className="text-sm">{policy.client.email}</p>
-                )}
-                {policy.client.phone && (
-                  <p className="text-sm">{policy.client.phone}</p>
-                )}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full"
-                  onClick={() => router.push(`/clientes/${policy.client?.id}`)}
-                >
-                  Ver Cliente
-                </Button>
+                <Button variant="outline" className="w-full mt-4" onClick={() => router.push(`/clientes/${policy.client?.id}`)}>Ver Cliente</Button>
               </CardContent>
             </Card>
           )}
 
-          {/* Resumen Rápido */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Resumen</CardTitle>
+              <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" />Resumen</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Prima</span>
-                <span className="font-medium">{formatCurrency(policy.premium)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Gastos Exp.</span>
-                <span className="font-medium">{formatCurrency(policy.gastos_expedicion)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">IVA</span>
-                <span className="font-medium">{formatCurrency(policy.iva)}</span>
-              </div>
-              <div className="border-t pt-3 flex justify-between">
-                <span className="font-medium">Total a Pagar</span>
-                <span className="font-bold text-primary">{formatCurrency(displayTotal)}</span>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Prima</span><span className="font-medium">{formatCurrency(policy.premium)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Gastos</span><span className="font-medium">{formatCurrency((policy as any).gastos_expedicion)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">IVA</span><span className="font-medium">{formatCurrency((policy as any).iva)}</span></div>
+                <div className="flex justify-between pt-2 border-t"><span className="font-medium">Total</span><span className="font-bold text-green-600">{formatCurrency(displayTotal)}</span></div>
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Dialog de Cancelación */}
+      {/* Dialog Cancelar */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancelar Póliza</DialogTitle>
-            <DialogDescription>
-              ¿Estás seguro de que deseas cancelar la póliza <strong>{policy.policy_number}</strong>?
-              Esta acción no se puede deshacer.
-            </DialogDescription>
+            <DialogDescription>¿Estás seguro de que deseas cancelar la póliza <strong>{policy.policy_number}</strong>? Esta acción no se puede deshacer.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
-              No, mantener
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleCancelPolicy}
-              disabled={isCanceling}
-            >
-              {isCanceling ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Cancelando...
-                </>
-              ) : (
-                'Sí, cancelar póliza'
-              )}
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>No, mantener</Button>
+            <Button variant="destructive" onClick={handleCancelPolicy} disabled={isCanceling}>
+              {isCanceling ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Cancelando...</> : 'Sí, cancelar'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Eliminar Documento */}
+      {/* Dialog Eliminar Doc */}
       <Dialog open={!!deleteDocId} onOpenChange={() => setDeleteDocId(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Eliminar Documento</DialogTitle>
-            <DialogDescription>
-              ¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer.
-            </DialogDescription>
+            <DialogDescription>¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDocId(null)}>
-              Cancelar
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleDeleteDocument}
-              disabled={isDeletingDoc}
-            >
-              {isDeletingDoc ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Eliminando...
-                </>
-              ) : (
-                'Eliminar'
-              )}
+            <Button variant="outline" onClick={() => setDeleteDocId(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleDeleteDocument} disabled={isDeletingDoc}>
+              {isDeletingDoc ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Eliminando...</> : 'Eliminar'}
             </Button>
           </DialogFooter>
         </DialogContent>
