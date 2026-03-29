@@ -45,7 +45,7 @@ function NewPolicyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedClientId = searchParams.get('clientId');
-  const { isLoading: isLoadingTenant, tenantName, tenantId, userId } = useTenant();
+  const { isLoading: isLoadingTenant, tenantId, userId } = useTenant();
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,12 +87,12 @@ function NewPolicyContent() {
 
   // ✅ FUNCIÓN PARA SUBIR DOCUMENTOS A SUPABASE STORAGE
   const uploadDocuments = async (
-    supabase: ReturnType<typeof getBrowserClient>,
     policyId: string,
     documents: PolicyDocument[]
   ): Promise<{ success: boolean; uploadedCount: number; errors: string[] }> => {
     const errors: string[] = [];
     let uploadedCount = 0;
+    const supabase = getBrowserClient();
 
     for (const doc of documents) {
       if (!doc.file) continue;
@@ -103,7 +103,7 @@ function NewPolicyContent() {
         const filePath = `${tenantId}/policies/${policyId}/${doc.document_type}/${timestamp}_${sanitizedFileName}`;
 
         // Subir archivo a Storage
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('policy-documents')
           .upload(filePath, doc.file, {
             cacheControl: '3600',
@@ -122,7 +122,8 @@ function NewPolicyContent() {
           .getPublicUrl(filePath);
 
         // Insertar registro en policy_documents
-        const { error: insertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: insertError } = await (supabase as any)
           .from('policy_documents')
           .insert({
             tenant_id: tenantId,
@@ -214,11 +215,10 @@ function NewPolicyContent() {
       if (allDocuments.length > 0) {
         setUploadProgress('Subiendo documentos...');
         
-        const uploadResult = await uploadDocuments(supabase, newPolicy.id, allDocuments);
+        const uploadResult = await uploadDocuments(newPolicy.id, allDocuments);
         
         if (!uploadResult.success) {
           console.warn('Algunos documentos no se subieron:', uploadResult.errors);
-          // No bloqueamos la creación de la póliza, solo mostramos advertencia
         }
         
         console.log(`Documentos subidos: ${uploadResult.uploadedCount}/${allDocuments.length}`);
