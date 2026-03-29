@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { AutomationBuilder } from '@/components/modules/automations/AutomationBuilder';
 import { EmailTemplateEditor } from '@/components/modules/automations/EmailTemplateEditor';
-import { AutomationLogs } from '@/components/modules/automations/AutomationLogs';
+import { AutomationLogs, EmailSendLogs } from '@/components/modules/automations';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,7 +56,7 @@ export default function AutomationsPage() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Modal states
   const [showAutomationBuilder, setShowAutomationBuilder] = useState(false);
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
@@ -70,7 +70,7 @@ export default function AutomationsPage() {
   // Cargar automatizaciones
   const loadAutomations = useCallback(async () => {
     if (!tenantId) return;
-    
+
     try {
       // Usar consulta directa en lugar de RPC
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,7 +81,7 @@ export default function AutomationsPage() {
         .order('created_at', { ascending: false });
 
       if (autoError) throw autoError;
-      
+
       // Obtener estadísticas para cada automatización
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const automationsWithStats: AutomationWithStats[] = await Promise.all(
@@ -138,7 +138,7 @@ export default function AutomationsPage() {
   // Cargar plantillas de email
   const loadTemplates = useCallback(async () => {
     if (!tenantId) return;
-    
+
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error: fetchError } = await (supabase as any)
@@ -148,6 +148,7 @@ export default function AutomationsPage() {
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
+
       setTemplates((data || []) as EmailTemplate[]);
     } catch (err) {
       console.error('Error loading templates:', err);
@@ -177,11 +178,11 @@ export default function AutomationsPage() {
         .eq('id', automation.id);
 
       if (updateError) throw updateError;
-      
-      setAutomations(prev => 
-        prev.map(a => 
-          a.id === automation.id 
-            ? { ...a, is_active: !a.is_active } 
+
+      setAutomations(prev =>
+        prev.map(a =>
+          a.id === automation.id
+            ? { ...a, is_active: !a.is_active }
             : a
         )
       );
@@ -194,7 +195,7 @@ export default function AutomationsPage() {
   // Eliminar automatización
   const handleDeleteAutomation = async (id: string) => {
     if (!confirm('¿Estás seguro de eliminar esta automatización?')) return;
-    
+
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: deleteError } = await (supabase as any)
@@ -203,6 +204,7 @@ export default function AutomationsPage() {
         .eq('id', id);
 
       if (deleteError) throw deleteError;
+
       setAutomations(prev => prev.filter(a => a.id !== id));
     } catch (err) {
       console.error('Error deleting automation:', err);
@@ -213,7 +215,7 @@ export default function AutomationsPage() {
   // Eliminar plantilla
   const handleDeleteTemplate = async (id: string) => {
     if (!confirm('¿Estás seguro de eliminar esta plantilla?')) return;
-    
+
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: deleteError } = await (supabase as any)
@@ -222,6 +224,7 @@ export default function AutomationsPage() {
         .eq('id', id);
 
       if (deleteError) throw deleteError;
+
       setTemplates(prev => prev.filter(t => t.id !== id));
     } catch (err) {
       console.error('Error deleting template:', err);
@@ -291,12 +294,16 @@ export default function AutomationsPage() {
               <Mail className="h-4 w-4" />
               Plantillas de Email
             </TabsTrigger>
+            <TabsTrigger value="send-logs" className="gap-2">
+              <History className="h-4 w-4" />
+              Historial de Envíos
+            </TabsTrigger>
           </TabsList>
 
-          {canEdit && (
+          {canEdit && activeTab !== 'send-logs' && (
             <div className="flex gap-2">
               {activeTab === 'automations' ? (
-                <Button 
+                <Button
                   onClick={() => {
                     setEditingAutomation(null);
                     setShowAutomationBuilder(true);
@@ -307,7 +314,7 @@ export default function AutomationsPage() {
                   Nueva Automatización
                 </Button>
               ) : (
-                <Button 
+                <Button
                   onClick={() => {
                     setEditingTemplate(null);
                     setShowTemplateEditor(true);
@@ -343,8 +350,8 @@ export default function AutomationsPage() {
           ) : (
             <div className="grid gap-4">
               {automations.map((automation) => (
-                <Card 
-                  key={automation.id} 
+                <Card
+                  key={automation.id}
                   className={!automation.is_active ? 'opacity-60' : ''}
                   data-testid={`automation-card-${automation.id}`}
                 >
@@ -357,7 +364,7 @@ export default function AutomationsPage() {
                             {automation.is_active ? 'Activa' : 'Inactiva'}
                           </Badge>
                         </div>
-                        
+
                         <p className="text-sm text-muted-foreground mb-3">
                           {automation.description || 'Sin descripción'}
                         </p>
@@ -385,8 +392,8 @@ export default function AutomationsPage() {
                                 <XCircle className="h-4 w-4 text-red-600" />
                               )}
                               <span className="text-muted-foreground">Última ejecución:</span>
-                              <span className={automation.last_execution_status === 'success' 
-                                ? 'text-green-600' 
+                              <span className={automation.last_execution_status === 'success'
+                                ? 'text-green-600'
                                 : 'text-red-600'
                               }>
                                 {formatDateTime(automation.last_execution_at)}
@@ -428,7 +435,7 @@ export default function AutomationsPage() {
                                   <Pencil className="h-4 w-4 mr-2" />
                                   Editar
                                 </DropdownMenuItem>
-                                <DropdownMenuItem 
+                                <DropdownMenuItem
                                   onClick={() => handleDeleteAutomation(automation.id)}
                                   className="text-red-600"
                                 >
@@ -469,7 +476,7 @@ export default function AutomationsPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {templates.map((template) => (
-                <Card 
+                <Card
                   key={template.id}
                   className={!template.is_active ? 'opacity-60' : ''}
                   data-testid={`template-card-${template.id}`}
@@ -489,12 +496,12 @@ export default function AutomationsPage() {
                     <p className="text-xs text-muted-foreground mb-4">
                       Creada: {formatDateTime(template.created_at)}
                     </p>
-                    
+
                     {canEdit && (
                       <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
+                        <Button
+                          variant="outline"
+                          size="sm"
                           className="flex-1"
                           onClick={() => {
                             setEditingTemplate(template);
@@ -504,8 +511,8 @@ export default function AutomationsPage() {
                           <Pencil className="h-3 w-3 mr-1" />
                           Editar
                         </Button>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
                           onClick={() => handleDeleteTemplate(template.id)}
                           className="text-red-600 hover:text-red-700"
@@ -519,6 +526,11 @@ export default function AutomationsPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* Tab: Historial de Envíos */}
+        <TabsContent value="send-logs" className="mt-6">
+          <EmailSendLogs />
         </TabsContent>
       </Tabs>
 
