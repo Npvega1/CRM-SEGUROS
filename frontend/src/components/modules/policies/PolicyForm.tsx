@@ -25,7 +25,7 @@ import {
   type Policy,
   type PolicyStatus
 } from '@/lib/validations/policies';
-import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Calendar } from 'lucide-react';
+import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Calendar, DollarSign } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
 
@@ -101,7 +101,6 @@ interface PolicyFormData {
 interface PolicyFormProps {
   policy?: Policy;
   clientId?: string;
-  // ✅ onSubmit recibe los documentos
   onSubmit: (
     data: PolicyFormData,
     polizaDocuments: PolicyDocument[],
@@ -111,7 +110,7 @@ interface PolicyFormProps {
   isLoading?: boolean;
 }
 
-// ✅ Funciones para formatear moneda
+// Funciones para formatear moneda
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
@@ -122,7 +121,6 @@ const formatCurrency = (value: number): string => {
 };
 
 const parseCurrencyInput = (value: string): number => {
-  // Remover todo excepto números
   const numericValue = value.replace(/[^0-9]/g, '');
   return parseInt(numericValue, 10) || 0;
 };
@@ -154,7 +152,7 @@ export function PolicyForm({
   const [polizaDocuments, setPolizaDocuments] = useState<PolicyDocument[]>([]);
   const [soporteDocuments, setSoporteDocuments] = useState<PolicyDocument[]>([]);
 
-  // ✅ Estados para valores formateados (display)
+  // Estados para valores formateados (display)
   const [displayPremium, setDisplayPremium] = useState('$0');
   const [displayGastos, setDisplayGastos] = useState('$0');
   const [displayIva, setDisplayIva] = useState('$0');
@@ -211,7 +209,7 @@ export function PolicyForm({
   const status = watch('status');
   const startDate = watch('start_date');
 
-  // ✅ Inicializar displays formateados
+  // Inicializar displays formateados
   useEffect(() => {
     if (policy) {
       setDisplayPremium(formatCurrency(policy.premium || 0));
@@ -224,14 +222,14 @@ export function PolicyForm({
     }
   }, [policy]);
 
-  // ✅ Calcular total automáticamente y actualizar display
+  // Calcular total automáticamente y actualizar display
   useEffect(() => {
     const total = Number(premium) + Number(gastosExpedicion) + Number(iva);
     setValue('total_a_pagar', total);
     setDisplayTotal(formatCurrency(total));
   }, [premium, gastosExpedicion, iva, setValue]);
 
-  // ✅ Handlers para inputs de moneda
+  // Handlers para inputs de moneda
   const handlePremiumChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = parseCurrencyInput(e.target.value);
     setValue('premium', numericValue);
@@ -470,7 +468,6 @@ export function PolicyForm({
     setSoporteDocuments(prev => prev.filter((_, i) => i !== index));
   };
 
-  // ✅ CORREGIDO: Ahora pasa los documentos al onSubmit
   const handleFormSubmit = async (data: PolicyFormData) => {
     console.log('Form data submitted:', data);
     console.log('Poliza documents:', polizaDocuments);
@@ -494,8 +491,10 @@ export function PolicyForm({
       {/* Client ID (oculto) */}
       <input type="hidden" {...register('client_id')} />
 
-      {/* Número de Póliza + Anexo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* ============================================= */}
+      {/* SECCIÓN 1: Número de Póliza + Anexo + Estado */}
+      {/* ============================================= */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="policy_number">Número de Póliza *</Label>
           <Input
@@ -531,9 +530,36 @@ export function PolicyForm({
             </SelectContent>
           </Select>
         </div>
+
+        <div className="space-y-2">
+          <Label>Estado *</Label>
+          <Select
+            value={status}
+            onValueChange={(value) => setValue('status', value as PolicyStatus)}
+            disabled={loading || isEditing}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar estado" />
+            </SelectTrigger>
+            <SelectContent>
+              {POLICY_STATUS_OPTIONS.map(({ value, label }) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {isEditing && (
+            <p className="text-xs text-muted-foreground">
+              Para cambiar el estado, usa el stepper
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* Selección en cascada: Compañía → Grupo → Ramo */}
+      {/* ============================================= */}
+      {/* SECCIÓN 2: Selección de Producto */}
+      {/* ============================================= */}
       <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
         <div className="flex items-center gap-2 text-lg font-semibold">
           <Building className="h-5 w-5 text-primary" />
@@ -582,7 +608,7 @@ export function PolicyForm({
               </Select>
             </div>
 
-            {/* Grupo (Línea de seguro) */}
+            {/* Grupo */}
             <div className="space-y-2">
               <Label>Grupo *</Label>
               <Select
@@ -606,7 +632,7 @@ export function PolicyForm({
               </Select>
             </div>
 
-            {/* Ramo (Grupo de seguro) */}
+            {/* Ramo */}
             <div className="space-y-2">
               <Label>Ramo *</Label>
               <Select
@@ -637,36 +663,53 @@ export function PolicyForm({
         <input type="hidden" {...register('group_id')} />
       </div>
 
-      {/* Estado */}
-      <div className="space-y-2">
-        <Label>Estado *</Label>
-        <Select
-          value={status}
-          onValueChange={(value) => setValue('status', value as PolicyStatus)}
-          disabled={loading || isEditing}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Seleccionar estado" />
-          </SelectTrigger>
-          <SelectContent>
-            {POLICY_STATUS_OPTIONS.map(({ value, label }) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {isEditing && (
-          <p className="text-xs text-muted-foreground">
-            Para cambiar el estado, usa el stepper de estados
-          </p>
-        )}
-      </div>
-
-      {/* ✅ Valores de la Póliza - CON FORMATO DE MONEDA */}
+      {/* ============================================= */}
+      {/* SECCIÓN 3: Fechas */}
+      {/* ============================================= */}
       <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
         <div className="flex items-center gap-2 text-lg font-semibold">
-          <Layers className="h-5 w-5 text-primary" />
+          <Calendar className="h-5 w-5 text-primary" />
+          <span>Fechas</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label>Fecha de Expedición</Label>
+            <Input
+              type="date"
+              {...register('fecha_expedicion')}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Fecha de Inicio</Label>
+            <Input
+              type="date"
+              value={startDate || ''}
+              onChange={handleStartDateChange}
+              disabled={loading}
+            />
+            <p className="text-xs text-muted-foreground">Al cambiar, se calcula vencimiento a 1 año</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Fecha de Vencimiento</Label>
+            <Input
+              type="date"
+              {...register('end_date')}
+              disabled={loading}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================= */}
+      {/* SECCIÓN 4: Valores de la Póliza */}
+      {/* ============================================= */}
+      <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+        <div className="flex items-center gap-2 text-lg font-semibold">
+          <DollarSign className="h-5 w-5 text-primary" />
           <span>Valores de la Póliza</span>
         </div>
 
@@ -689,7 +732,7 @@ export function PolicyForm({
             </Select>
           </div>
 
-          {/* Prima - CON FORMATO */}
+          {/* Prima */}
           <div className="space-y-2">
             <Label>Prima *</Label>
             <Input
@@ -703,7 +746,7 @@ export function PolicyForm({
             <input type="hidden" {...register('premium', { valueAsNumber: true })} />
           </div>
 
-          {/* Gastos Expedición - CON FORMATO */}
+          {/* Gastos Expedición */}
           <div className="space-y-2">
             <Label>Gastos Exp.</Label>
             <Input
@@ -717,7 +760,7 @@ export function PolicyForm({
             <input type="hidden" {...register('gastos_expedicion', { valueAsNumber: true })} />
           </div>
 
-          {/* IVA - CON FORMATO */}
+          {/* IVA */}
           <div className="space-y-2">
             <Label>IVA</Label>
             <Input
@@ -731,7 +774,7 @@ export function PolicyForm({
             <input type="hidden" {...register('iva', { valueAsNumber: true })} />
           </div>
 
-          {/* Total - CON FORMATO (readonly) */}
+          {/* Total */}
           <div className="space-y-2">
             <Label>Total</Label>
             <Input
@@ -761,52 +804,13 @@ export function PolicyForm({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados (modificable).
+          El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados.
         </p>
       </div>
 
-      {/* Fechas: Expedición, Inicio, Vencimiento */}
-      <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-        <div className="flex items-center gap-2 text-lg font-semibold">
-          <Calendar className="h-5 w-5 text-primary" />
-          <span>Fechas</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label>Fecha de Expedición</Label>
-            <Input
-              type="date"
-              {...register('fecha_expedicion')}
-              disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground">Fecha en que se expide la póliza</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Fecha de Inicio</Label>
-            <Input
-              type="date"
-              value={startDate || ''}
-              onChange={handleStartDateChange}
-              disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground">Al cambiar, se calcula el vencimiento a 1 año</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Fecha de Vencimiento</Label>
-            <Input
-              type="date"
-              {...register('end_date')}
-              disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground">Puedes ajustar manualmente</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Documentos Adjuntos */}
+      {/* ============================================= */}
+      {/* SECCIÓN 5: Documentos Adjuntos (MEJORADO) */}
+      {/* ============================================= */}
       <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
         <div className="flex items-center gap-2 text-lg font-semibold">
           <FileText className="h-5 w-5 text-primary" />
@@ -815,33 +819,39 @@ export function PolicyForm({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Documentos de Póliza */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Documentos de Póliza</Label>
-              <span className="text-xs text-muted-foreground">{polizaDocuments.length} / 5</span>
+          <div className="p-4 border rounded-lg bg-background">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="font-medium">Documentos de Póliza</h4>
+                <p className="text-xs text-muted-foreground">PDF de la póliza emitida</p>
+              </div>
+              <span className="text-sm font-medium text-muted-foreground bg-muted px-2 py-1 rounded">
+                {polizaDocuments.length} / 5
+              </span>
             </div>
 
             {polizaDocuments.length < 5 && (
-              <div className="relative">
+              <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors">
+                <Upload className="h-5 w-5 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Seleccionar archivos</span>
                 <Input
                   type="file"
                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                   onChange={handlePolizaFileChange}
                   disabled={loading}
-                  className="cursor-pointer"
+                  className="hidden"
                   multiple
                 />
-                <Upload className="h-4 w-4 absolute right-3 top-3 text-muted-foreground pointer-events-none" />
-              </div>
+              </label>
             )}
 
             {polizaDocuments.length > 0 && (
-              <div className="space-y-2">
+              <div className="mt-3 space-y-2">
                 {polizaDocuments.map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-background rounded border">
-                    <div className="flex items-center gap-2">
-                      <File className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm truncate max-w-[200px]">{doc.file_name}</span>
+                  <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <File className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                      <span className="text-sm truncate">{doc.file_name}</span>
                     </div>
                     <Button
                       type="button"
@@ -849,7 +859,7 @@ export function PolicyForm({
                       size="sm"
                       onClick={() => removePolizaDoc(index)}
                       disabled={loading}
-                      className="h-8 w-8 p-0 hover:bg-red-100"
+                      className="h-7 w-7 p-0 hover:bg-red-100 flex-shrink-0"
                     >
                       <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
@@ -860,36 +870,39 @@ export function PolicyForm({
           </div>
 
           {/* Documentos de Soporte */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Documentos de Soporte</Label>
-              <span className="text-xs text-muted-foreground">{soporteDocuments.length} / 8</span>
+          <div className="p-4 border rounded-lg bg-background">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="font-medium">Documentos de Soporte</h4>
+                <p className="text-xs text-muted-foreground">Sarlaft, Cédula, CCB, RUT, Estados Financieros</p>
+              </div>
+              <span className="text-sm font-medium text-muted-foreground bg-muted px-2 py-1 rounded">
+                {soporteDocuments.length} / 8
+              </span>
             </div>
-            <p className="text-xs text-muted-foreground -mt-2">
-              Sarlaft, Cédula, CCB, RUT, Estados Financieros
-            </p>
 
             {soporteDocuments.length < 8 && (
-              <div className="relative">
+              <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors">
+                <Upload className="h-5 w-5 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Seleccionar archivos</span>
                 <Input
                   type="file"
                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                   onChange={handleSoporteFileChange}
                   disabled={loading}
-                  className="cursor-pointer"
+                  className="hidden"
                   multiple
                 />
-                <Upload className="h-4 w-4 absolute right-3 top-3 text-muted-foreground pointer-events-none" />
-              </div>
+              </label>
             )}
 
             {soporteDocuments.length > 0 && (
-              <div className="space-y-2">
+              <div className="mt-3 space-y-2">
                 {soporteDocuments.map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-background rounded border">
-                    <div className="flex items-center gap-2">
-                      <File className="h-4 w-4 text-green-600" />
-                      <span className="text-sm truncate max-w-[200px]">{doc.file_name}</span>
+                  <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <File className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <span className="text-sm truncate">{doc.file_name}</span>
                     </div>
                     <Button
                       type="button"
@@ -897,7 +910,7 @@ export function PolicyForm({
                       size="sm"
                       onClick={() => removeSoporteDoc(index)}
                       disabled={loading}
-                      className="h-8 w-8 p-0 hover:bg-red-100"
+                      className="h-7 w-7 p-0 hover:bg-red-100 flex-shrink-0"
                     >
                       <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
@@ -909,7 +922,9 @@ export function PolicyForm({
         </div>
       </div>
 
+      {/* ============================================= */}
       {/* Botones */}
+      {/* ============================================= */}
       <div className="flex justify-end gap-3 pt-4 border-t">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
