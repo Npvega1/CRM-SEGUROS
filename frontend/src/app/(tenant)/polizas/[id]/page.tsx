@@ -80,14 +80,6 @@ interface PolicyDocument {
 }
 
 interface PolicyWithClient extends Policy {
-  anexo?: string;
-  gastos_expedicion?: number;
-  iva?: number;
-  total_a_pagar?: number;
-  fecha_expedicion?: string;
-  policy_type?: 'original' | 'anexo' | 'renovacion';
-  parent_policy_id?: string;
-  renewed_from_policy_id?: string;
   client?: {
     id: string;
     full_name: string;
@@ -557,11 +549,6 @@ export default function PolicyDetailPage() {
                   <p className="font-bold text-xl text-blue-700">{formatCurrency(displayTotal)}</p>
                 </div>
               </div>
-              {(!policy.gastos_expedicion && !policy.iva && !policy.total_a_pagar) && (
-                <p className="text-xs text-amber-600 mt-3">
-                  * Los valores de Gastos, IVA y Total no fueron registrados. Puedes editarlos desde "Acciones → Editar Póliza".
-                </p>
-              )}
             </CardContent>
           </Card>
 
@@ -766,7 +753,7 @@ export default function PolicyDetailPage() {
             </Card>
           )}
 
-          {/* Resumen Rápido - SIN COMISIÓN */}
+          {/* Resumen Rápido */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Resumen</CardTitle>
