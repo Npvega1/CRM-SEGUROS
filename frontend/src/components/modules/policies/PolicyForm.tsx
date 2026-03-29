@@ -6,7 +6,7 @@
 // Con selección en cascada: Compañía → Grupo → Ramo
 // =====================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
@@ -22,12 +22,19 @@ import {
 import {
   CreatePolicyInputSchema,
   type Policy,
-  POLICY_STATUS_LABELS,
   type PolicyStatus
 } from '@/lib/validations/policies';
-import { Loader2, Save, X, Building, Layers, FileText } from 'lucide-react';
+import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Calendar } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
+
+// Labels para estados (sin cotización)
+const POLICY_STATUS_OPTIONS: { value: PolicyStatus; label: string }[] = [
+  { value: 'activa', label: 'Activa' },
+  { value: 'vencida', label: 'Vencida' },
+  { value: 'cancelada', label: 'Cancelada' },
+  { value: 'renovacion', label: 'En Renovación' },
+];
 
 // Tipos para catálogos de seguros
 interface InsuranceCompany {
@@ -57,21 +64,35 @@ interface TenantCompany {
   company: InsuranceCompany;
 }
 
+// Tipo para documentos
+interface PolicyDocument {
+  id?: string;
+  file: File | null;
+  file_url?: string;
+  file_name: string;
+  document_type: 'poliza' | 'soporte';
+  document_name: string;
+}
+
 // Tipo para el formulario
 interface PolicyFormData {
   client_id: string;
   policy_number: string;
+  anexo: string;
   insurer: string;
   insurer_id?: string;
   line: string;
   line_id?: string;
   group_id?: string;
   status: PolicyStatus;
+  currency: string;
   premium: number;
-  currency?: string;
+  gastos_expedicion: number;
+  iva: number;
+  total_a_pagar: number;
+  fecha_expedicion?: string | null;
   start_date?: string | null;
   end_date?: string | null;
-  commission_pct?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -105,6 +126,11 @@ export function PolicyForm({
   const [selectedLineId, setSelectedLineId] = useState<string>('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
 
+  // Estados para documentos
+  const [polizaDocuments, setPolizaDocuments] = useState<PolicyDocument[]>([]);
+  const [soporteDocuments, setSoporteDocuments] = useState<PolicyDocument[]>([]);
+  const [uploadingDocs, setUploadingDocs] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -117,32 +143,51 @@ export function PolicyForm({
     defaultValues: policy ? {
       client_id: policy.client_id,
       policy_number: policy.policy_number,
+      anexo: (policy as any).anexo || '00',
       insurer: policy.insurer,
       line: policy.line,
       status: policy.status as PolicyStatus,
-      premium: policy.premium,
       currency: policy.currency || 'COP',
+      premium: policy.premium,
+      gastos_expedicion: (policy as any).gastos_expedicion || 0,
+      iva: (policy as any).iva || 0,
+      total_a_pagar: (policy as any).total_a_pagar || 0,
+      fecha_expedicion: (policy as any).fecha_expedicion || '',
       start_date: policy.start_date || '',
       end_date: policy.end_date || '',
-      commission_pct: policy.commission_pct || 0
     } : {
       client_id: clientId || '',
+      anexo: '00',
       line: 'otro',
-      status: 'cotizacion',
+      status: 'activa',
       currency: 'COP',
       premium: 0,
-      commission_pct: 0
+      gastos_expedicion: 0,
+      iva: 0,
+      total_a_pagar: 0
     }
   });
+
+  const premium = watch('premium') || 0;
+  const gastosExpedicion = watch('gastos_expedicion') || 0;
+  const iva = watch('iva') || 0;
+  const status = watch('status');
+  const fechaExpedicion = watch('fecha_expedicion');
+  const startDate = watch('start_date');
+
+  // Calcular total automáticamente
+  useEffect(() => {
+    const total = Number(premium) + Number(gastosExpedicion) + Number(iva);
+    setValue('total_a_pagar', total);
+  }, [premium, gastosExpedicion, iva, setValue]);
 
   // Cargar compañías activas del tenant
   useEffect(() => {
     async function loadTenantCompanies() {
       if (!tenantId) return;
-      setLoadingCatalogs(true);
 
+      setLoadingCatalogs(true);
       try {
-        // Cargar compañías activas del tenant con datos de la compañía
         const { data: tcData } = await (supabase.from('tenant_companies') as ReturnType<typeof supabase.from>)
           .select(`
             company_id,
@@ -183,7 +228,6 @@ export function PolicyForm({
       }
 
       try {
-        // Cargar líneas disponibles para esta compañía
         const { data: clData } = await (supabase.from('company_lines') as ReturnType<typeof supabase.from>)
           .select(`
             line_id,
@@ -266,56 +310,122 @@ export function PolicyForm({
     }
   }, [clientId, isEditing, setValue]);
 
-  const status = watch('status');
-  const startDate = watch('start_date');
-
   // Auto-calcular fecha de vencimiento cuando cambia la fecha de inicio
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartDate = e.target.value;
     setValue('start_date', newStartDate);
-    
-    // Si hay fecha de inicio, calcular vencimiento = inicio + 1 año
+
     if (newStartDate) {
       const start = new Date(newStartDate);
       const end = new Date(start);
       end.setFullYear(end.getFullYear() + 1);
-      
-      // Formatear como YYYY-MM-DD
       const endDateStr = end.toISOString().split('T')[0];
       setValue('end_date', endDateStr);
     }
   };
 
+  // Manejo de documentos - Póliza
+  const handlePolizaFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const remainingSlots = 5 - polizaDocuments.length;
+    const filesToAdd = Array.from(files).slice(0, remainingSlots);
+
+    const newDocs: PolicyDocument[] = filesToAdd.map(file => ({
+      file,
+      file_name: file.name,
+      document_type: 'poliza',
+      document_name: 'Póliza'
+    }));
+
+    setPolizaDocuments(prev => [...prev, ...newDocs]);
+    e.target.value = '';
+  };
+
+  // Manejo de documentos - Soporte
+  const handleSoporteFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const remainingSlots = 8 - soporteDocuments.length;
+    const filesToAdd = Array.from(files).slice(0, remainingSlots);
+
+    const newDocs: PolicyDocument[] = filesToAdd.map(file => ({
+      file,
+      file_name: file.name,
+      document_type: 'soporte',
+      document_name: file.name.split('.')[0]
+    }));
+
+    setSoporteDocuments(prev => [...prev, ...newDocs]);
+    e.target.value = '';
+  };
+
+  const removePolizaDoc = (index: number) => {
+    setPolizaDocuments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeSoporteDoc = (index: number) => {
+    setSoporteDocuments(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleFormSubmit = async (data: PolicyFormData) => {
     console.log('Form data submitted:', data);
+    // TODO: Subir documentos al storage antes de guardar la póliza
     await onSubmit(data);
   };
 
-  // Mostrar errores de validación en consola para debug
   const onError = (errors: Record<string, unknown>) => {
     console.error('Form validation errors:', errors);
   };
 
   const loading = isLoading || isSubmitting;
 
+  // Generar opciones de anexo (00-99)
+  const anexoOptions = Array.from({ length: 100 }, (_, i) => 
+    i.toString().padStart(2, '0')
+  );
+
   return (
     <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
-      {/* Client ID (oculto si viene predefinido) */}
+      {/* Client ID (oculto) */}
       <input type="hidden" {...register('client_id')} />
 
-      {/* Número de Póliza */}
-      <div className="space-y-2">
-        <Label htmlFor="policy_number">Número de Póliza *</Label>
-        <Input
-          id="policy_number"
-          placeholder="Ej: POL-2024-001"
-          {...register('policy_number')}
-          disabled={loading}
-          data-testid="policy-number-input"
-        />
-        {errors.policy_number && (
-          <p className="text-sm text-red-500">{errors.policy_number.message}</p>
-        )}
+      {/* Número de Póliza + Anexo */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="md:col-span-3 space-y-2">
+          <Label htmlFor="policy_number">Número de Póliza *</Label>
+          <Input
+            id="policy_number"
+            placeholder="Ej: POL-2024-001"
+            {...register('policy_number')}
+            disabled={loading}
+            data-testid="policy-number-input"
+          />
+          {errors.policy_number && (
+            <p className="text-sm text-red-500">{errors.policy_number.message}</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="anexo">Anexo</Label>
+          <Select
+            value={watch('anexo') || '00'}
+            onValueChange={(value) => setValue('anexo', value)}
+            disabled={loading}
+          >
+            <SelectTrigger id="anexo" data-testid="policy-anexo-select">
+              <SelectValue placeholder="00" />
+            </SelectTrigger>
+            <SelectContent className="max-h-[200px]">
+              {anexoOptions.map((num) => (
+                <SelectItem key={num} value={num}>
+                  {num}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Selección en cascada: Compañía → Grupo → Ramo */}
@@ -324,7 +434,7 @@ export function PolicyForm({
           <Building className="h-4 w-4" />
           Selección de Producto
         </div>
-        
+
         {loadingCatalogs ? (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -420,59 +530,45 @@ export function PolicyForm({
             </div>
           </div>
         )}
-        
-        {/* Campos ocultos para el formulario */}
+
+        {/* Campos ocultos */}
         <input type="hidden" {...register('insurer')} />
         <input type="hidden" {...register('line')} />
       </div>
 
       {/* Estado */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="status">Estado *</Label>
-          <Select
-            value={status}
-            onValueChange={(value: PolicyStatus) => setValue('status', value)}
-            disabled={loading || isEditing}
-          >
-            <SelectTrigger id="status" data-testid="policy-status-select">
-              <SelectValue placeholder="Seleccionar estado" />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.entries(POLICY_STATUS_LABELS) as [PolicyStatus, string][]).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {isEditing && (
-            <p className="text-xs text-muted-foreground">
-              Para cambiar el estado, usa el stepper de estados
-            </p>
-          )}
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="status">Estado *</Label>
+        <Select
+          value={status}
+          onValueChange={(value: PolicyStatus) => setValue('status', value)}
+          disabled={loading || isEditing}
+        >
+          <SelectTrigger id="status" data-testid="policy-status-select" className="w-full md:w-1/3">
+            <SelectValue placeholder="Seleccionar estado" />
+          </SelectTrigger>
+          <SelectContent>
+            {POLICY_STATUS_OPTIONS.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {isEditing && (
+          <p className="text-xs text-muted-foreground">
+            Para cambiar el estado, usa el stepper de estados
+          </p>
+        )}
       </div>
 
-      {/* Prima y Comisión */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="premium">Prima *</Label>
-          <Input
-            id="premium"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            {...register('premium', { valueAsNumber: true })}
-            disabled={loading}
-            data-testid="policy-premium-input"
-          />
-          {errors.premium && (
-            <p className="text-sm text-red-500">{errors.premium.message}</p>
-          )}
+      {/* Valores: Moneda + Prima + Gastos + IVA + Total */}
+      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          Valores de la Póliza
         </div>
 
+        {/* Moneda */}
         <div className="space-y-2">
           <Label htmlFor="currency">Moneda</Label>
           <Select
@@ -480,64 +576,237 @@ export function PolicyForm({
             onValueChange={(value) => setValue('currency', value)}
             disabled={loading}
           >
-            <SelectTrigger id="currency">
+            <SelectTrigger id="currency" className="w-full md:w-1/4">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="COP">COP</SelectItem>
-              <SelectItem value="USD">USD</SelectItem>
+              <SelectItem value="COP">COP (Peso Colombiano)</SelectItem>
+              <SelectItem value="USD">USD (Dólar)</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="commission_pct">Comisión %</Label>
-          <Input
-            id="commission_pct"
-            type="number"
-            step="0.01"
-            min="0"
-            max="100"
-            placeholder="0.00"
-            {...register('commission_pct', { valueAsNumber: true })}
-            disabled={loading}
-            data-testid="policy-commission-input"
-          />
-          {errors.commission_pct && (
-            <p className="text-sm text-red-500">{errors.commission_pct.message}</p>
-          )}
+        {/* Prima, Gastos, IVA, Total */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="premium">Prima *</Label>
+            <Input
+              id="premium"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              {...register('premium', { valueAsNumber: true })}
+              disabled={loading}
+              data-testid="policy-premium-input"
+            />
+            {errors.premium && (
+              <p className="text-sm text-red-500">{errors.premium.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="gastos_expedicion">Gastos Expedición</Label>
+            <Input
+              id="gastos_expedicion"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              {...register('gastos_expedicion', { valueAsNumber: true })}
+              disabled={loading}
+              data-testid="policy-gastos-input"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="iva">IVA</Label>
+            <Input
+              id="iva"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              {...register('iva', { valueAsNumber: true })}
+              disabled={loading}
+              data-testid="policy-iva-input"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="total_a_pagar">Total a Pagar</Label>
+            <Input
+              id="total_a_pagar"
+              type="number"
+              step="0.01"
+              min="0"
+              value={watch('total_a_pagar') || 0}
+              disabled
+              className="bg-slate-100 font-semibold"
+              data-testid="policy-total-input"
+            />
+            <p className="text-xs text-muted-foreground">Calculado automáticamente</p>
+          </div>
         </div>
       </div>
 
-      {/* Fechas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="start_date">Fecha de Inicio</Label>
-          <Input
-            id="start_date"
-            type="date"
-            value={startDate || ''}
-            onChange={handleStartDateChange}
-            disabled={loading}
-            data-testid="policy-start-date-input"
-          />
-          <p className="text-xs text-muted-foreground">
-            Al cambiar, se calcula automáticamente el vencimiento a 1 año
-          </p>
+      {/* Fechas: Expedición, Inicio, Vencimiento */}
+      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <Calendar className="h-4 w-4" />
+          Fechas
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="end_date">Fecha de Vencimiento</Label>
-          <Input
-            id="end_date"
-            type="date"
-            {...register('end_date')}
-            disabled={loading}
-            data-testid="policy-end-date-input"
-          />
-          <p className="text-xs text-muted-foreground">
-            Puedes ajustar manualmente si la póliza no es anual
-          </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
+            <Input
+              id="fecha_expedicion"
+              type="date"
+              {...register('fecha_expedicion')}
+              disabled={loading}
+              data-testid="policy-expedition-date-input"
+            />
+            <p className="text-xs text-muted-foreground">
+              Fecha en que se expide la póliza
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="start_date">Fecha de Inicio</Label>
+            <Input
+              id="start_date"
+              type="date"
+              value={startDate || ''}
+              onChange={handleStartDateChange}
+              disabled={loading}
+              data-testid="policy-start-date-input"
+            />
+            <p className="text-xs text-muted-foreground">
+              Al cambiar, se calcula el vencimiento a 1 año
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="end_date">Fecha de Vencimiento</Label>
+            <Input
+              id="end_date"
+              type="date"
+              {...register('end_date')}
+              disabled={loading}
+              data-testid="policy-end-date-input"
+            />
+            <p className="text-xs text-muted-foreground">
+              Puedes ajustar manualmente
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Documentos */}
+      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <FileText className="h-4 w-4" />
+          Documentos Adjuntos
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Documentos de Póliza */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Documentos de Póliza</Label>
+              <span className="text-xs text-muted-foreground">{polizaDocuments.length}/5</span>
+            </div>
+            
+            {polizaDocuments.length < 5 && (
+              <div className="relative">
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  multiple
+                  onChange={handlePolizaFileChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  disabled={loading}
+                />
+                <div className="flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                  <Upload className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Subir documento de póliza</span>
+                </div>
+              </div>
+            )}
+
+            {polizaDocuments.length > 0 && (
+              <div className="space-y-2">
+                {polizaDocuments.map((doc, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
+                    <div className="flex items-center gap-2">
+                      <File className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm truncate max-w-[180px]">{doc.file_name}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removePolizaDoc(index)}
+                      disabled={loading}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Documentos de Soporte */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Documentos de Soporte</Label>
+              <span className="text-xs text-muted-foreground">{soporteDocuments.length}/8</span>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-2">
+              Sarlaft, Cédula, CCB, RUT, Estados Financieros, etc.
+            </p>
+            
+            {soporteDocuments.length < 8 && (
+              <div className="relative">
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  multiple
+                  onChange={handleSoporteFileChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  disabled={loading}
+                />
+                <div className="flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                  <Upload className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Subir documentos soporte</span>
+                </div>
+              </div>
+            )}
+
+            {soporteDocuments.length > 0 && (
+              <div className="space-y-2">
+                {soporteDocuments.map((doc, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
+                    <div className="flex items-center gap-2">
+                      <File className="h-4 w-4 text-green-600" />
+                      <span className="text-sm truncate max-w-[180px]">{doc.file_name}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeSoporteDoc(index)}
+                      disabled={loading}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
