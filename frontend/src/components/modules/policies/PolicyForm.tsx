@@ -25,16 +25,13 @@ import {
   type Policy,
   type PolicyStatus
 } from '@/lib/validations/policies';
-import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Calendar, DollarSign } from 'lucide-react';
+import { Loader2, Save, X, Building, FileText, Upload, Trash2, File, Calendar, DollarSign } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
 
-// Labels para estados (sin cotización)
+// ✅ Solo estado "Activa" visible
 const POLICY_STATUS_OPTIONS: { value: PolicyStatus; label: string }[] = [
   { value: 'activa', label: 'Activa' },
-  { value: 'vencida', label: 'Vencida' },
-  { value: 'cancelada', label: 'Cancelada' },
-  { value: 'renovacion', label: 'En Renovación' },
 ];
 
 // Tipos para catálogos de seguros
@@ -549,11 +546,6 @@ export function PolicyForm({
               ))}
             </SelectContent>
           </Select>
-          {isEditing && (
-            <p className="text-xs text-muted-foreground">
-              Para cambiar el estado, usa el stepper
-            </p>
-          )}
         </div>
       </div>
 
@@ -809,7 +801,7 @@ export function PolicyForm({
       </div>
 
       {/* ============================================= */}
-      {/* SECCIÓN 5: Documentos Adjuntos (MEJORADO) */}
+      {/* SECCIÓN 5: Documentos Adjuntos */}
       {/* ============================================= */}
       <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
         <div className="flex items-center gap-2 text-lg font-semibold">
@@ -943,4 +935,3 @@ export function PolicyForm({
       </div>
     </form>
   );
-}
