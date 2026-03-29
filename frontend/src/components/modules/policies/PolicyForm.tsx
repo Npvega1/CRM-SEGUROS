@@ -3,10 +3,11 @@
 // =====================================================
 // COMPONENTE: PolicyForm
 // Formulario para crear/editar pólizas
-// Con selección en cascada y carga automática de comisión
+// Con selección en cascada, carga automática de comisión
+// y formato de moneda ($1.000.000)
 // =====================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
@@ -64,7 +65,7 @@ interface TenantCompany {
   company: InsuranceCompany;
 }
 
-// Tipo para documentos
+// Tipo para documentos - EXPORTADO
 export interface PolicyDocument {
   id?: string;
   file: File | null;
@@ -100,15 +101,31 @@ interface PolicyFormData {
 interface PolicyFormProps {
   policy?: Policy;
   clientId?: string;
-  // ✅ ACTUALIZADO: onSubmit ahora recibe los documentos
+  // ✅ onSubmit recibe los documentos
   onSubmit: (
-    data: PolicyFormData, 
-    polizaDocuments: PolicyDocument[], 
+    data: PolicyFormData,
+    polizaDocuments: PolicyDocument[],
     soporteDocuments: PolicyDocument[]
   ) => Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
 }
+
+// ✅ Funciones para formatear moneda
+const formatCurrency = (value: number): string => {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(value);
+};
+
+const parseCurrencyInput = (value: string): number => {
+  // Remover todo excepto números
+  const numericValue = value.replace(/[^0-9]/g, '');
+  return parseInt(numericValue, 10) || 0;
+};
 
 export function PolicyForm({
   policy,
@@ -136,6 +153,12 @@ export function PolicyForm({
   // Estados para documentos
   const [polizaDocuments, setPolizaDocuments] = useState<PolicyDocument[]>([]);
   const [soporteDocuments, setSoporteDocuments] = useState<PolicyDocument[]>([]);
+
+  // ✅ Estados para valores formateados (display)
+  const [displayPremium, setDisplayPremium] = useState('$0');
+  const [displayGastos, setDisplayGastos] = useState('$0');
+  const [displayIva, setDisplayIva] = useState('$0');
+  const [displayTotal, setDisplayTotal] = useState('$0');
 
   const {
     register,
@@ -188,11 +211,44 @@ export function PolicyForm({
   const status = watch('status');
   const startDate = watch('start_date');
 
-  // Calcular total automáticamente
+  // ✅ Inicializar displays formateados
+  useEffect(() => {
+    if (policy) {
+      setDisplayPremium(formatCurrency(policy.premium || 0));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setDisplayGastos(formatCurrency((policy as any).gastos_expedicion || 0));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setDisplayIva(formatCurrency((policy as any).iva || 0));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setDisplayTotal(formatCurrency((policy as any).total_a_pagar || 0));
+    }
+  }, [policy]);
+
+  // ✅ Calcular total automáticamente y actualizar display
   useEffect(() => {
     const total = Number(premium) + Number(gastosExpedicion) + Number(iva);
     setValue('total_a_pagar', total);
+    setDisplayTotal(formatCurrency(total));
   }, [premium, gastosExpedicion, iva, setValue]);
+
+  // ✅ Handlers para inputs de moneda
+  const handlePremiumChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const numericValue = parseCurrencyInput(e.target.value);
+    setValue('premium', numericValue);
+    setDisplayPremium(formatCurrency(numericValue));
+  }, [setValue]);
+
+  const handleGastosChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const numericValue = parseCurrencyInput(e.target.value);
+    setValue('gastos_expedicion', numericValue);
+    setDisplayGastos(formatCurrency(numericValue));
+  }, [setValue]);
+
+  const handleIvaChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const numericValue = parseCurrencyInput(e.target.value);
+    setValue('iva', numericValue);
+    setDisplayIva(formatCurrency(numericValue));
+  }, [setValue]);
 
   // Cargar comisión cuando se selecciona compañía + ramo
   useEffect(() => {
@@ -212,7 +268,6 @@ export function PolicyForm({
         if (data && !error) {
           setValue('commission_pct', data.commission_pct);
         } else {
-          // Si no hay comisión configurada, usar 10% por defecto
           setValue('commission_pct', 10);
         }
       } catch (err) {
@@ -448,6 +503,7 @@ export function PolicyForm({
             placeholder="POL-2024-001"
             {...register('policy_number')}
             disabled={loading}
+            className="text-lg"
           />
           {errors.policy_number && (
             <p className="text-sm text-destructive">
@@ -463,7 +519,7 @@ export function PolicyForm({
             onValueChange={(value) => setValue('anexo', value)}
             disabled={loading}
           >
-            <SelectTrigger>
+            <SelectTrigger className="text-lg">
               <SelectValue placeholder="00" />
             </SelectTrigger>
             <SelectContent>
@@ -607,7 +663,7 @@ export function PolicyForm({
         )}
       </div>
 
-      {/* Valores de la Póliza */}
+      {/* ✅ Valores de la Póliza - CON FORMATO DE MONEDA */}
       <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
         <div className="flex items-center gap-2 text-lg font-semibold">
           <Layers className="h-5 w-5 text-primary" />
@@ -633,52 +689,58 @@ export function PolicyForm({
             </Select>
           </div>
 
-          {/* Prima */}
+          {/* Prima - CON FORMATO */}
           <div className="space-y-2">
             <Label>Prima *</Label>
             <Input
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              {...register('premium', { valueAsNumber: true })}
+              type="text"
+              placeholder="$0"
+              value={displayPremium}
+              onChange={handlePremiumChange}
               disabled={loading}
+              className="text-right font-semibold"
             />
+            <input type="hidden" {...register('premium', { valueAsNumber: true })} />
           </div>
 
-          {/* Gastos Expedición */}
+          {/* Gastos Expedición - CON FORMATO */}
           <div className="space-y-2">
             <Label>Gastos Exp.</Label>
             <Input
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              {...register('gastos_expedicion', { valueAsNumber: true })}
+              type="text"
+              placeholder="$0"
+              value={displayGastos}
+              onChange={handleGastosChange}
               disabled={loading}
+              className="text-right"
             />
+            <input type="hidden" {...register('gastos_expedicion', { valueAsNumber: true })} />
           </div>
 
-          {/* IVA */}
+          {/* IVA - CON FORMATO */}
           <div className="space-y-2">
             <Label>IVA</Label>
             <Input
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              {...register('iva', { valueAsNumber: true })}
+              type="text"
+              placeholder="$0"
+              value={displayIva}
+              onChange={handleIvaChange}
               disabled={loading}
+              className="text-right"
             />
+            <input type="hidden" {...register('iva', { valueAsNumber: true })} />
           </div>
 
-          {/* Total */}
+          {/* Total - CON FORMATO (readonly) */}
           <div className="space-y-2">
             <Label>Total</Label>
             <Input
-              type="number"
-              step="0.01"
-              {...register('total_a_pagar', { valueAsNumber: true })}
+              type="text"
+              value={displayTotal}
               disabled
-              className="bg-muted font-semibold"
+              className="bg-primary/10 font-bold text-right text-primary"
             />
+            <input type="hidden" {...register('total_a_pagar', { valueAsNumber: true })} />
           </div>
 
           {/* Comisión */}
@@ -691,6 +753,7 @@ export function PolicyForm({
                 placeholder="10.00"
                 {...register('commission_pct', { valueAsNumber: true })}
                 disabled={loading}
+                className="text-right"
               />
               {loadingCommission && <Loader2 className="h-4 w-4 animate-spin absolute right-3 top-3" />}
             </div>
@@ -854,7 +917,7 @@ export function PolicyForm({
             Cancelar
           </Button>
         )}
-        <Button type="submit" disabled={loading}>
+        <Button type="submit" disabled={loading} size="lg">
           {loading ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
