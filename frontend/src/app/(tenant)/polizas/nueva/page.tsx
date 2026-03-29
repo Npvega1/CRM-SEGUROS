@@ -3,7 +3,6 @@
 // =====================================================
 // PÁGINA: Nueva Póliza
 // /polizas/nueva
-// Layout mejorado: Cliente arriba del formulario
 // INSERT con todos los campos nuevos
 // =====================================================
 
@@ -80,6 +79,7 @@ function NewPolicyContent() {
     try {
       const supabase = getBrowserClient();
 
+      // INSERT con TODOS los campos
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: newPolicy, error: insertError } = await (supabase as any)
         .from('policies')
@@ -148,7 +148,7 @@ function NewPolicyContent() {
         </div>
       )}
 
-      {/* ========== PASO 1: Selección de Cliente ========== */}
+      {/* PASO 1: Selección de Cliente */}
       {!selectedClientId ? (
         <Card>
           <CardHeader>
@@ -196,9 +196,9 @@ function NewPolicyContent() {
           </CardContent>
         </Card>
       ) : (
-        /* ========== PASO 2: Formulario de Póliza ========== */
+        /* PASO 2: Formulario de Póliza */
         <div className="space-y-4">
-          {/* Botón para cambiar cliente */}
+          {/* Cliente seleccionado */}
           <div className="flex items-center justify-between p-4 bg-slate-50 border rounded-lg">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-full bg-green-100 text-green-600">
