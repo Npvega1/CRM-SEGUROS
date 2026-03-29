@@ -5,3 +5,4 @@
 export { AutomationBuilder } from './AutomationBuilder';
 export { EmailTemplateEditor } from './EmailTemplateEditor';
 export { AutomationLogs } from './AutomationLogs';
+export { EmailSendLogs } from './EmailSendLogs';
