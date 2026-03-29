@@ -85,9 +85,10 @@ function NewPolicyContent() {
   // Función para subir documentos a Supabase Storage
   const uploadDocuments = async (
     policyId: string,
-    documents: PolicyDocument[],
-    supabase: ReturnType<typeof getBrowserClient>
+    documents: PolicyDocument[]
   ): Promise<void> => {
+    const supabase = getBrowserClient();
+    
     for (const doc of documents) {
       if (!doc.file) continue;
 
@@ -113,7 +114,8 @@ function NewPolicyContent() {
         .getPublicUrl(fileName);
 
       // Guardar referencia en policy_documents
-      const { error: dbError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: dbError } = await (supabase as any)
         .from('policy_documents')
         .insert({
           tenant_id: tenantId,
@@ -190,7 +192,7 @@ function NewPolicyContent() {
       const allDocuments = [...data.polizaDocuments, ...data.soporteDocuments];
       if (allDocuments.length > 0) {
         try {
-          await uploadDocuments(newPolicy.id, allDocuments, supabase);
+          await uploadDocuments(newPolicy.id, allDocuments);
         } catch (uploadErr) {
           console.error('Error uploading documents:', uploadErr);
           router.push(`/polizas/${newPolicy.id}?warning=documents`);
