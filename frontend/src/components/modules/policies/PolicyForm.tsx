@@ -3,7 +3,6 @@
 // =====================================================
 // COMPONENTE: PolicyForm
 // Formulario para crear/editar pólizas
-// Con selección en cascada y carga automática de comisión
 // =====================================================
 
 import { useEffect, useState } from 'react';
@@ -28,7 +27,7 @@ import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Cal
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
 
-// Labels para estados (sin cotización)
+// Labels para estados
 const POLICY_STATUS_OPTIONS: { value: PolicyStatus; label: string }[] = [
   { value: 'activa', label: 'Activa' },
   { value: 'vencida', label: 'Vencida' },
@@ -36,7 +35,7 @@ const POLICY_STATUS_OPTIONS: { value: PolicyStatus; label: string }[] = [
   { value: 'renovacion', label: 'En Renovación' },
 ];
 
-// Tipos para catálogos de seguros
+// Tipos para catálogos
 interface InsuranceCompany {
   id: string;
   name: string;
@@ -64,7 +63,7 @@ interface TenantCompany {
   company: InsuranceCompany;
 }
 
-// Tipo para documentos
+// Tipo para documentos - EXPORTADO
 export interface PolicyDocument {
   id?: string;
   file: File | null;
@@ -74,8 +73,8 @@ export interface PolicyDocument {
   document_name: string;
 }
 
-// Tipo para el formulario
-interface PolicyFormData {
+// Tipo para el formulario - EXPORTADO
+export interface PolicyFormData {
   client_id: string;
   policy_number: string;
   anexo: string;
@@ -97,10 +96,16 @@ interface PolicyFormData {
   metadata?: Record<string, unknown>;
 }
 
+// Tipo combinado para onSubmit
+export interface PolicySubmitData extends PolicyFormData {
+  polizaDocuments: PolicyDocument[];
+  soporteDocuments: PolicyDocument[];
+}
+
 interface PolicyFormProps {
   policy?: Policy;
   clientId?: string;
-  onSubmit: (data: PolicyFormData & { polizaDocuments: PolicyDocument[]; soporteDocuments: PolicyDocument[] }) => Promise<void>;
+  onSubmit: (data: PolicySubmitData) => Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
 }
@@ -148,7 +153,7 @@ export function PolicyForm({
   const [polizaDocuments, setPolizaDocuments] = useState<PolicyDocument[]>([]);
   const [soporteDocuments, setSoporteDocuments] = useState<PolicyDocument[]>([]);
 
-  // Estados para valores formateados (display)
+  // Estados para valores formateados
   const [premiumDisplay, setPremiumDisplay] = useState('');
   const [gastosDisplay, setGastosDisplay] = useState('');
   const [ivaDisplay, setIvaDisplay] = useState('');
@@ -188,7 +193,7 @@ export function PolicyForm({
       client_id: clientId || '',
       anexo: '00',
       line: 'otro',
-      status: 'activa',
+      status: 'activa' as PolicyStatus,
       currency: 'COP',
       premium: 0,
       gastos_expedicion: 0,
@@ -259,7 +264,9 @@ export function PolicyForm({
 
       setLoadingCatalogs(true);
       try {
-        const { data: tcData } = await (supabase.from('tenant_companies') as ReturnType<typeof supabase.from>)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: tcData } = await (supabase as any)
+          .from('tenant_companies')
           .select(`
             company_id,
             is_active,
@@ -289,7 +296,7 @@ export function PolicyForm({
     loadTenantCompanies();
   }, [tenantId, supabase]);
 
-  // Cargar grupos (líneas) cuando se selecciona una compañía
+  // Cargar líneas cuando se selecciona compañía
   useEffect(() => {
     async function loadLinesForCompany() {
       if (!selectedCompanyId) {
@@ -299,7 +306,9 @@ export function PolicyForm({
       }
 
       try {
-        const { data: clData } = await (supabase.from('company_lines') as ReturnType<typeof supabase.from>)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: clData } = await (supabase as any)
+          .from('company_lines')
           .select(`
             line_id,
             line:insurance_lines(id, name, slug, unit)
@@ -320,7 +329,7 @@ export function PolicyForm({
     loadLinesForCompany();
   }, [selectedCompanyId, supabase]);
 
-  // Cargar ramos cuando se selecciona un grupo (línea)
+  // Cargar ramos cuando se selecciona línea
   useEffect(() => {
     async function loadGroupsForLine() {
       if (!selectedLineId) {
@@ -330,7 +339,9 @@ export function PolicyForm({
       }
 
       try {
-        const { data: groupsData } = await (supabase.from('insurance_groups') as ReturnType<typeof supabase.from>)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: groupsData } = await (supabase as any)
+          .from('insurance_groups')
           .select('id, name, slug, line_id')
           .eq('line_id', selectedLineId)
           .eq('is_active', true)
@@ -347,7 +358,7 @@ export function PolicyForm({
     loadGroupsForLine();
   }, [selectedLineId, supabase]);
 
-  // Actualizar valores del formulario cuando cambian las selecciones
+  // Actualizar valores cuando cambian selecciones
   useEffect(() => {
     if (selectedCompanyId) {
       const company = tenantCompanies.find(tc => tc.company_id === selectedCompanyId)?.company;
@@ -374,14 +385,13 @@ export function PolicyForm({
     }
   }, [selectedGroupId, setValue]);
 
-  // Actualizar client_id cuando cambie la prop
   useEffect(() => {
     if (clientId && !isEditing) {
       setValue('client_id', clientId);
     }
   }, [clientId, isEditing, setValue]);
 
-  // Auto-calcular fecha de vencimiento cuando cambia la fecha de inicio
+  // Auto-calcular fecha de vencimiento
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartDate = e.target.value;
     setValue('start_date', newStartDate);
@@ -397,22 +407,19 @@ export function PolicyForm({
 
   // Handlers para campos de moneda
   const handlePremiumChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value;
-    const numericValue = parseCurrencyValue(rawValue);
+    const numericValue = parseCurrencyValue(e.target.value);
     setValue('premium', numericValue);
     setPremiumDisplay(formatCurrency(numericValue));
   };
 
   const handleGastosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value;
-    const numericValue = parseCurrencyValue(rawValue);
+    const numericValue = parseCurrencyValue(e.target.value);
     setValue('gastos_expedicion', numericValue);
     setGastosDisplay(formatCurrency(numericValue));
   };
 
   const handleIvaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value;
-    const numericValue = parseCurrencyValue(rawValue);
+    const numericValue = parseCurrencyValue(e.target.value);
     setValue('iva', numericValue);
     setIvaDisplay(formatCurrency(numericValue));
   };
@@ -463,6 +470,7 @@ export function PolicyForm({
     setSoporteDocuments(prev => prev.filter((_, i) => i !== index));
   };
 
+  // IMPORTANTE: Incluir documentos en el submit
   const handleFormSubmit = async (data: PolicyFormData) => {
     console.log('Form data submitted:', data);
     await onSubmit({
@@ -472,20 +480,19 @@ export function PolicyForm({
     });
   };
 
-  const onError = (errors: Record<string, unknown>) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const onError = (errors: any) => {
     console.error('Form validation errors:', errors);
   };
 
   const loading = isLoading || isSubmitting;
 
-  // Generar opciones de anexo (00-99)
   const anexoOptions = Array.from({ length: 100 }, (_, i) =>
     i.toString().padStart(2, '0')
   );
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
-      {/* Client ID (oculto) */}
       <input type="hidden" {...register('client_id')} />
 
       {/* SECCIÓN 1: Número de Póliza + Anexo + Estado */}
@@ -495,7 +502,6 @@ export function PolicyForm({
           Identificación de la Póliza
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Número de Póliza */}
           <div className="space-y-2">
             <Label htmlFor="policy_number">Número de Póliza *</Label>
             <Input
@@ -503,14 +509,12 @@ export function PolicyForm({
               placeholder="Ej: POL-2024-001"
               {...register('policy_number')}
               disabled={loading}
-              data-testid="policy-number-input"
             />
             {errors.policy_number && (
               <p className="text-sm text-red-500">{errors.policy_number.message}</p>
             )}
           </div>
 
-          {/* Anexo */}
           <div className="space-y-2">
             <Label htmlFor="anexo">Anexo</Label>
             <Select
@@ -518,20 +522,17 @@ export function PolicyForm({
               onValueChange={(value) => setValue('anexo', value)}
               disabled={loading}
             >
-              <SelectTrigger id="anexo" data-testid="policy-anexo-select">
+              <SelectTrigger id="anexo">
                 <SelectValue placeholder="00" />
               </SelectTrigger>
               <SelectContent>
                 {anexoOptions.map((num) => (
-                  <SelectItem key={num} value={num}>
-                    {num}
-                  </SelectItem>
+                  <SelectItem key={num} value={num}>{num}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Estado */}
           <div className="space-y-2">
             <Label htmlFor="status">Estado *</Label>
             <Select
@@ -539,21 +540,17 @@ export function PolicyForm({
               onValueChange={(value: PolicyStatus) => setValue('status', value)}
               disabled={loading || !isEditing}
             >
-              <SelectTrigger id="status" data-testid="policy-status-select">
+              <SelectTrigger id="status">
                 <SelectValue placeholder="Seleccionar estado" />
               </SelectTrigger>
               <SelectContent>
                 {POLICY_STATUS_OPTIONS.map(({ value, label }) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {!isEditing && (
-              <p className="text-xs text-muted-foreground">
-                Estado inicial: Activa
-              </p>
+              <p className="text-xs text-muted-foreground">Estado inicial: Activa</p>
             )}
           </div>
         </div>
@@ -578,9 +575,8 @@ export function PolicyForm({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Compañía */}
             <div className="space-y-2">
-              <Label htmlFor="company" className="flex items-center gap-1">
+              <Label className="flex items-center gap-1">
                 <Building className="h-3 w-3" />
                 Compañía *
               </Label>
@@ -593,25 +589,22 @@ export function PolicyForm({
                 }}
                 disabled={loading}
               >
-                <SelectTrigger id="company" data-testid="policy-company-select">
+                <SelectTrigger>
                   <SelectValue placeholder="Seleccionar compañía" />
                 </SelectTrigger>
                 <SelectContent>
                   {tenantCompanies.map((tc) => (
                     <SelectItem key={tc.company_id} value={tc.company_id}>
                       {tc.company.name}
-                      {tc.company_code && (
-                        <span className="text-muted-foreground ml-2">({tc.company_code})</span>
-                      )}
+                      {tc.company_code && <span className="text-muted-foreground ml-2">({tc.company_code})</span>}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Grupo (Línea de seguro) */}
             <div className="space-y-2">
-              <Label htmlFor="line" className="flex items-center gap-1">
+              <Label className="flex items-center gap-1">
                 <Layers className="h-3 w-3" />
                 Grupo *
               </Label>
@@ -623,22 +616,19 @@ export function PolicyForm({
                 }}
                 disabled={loading || !selectedCompanyId || availableLines.length === 0}
               >
-                <SelectTrigger id="line" data-testid="policy-line-select">
+                <SelectTrigger>
                   <SelectValue placeholder={!selectedCompanyId ? "Primero selecciona compañía" : "Seleccionar grupo"} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableLines.map((line) => (
-                    <SelectItem key={line.id} value={line.id}>
-                      {line.name}
-                    </SelectItem>
+                    <SelectItem key={line.id} value={line.id}>{line.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Ramo (Grupo de seguro) */}
             <div className="space-y-2">
-              <Label htmlFor="group" className="flex items-center gap-1">
+              <Label className="flex items-center gap-1">
                 <FileText className="h-3 w-3" />
                 Ramo *
               </Label>
@@ -647,14 +637,12 @@ export function PolicyForm({
                 onValueChange={setSelectedGroupId}
                 disabled={loading || !selectedLineId || availableGroups.length === 0}
               >
-                <SelectTrigger id="group" data-testid="policy-group-select">
+                <SelectTrigger>
                   <SelectValue placeholder={!selectedLineId ? "Primero selecciona grupo" : "Seleccionar ramo"} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableGroups.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {group.name}
-                    </SelectItem>
+                    <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -662,7 +650,6 @@ export function PolicyForm({
           </div>
         )}
 
-        {/* Campos ocultos */}
         <input type="hidden" {...register('insurer')} />
         <input type="hidden" {...register('line')} />
       </div>
@@ -676,16 +663,8 @@ export function PolicyForm({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
-            <Input
-              id="fecha_expedicion"
-              type="date"
-              {...register('fecha_expedicion')}
-              disabled={loading}
-              data-testid="policy-fecha-expedicion-input"
-            />
-            <p className="text-xs text-muted-foreground">
-              Fecha en que se expide la póliza
-            </p>
+            <Input id="fecha_expedicion" type="date" {...register('fecha_expedicion')} disabled={loading} />
+            <p className="text-xs text-muted-foreground">Fecha en que se expide la póliza</p>
           </div>
 
           <div className="space-y-2">
@@ -696,30 +675,19 @@ export function PolicyForm({
               value={startDate || ''}
               onChange={handleStartDateChange}
               disabled={loading}
-              data-testid="policy-start-date-input"
             />
-            <p className="text-xs text-muted-foreground">
-              Al cambiar, se calcula el vencimiento a 1 año
-            </p>
+            <p className="text-xs text-muted-foreground">Al cambiar, se calcula el vencimiento a 1 año</p>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="end_date">Fecha de Vencimiento</Label>
-            <Input
-              id="end_date"
-              type="date"
-              {...register('end_date')}
-              disabled={loading}
-              data-testid="policy-end-date-input"
-            />
-            <p className="text-xs text-muted-foreground">
-              Puedes ajustar manualmente
-            </p>
+            <Input id="end_date" type="date" {...register('end_date')} disabled={loading} />
+            <p className="text-xs text-muted-foreground">Puedes ajustar manualmente</p>
           </div>
         </div>
       </div>
 
-      {/* SECCIÓN 4: Valores de la Póliza */}
+      {/* SECCIÓN 4: Valores */}
       <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <FileText className="h-4 w-4" />
@@ -727,7 +695,6 @@ export function PolicyForm({
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          {/* Moneda */}
           <div className="space-y-2">
             <Label htmlFor="currency">Moneda</Label>
             <Select
@@ -745,7 +712,6 @@ export function PolicyForm({
             </Select>
           </div>
 
-          {/* Prima */}
           <div className="space-y-2">
             <Label htmlFor="premium">Prima *</Label>
             <Input
@@ -755,11 +721,9 @@ export function PolicyForm({
               value={premiumDisplay}
               onChange={handlePremiumChange}
               disabled={loading}
-              data-testid="policy-premium-input"
             />
           </div>
 
-          {/* Gastos Expedición */}
           <div className="space-y-2">
             <Label htmlFor="gastos_expedicion">Gastos Exp.</Label>
             <Input
@@ -769,11 +733,9 @@ export function PolicyForm({
               value={gastosDisplay}
               onChange={handleGastosChange}
               disabled={loading}
-              data-testid="policy-gastos-input"
             />
           </div>
 
-          {/* IVA */}
           <div className="space-y-2">
             <Label htmlFor="iva">IVA</Label>
             <Input
@@ -783,11 +745,9 @@ export function PolicyForm({
               value={ivaDisplay}
               onChange={handleIvaChange}
               disabled={loading}
-              data-testid="policy-iva-input"
             />
           </div>
 
-          {/* Total */}
           <div className="space-y-2">
             <Label htmlFor="total">Total</Label>
             <Input
@@ -796,11 +756,9 @@ export function PolicyForm({
               value={formatCurrency(watch('total_a_pagar') || 0)}
               disabled={true}
               className="bg-green-50 font-semibold"
-              data-testid="policy-total-input"
             />
           </div>
 
-          {/* Comisión */}
           <div className="space-y-2">
             <Label htmlFor="commission_pct">Comisión %</Label>
             <div className="relative">
@@ -813,19 +771,17 @@ export function PolicyForm({
                 placeholder="0.00"
                 {...register('commission_pct', { valueAsNumber: true })}
                 disabled={loading}
-                data-testid="policy-commission-input"
               />
               {loadingCommission && <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin" />}
             </div>
           </div>
         </div>
-
         <p className="text-xs text-muted-foreground">
-          El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados (modificable).
+          El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados.
         </p>
       </div>
 
-      {/* SECCIÓN 5: Documentos Adjuntos */}
+      {/* SECCIÓN 5: Documentos */}
       <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <Upload className="h-4 w-4" />
@@ -840,9 +796,7 @@ export function PolicyForm({
                 <File className="h-4 w-4 text-blue-600" />
                 Documentos de Póliza
               </Label>
-              <span className="text-xs text-muted-foreground">
-                {polizaDocuments.length} / 5
-              </span>
+              <span className="text-xs text-muted-foreground">{polizaDocuments.length} / 5</span>
             </div>
 
             <div className="border-2 border-dashed border-blue-200 rounded-lg p-4 bg-blue-50/50 hover:bg-blue-50 transition-colors">
@@ -894,13 +848,9 @@ export function PolicyForm({
                 <File className="h-4 w-4 text-green-600" />
                 Documentos de Soporte
               </Label>
-              <span className="text-xs text-muted-foreground">
-                {soporteDocuments.length} / 8
-              </span>
+              <span className="text-xs text-muted-foreground">{soporteDocuments.length} / 8</span>
             </div>
-            <p className="text-xs text-muted-foreground -mt-2">
-              Sarlaft, Cédula, CCB, RUT, Estados Financieros
-            </p>
+            <p className="text-xs text-muted-foreground -mt-2">Sarlaft, Cédula, CCB, RUT, Estados Financieros</p>
 
             <div className="border-2 border-dashed border-green-200 rounded-lg p-4 bg-green-50/50 hover:bg-green-50 transition-colors">
               {soporteDocuments.length < 8 && (
@@ -949,22 +899,13 @@ export function PolicyForm({
       {/* Botones */}
       <div className="flex justify-end gap-3 pt-4 border-t">
         {onCancel && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            disabled={loading}
-          >
+          <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
             <X className="w-4 h-4 mr-2" />
             Cancelar
           </Button>
         )}
-        <Button type="submit" disabled={loading} data-testid="policy-submit-button">
-          {loading ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4 mr-2" />
-          )}
+        <Button type="submit" disabled={loading}>
+          {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
           {isEditing ? 'Guardar Cambios' : 'Crear Póliza'}
         </Button>
       </div>
