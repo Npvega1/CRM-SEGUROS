@@ -31,15 +31,12 @@ import {
   type Policy,
   type PolicyStatus,
   POLICY_STATUS_LABELS,
-  POLICY_STATUS_COLORS,
 } from '@/lib/validations/policies';
 import {
   ArrowLeft,
   Shield,
   AlertCircle,
-  Building,
   Calendar,
-  Percent,
   FileText,
   User,
   MoreVertical,
@@ -48,8 +45,6 @@ import {
   RefreshCw,
   XCircle,
   Eye,
-  Trash2,
-  Download,
   Loader2,
   DollarSign
 } from 'lucide-react';
@@ -312,23 +307,24 @@ export default function PolicyDetailPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem asChild>
-              <Link href={`/polizas/${policyId}/editar`} className="flex items-center">
-                <Edit className="h-4 w-4 mr-2" />
-                Editar Póliza {policy.anexo || '00'}
-              </Link>
+            <DropdownMenuItem 
+              onClick={() => router.push(`/polizas/${policyId}/editar`)}
+              className="cursor-pointer"
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Editar Póliza {policy.anexo || '00'}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               onClick={() => router.push(`/polizas/nueva?modificacion=${policyId}`)}
-              className="flex items-center"
+              className="cursor-pointer"
             >
               <FilePlus className="h-4 w-4 mr-2" />
               Incluir Modificación (Anexo)
             </DropdownMenuItem>
             <DropdownMenuItem 
               onClick={() => router.push(`/polizas/nueva?renovacion=${policyId}`)}
-              className="flex items-center"
+              className="cursor-pointer"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Renovar Póliza
@@ -336,7 +332,7 @@ export default function PolicyDetailPage() {
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               onClick={() => setShowCancelDialog(true)}
-              className="flex items-center text-red-600 focus:text-red-600"
+              className="cursor-pointer text-red-600 focus:text-red-600"
               disabled={policy.status === 'cancelada'}
             >
               <XCircle className="h-4 w-4 mr-2" />
@@ -559,10 +555,13 @@ export default function PolicyDetailPage() {
                 {policy.client.phone && (
                   <p className="text-sm">{policy.client.phone}</p>
                 )}
-                <Button variant="outline" size="sm" className="w-full" asChild>
-                  <Link href={`/clientes/${policy.client.id}`}>
-                    Ver Cliente
-                  </Link>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full"
+                  onClick={() => router.push(`/clientes/${policy.client?.id}`)}
+                >
+                  Ver Cliente
                 </Button>
               </CardContent>
             </Card>
