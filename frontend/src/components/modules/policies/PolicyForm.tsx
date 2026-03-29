@@ -3,8 +3,8 @@
 // =====================================================
 // COMPONENTE: PolicyForm
 // Formulario para crear/editar pólizas
-// Con selección en cascada y carga automática de comisión
-// Layout mejorado: Cliente arriba, formulario más amplio
+// Orden: Datos básicos → Producto → Fechas → Valores → Documentos
+// Valores con formato de miles (1.000.000)
 // =====================================================
 
 import { useEffect, useState } from 'react';
@@ -28,6 +28,21 @@ import {
 import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Calendar, User } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
+
+// Función para formatear número con separadores de miles (punto)
+const formatNumber = (value: number | string): string => {
+  const num = typeof value === 'string' ? parseFloat(value.replace(/\./g, '').replace(',', '.')) : value;
+  if (isNaN(num)) return '';
+  return num.toLocaleString('es-CO', { maximumFractionDigits: 0 });
+};
+
+// Función para parsear número formateado a número real
+const parseFormattedNumber = (value: string): number => {
+  if (!value) return 0;
+  const cleaned = value.replace(/\./g, '').replace(',', '.');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+};
 
 // Tipos para catálogos de seguros
 interface InsuranceCompany {
@@ -90,7 +105,7 @@ interface PolicyFormData {
   metadata?: Record<string, unknown>;
 }
 
-// Tipo para cliente (para mostrar info)
+// Tipo para cliente
 interface ClientInfo {
   id: string;
   full_name: string;
@@ -102,7 +117,8 @@ interface PolicyFormProps {
   policy?: Policy;
   clientId?: string;
   clientInfo?: ClientInfo;
-  onSubmit: (data: PolicyFormData) => Promise<void>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onSubmit: (data: any) => Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
 }
@@ -134,6 +150,12 @@ export function PolicyForm({
   // Estados para documentos
   const [polizaDocuments, setPolizaDocuments] = useState<PolicyDocument[]>([]);
   const [soporteDocuments, setSoporteDocuments] = useState<PolicyDocument[]>([]);
+
+  // Estados para valores formateados (display)
+  const [displayPremium, setDisplayPremium] = useState('');
+  const [displayGastos, setDisplayGastos] = useState('');
+  const [displayIva, setDisplayIva] = useState('');
+  const [displayTotal, setDisplayTotal] = useState('');
 
   const {
     register,
@@ -186,11 +208,53 @@ export function PolicyForm({
   const status = watch('status');
   const startDate = watch('start_date');
 
+  // Inicializar valores formateados
+  useEffect(() => {
+    if (policy) {
+      setDisplayPremium(formatNumber(policy.premium || 0));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setDisplayGastos(formatNumber((policy as any).gastos_expedicion || 0));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setDisplayIva(formatNumber((policy as any).iva || 0));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setDisplayTotal(formatNumber((policy as any).total_a_pagar || 0));
+    }
+  }, [policy]);
+
   // Calcular total automáticamente
   useEffect(() => {
     const total = Number(premium) + Number(gastosExpedicion) + Number(iva);
     setValue('total_a_pagar', total);
+    setDisplayTotal(formatNumber(total));
   }, [premium, gastosExpedicion, iva, setValue]);
+
+  // Handlers para inputs con formato
+  const handlePremiumChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value.replace(/\./g, '');
+    if (rawValue === '' || /^\d+$/.test(rawValue)) {
+      const numValue = parseFormattedNumber(rawValue);
+      setValue('premium', numValue);
+      setDisplayPremium(rawValue ? formatNumber(numValue) : '');
+    }
+  };
+
+  const handleGastosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value.replace(/\./g, '');
+    if (rawValue === '' || /^\d+$/.test(rawValue)) {
+      const numValue = parseFormattedNumber(rawValue);
+      setValue('gastos_expedicion', numValue);
+      setDisplayGastos(rawValue ? formatNumber(numValue) : '');
+    }
+  };
+
+  const handleIvaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value.replace(/\./g, '');
+    if (rawValue === '' || /^\d+$/.test(rawValue)) {
+      const numValue = parseFormattedNumber(rawValue);
+      setValue('iva', numValue);
+      setDisplayIva(rawValue ? formatNumber(numValue) : '');
+    }
+  };
 
   // Cargar comisión cuando se selecciona compañía + ramo
   useEffect(() => {
@@ -210,7 +274,6 @@ export function PolicyForm({
         if (data && !error) {
           setValue('commission_pct', data.commission_pct);
         } else {
-          // Si no hay comisión configurada, usar 10% por defecto
           setValue('commission_pct', 10);
         }
       } catch (err) {
@@ -346,14 +409,13 @@ export function PolicyForm({
     }
   }, [selectedGroupId, setValue]);
 
-  // Actualizar client_id cuando cambie la prop
   useEffect(() => {
     if (clientId && !isEditing) {
       setValue('client_id', clientId);
     }
   }, [clientId, isEditing, setValue]);
 
-  // Auto-calcular fecha de vencimiento cuando cambia la fecha de inicio
+  // Auto-calcular fecha de vencimiento
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartDate = e.target.value;
     setValue('start_date', newStartDate);
@@ -434,7 +496,7 @@ export function PolicyForm({
       {/* Client ID (oculto) */}
       <input type="hidden" {...register('client_id')} />
 
-      {/* ========== CLIENTE SELECCIONADO (ARRIBA) ========== */}
+      {/* ========== CLIENTE SELECCIONADO ========== */}
       {clientInfo && (
         <div className="p-4 border rounded-lg bg-gradient-to-r from-blue-50 to-slate-50 border-blue-200">
           <div className="flex items-center gap-3">
@@ -459,8 +521,8 @@ export function PolicyForm({
           Datos de la Póliza
         </h3>
 
-        {/* Número de Póliza + Anexo */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        {/* 1. Número de Póliza + Anexo + Estado (misma fila) */}
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
           <div className="md:col-span-3 space-y-2">
             <Label htmlFor="policy_number">Número de Póliza *</Label>
             <Input
@@ -494,9 +556,24 @@ export function PolicyForm({
               </SelectContent>
             </Select>
           </div>
+          <div className="md:col-span-2 space-y-2">
+            <Label htmlFor="status">Estado *</Label>
+            <Select
+              value={status}
+              onValueChange={(value: PolicyStatus) => setValue('status', value)}
+              disabled={loading || isEditing}
+            >
+              <SelectTrigger id="status" data-testid="policy-status-select" className="h-11">
+                <SelectValue placeholder="Seleccionar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="activa">Activa</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        {/* Selección en cascada: Compañía → Grupo → Ramo */}
+        {/* 2. Selección de Producto */}
         <div className="space-y-4 p-5 border rounded-lg bg-slate-50 mb-6">
           <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
             <Building className="h-4 w-4" />
@@ -546,7 +623,7 @@ export function PolicyForm({
                 </Select>
               </div>
 
-              {/* Grupo (Línea de seguro) */}
+              {/* Grupo */}
               <div className="space-y-2">
                 <Label htmlFor="line" className="flex items-center gap-1">
                   <Layers className="h-3 w-3" />
@@ -573,7 +650,7 @@ export function PolicyForm({
                 </Select>
               </div>
 
-              {/* Ramo (Grupo de seguro) */}
+              {/* Ramo */}
               <div className="space-y-2">
                 <Label htmlFor="group" className="flex items-center gap-1">
                   <FileText className="h-3 w-3" />
@@ -599,144 +676,11 @@ export function PolicyForm({
             </div>
           )}
 
-          {/* Campos ocultos */}
           <input type="hidden" {...register('insurer')} />
           <input type="hidden" {...register('line')} />
         </div>
 
-        {/* Estado - SOLO ACTIVA */}
-        <div className="mb-6">
-          <div className="space-y-2 max-w-xs">
-            <Label htmlFor="status">Estado *</Label>
-            <Select
-              value={status}
-              onValueChange={(value: PolicyStatus) => setValue('status', value)}
-              disabled={loading || isEditing}
-            >
-              <SelectTrigger id="status" data-testid="policy-status-select" className="h-11">
-                <SelectValue placeholder="Seleccionar estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="activa">Activa</SelectItem>
-              </SelectContent>
-            </Select>
-            {isEditing && (
-              <p className="text-xs text-muted-foreground">
-                Para cambiar el estado, usa el stepper de estados
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Valores de la Póliza */}
-        <div className="space-y-4 p-5 border rounded-lg bg-slate-50 mb-6">
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-            Valores de la Póliza
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-            {/* Moneda */}
-            <div className="space-y-2">
-              <Label htmlFor="currency">Moneda</Label>
-              <Select
-                value={watch('currency') || 'COP'}
-                onValueChange={(value) => setValue('currency', value)}
-                disabled={loading}
-              >
-                <SelectTrigger id="currency" className="h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="COP">COP</SelectItem>
-                  <SelectItem value="USD">USD</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Prima */}
-            <div className="space-y-2">
-              <Label htmlFor="premium">Prima *</Label>
-              <Input
-                id="premium"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0"
-                {...register('premium', { valueAsNumber: true })}
-                disabled={loading}
-                data-testid="policy-premium-input"
-                className="h-11"
-              />
-            </div>
-
-            {/* Gastos Expedición */}
-            <div className="space-y-2">
-              <Label htmlFor="gastos_expedicion">Gastos Exp.</Label>
-              <Input
-                id="gastos_expedicion"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0"
-                {...register('gastos_expedicion', { valueAsNumber: true })}
-                disabled={loading}
-                className="h-11"
-              />
-            </div>
-
-            {/* IVA */}
-            <div className="space-y-2">
-              <Label htmlFor="iva">IVA</Label>
-              <Input
-                id="iva"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0"
-                {...register('iva', { valueAsNumber: true })}
-                disabled={loading}
-                className="h-11"
-              />
-            </div>
-
-            {/* Total */}
-            <div className="space-y-2">
-              <Label htmlFor="total_a_pagar">Total</Label>
-              <Input
-                id="total_a_pagar"
-                type="number"
-                {...register('total_a_pagar', { valueAsNumber: true })}
-                disabled
-                className="bg-blue-50 font-semibold h-11"
-              />
-            </div>
-
-            {/* Comisión */}
-            <div className="space-y-2">
-              <Label htmlFor="commission_pct" className="flex items-center gap-1">
-                Comisión %
-                {loadingCommission && <Loader2 className="h-3 w-3 animate-spin" />}
-              </Label>
-              <Input
-                id="commission_pct"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                placeholder="0"
-                {...register('commission_pct', { valueAsNumber: true })}
-                disabled={loading}
-                className="h-11"
-              />
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados (modificable).
-          </p>
-        </div>
-
-        {/* Fechas: Expedición, Inicio, Vencimiento */}
+        {/* 3. Fechas */}
         <div className="space-y-4 p-5 border rounded-lg bg-slate-50 mb-6">
           <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
             <Calendar className="h-4 w-4" />
@@ -782,6 +726,114 @@ export function PolicyForm({
             </div>
           </div>
         </div>
+
+        {/* 4. Valores de la Póliza */}
+        <div className="space-y-4 p-5 border rounded-lg bg-slate-50">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            Valores de la Póliza
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            {/* Moneda */}
+            <div className="space-y-2">
+              <Label htmlFor="currency">Moneda</Label>
+              <Select
+                value={watch('currency') || 'COP'}
+                onValueChange={(value) => setValue('currency', value)}
+                disabled={loading}
+              >
+                <SelectTrigger id="currency" className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="COP">COP</SelectItem>
+                  <SelectItem value="USD">USD</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Prima */}
+            <div className="space-y-2">
+              <Label htmlFor="premium">Prima *</Label>
+              <Input
+                id="premium"
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={displayPremium}
+                onChange={handlePremiumChange}
+                disabled={loading}
+                data-testid="policy-premium-input"
+                className="h-11"
+              />
+            </div>
+
+            {/* Gastos Expedición */}
+            <div className="space-y-2">
+              <Label htmlFor="gastos_expedicion">Gastos Exp.</Label>
+              <Input
+                id="gastos_expedicion"
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={displayGastos}
+                onChange={handleGastosChange}
+                disabled={loading}
+                className="h-11"
+              />
+            </div>
+
+            {/* IVA */}
+            <div className="space-y-2">
+              <Label htmlFor="iva">IVA</Label>
+              <Input
+                id="iva"
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={displayIva}
+                onChange={handleIvaChange}
+                disabled={loading}
+                className="h-11"
+              />
+            </div>
+
+            {/* Total */}
+            <div className="space-y-2">
+              <Label htmlFor="total_a_pagar">Total</Label>
+              <Input
+                id="total_a_pagar"
+                type="text"
+                value={displayTotal}
+                disabled
+                className="bg-blue-50 font-semibold h-11"
+              />
+            </div>
+
+            {/* Comisión */}
+            <div className="space-y-2">
+              <Label htmlFor="commission_pct" className="flex items-center gap-1">
+                Comisión %
+                {loadingCommission && <Loader2 className="h-3 w-3 animate-spin" />}
+              </Label>
+              <Input
+                id="commission_pct"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                placeholder="0"
+                {...register('commission_pct', { valueAsNumber: true })}
+                disabled={loading}
+                className="h-11"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados (modificable).
+          </p>
+        </div>
       </div>
 
       {/* ========== DOCUMENTOS ADJUNTOS ========== */}
@@ -795,9 +847,7 @@ export function PolicyForm({
           {/* Documentos de Póliza */}
           <div className="space-y-3 p-4 border rounded-lg bg-slate-50">
             <div className="flex justify-between items-center">
-              <div>
-                <p className="font-medium text-slate-700">Documentos de Póliza</p>
-              </div>
+              <p className="font-medium text-slate-700">Documentos de Póliza</p>
               <span className="text-xs text-slate-500 bg-slate-200 px-2 py-1 rounded">
                 {polizaDocuments.length} / 5
               </span>
