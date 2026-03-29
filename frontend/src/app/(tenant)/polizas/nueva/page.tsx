@@ -4,6 +4,7 @@
 // PÁGINA: Nueva Póliza
 // /polizas/nueva
 // Layout mejorado: Cliente arriba del formulario
+// INSERT con todos los campos nuevos
 // =====================================================
 
 import { useState, useEffect, Suspense } from 'react';
@@ -232,12 +233,6 @@ function NewPolicyContent() {
             <CardContent>
               <PolicyForm
                 clientId={selectedClientId}
-                clientInfo={selectedClient ? {
-                  id: selectedClient.id,
-                  full_name: selectedClient.full_name,
-                  document_number: selectedClient.doc_number,
-                  email: selectedClient.email || undefined
-                } : undefined}
                 onSubmit={handleSubmit}
                 onCancel={() => router.back()}
                 isLoading={isLoading}
