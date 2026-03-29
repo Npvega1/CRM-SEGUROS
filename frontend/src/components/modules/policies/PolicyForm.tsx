@@ -25,14 +25,14 @@ import {
   type Policy,
   type PolicyStatus
 } from '@/lib/validations/policies';
-import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Calendar, User } from 'lucide-react';
+import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Calendar } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
 
 // Función para formatear número con separadores de miles (punto)
 const formatNumber = (value: number | string): string => {
   const num = typeof value === 'string' ? parseFloat(value.replace(/\./g, '').replace(',', '.')) : value;
-  if (isNaN(num)) return '';
+  if (isNaN(num) || num === 0) return '';
   return num.toLocaleString('es-CO', { maximumFractionDigits: 0 });
 };
 
@@ -105,18 +105,9 @@ interface PolicyFormData {
   metadata?: Record<string, unknown>;
 }
 
-// Tipo para cliente
-interface ClientInfo {
-  id: string;
-  full_name: string;
-  document_number?: string;
-  email?: string;
-}
-
 interface PolicyFormProps {
   policy?: Policy;
   clientId?: string;
-  clientInfo?: ClientInfo;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onSubmit: (data: any) => Promise<void>;
   onCancel?: () => void;
@@ -126,7 +117,6 @@ interface PolicyFormProps {
 export function PolicyForm({
   policy,
   clientId,
-  clientInfo,
   onSubmit,
   onCancel,
   isLoading = false
@@ -496,24 +486,6 @@ export function PolicyForm({
       {/* Client ID (oculto) */}
       <input type="hidden" {...register('client_id')} />
 
-      {/* ========== CLIENTE SELECCIONADO ========== */}
-      {clientInfo && (
-        <div className="p-4 border rounded-lg bg-gradient-to-r from-blue-50 to-slate-50 border-blue-200">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600">
-              <User className="h-6 w-6" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm text-slate-500 font-medium">Cliente seleccionado</p>
-              <p className="text-lg font-semibold text-slate-800">{clientInfo.full_name}</p>
-              {clientInfo.document_number && (
-                <p className="text-sm text-slate-600">Doc: {clientInfo.document_number}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ========== DATOS DE LA PÓLIZA ========== */}
       <div className="p-6 border rounded-lg bg-white shadow-sm">
         <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2">
@@ -697,7 +669,6 @@ export function PolicyForm({
                 disabled={loading}
                 className="h-11"
               />
-              <p className="text-xs text-muted-foreground">Fecha en que se expide la póliza</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="start_date">Fecha de Inicio</Label>
@@ -710,7 +681,6 @@ export function PolicyForm({
                 data-testid="policy-start-date-input"
                 className="h-11"
               />
-              <p className="text-xs text-muted-foreground">Al cambiar, se calcula el vencimiento a 1 año</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="end_date">Fecha de Vencimiento</Label>
@@ -722,7 +692,6 @@ export function PolicyForm({
                 data-testid="policy-end-date-input"
                 className="h-11"
               />
-              <p className="text-xs text-muted-foreground">Puedes ajustar manualmente</p>
             </div>
           </div>
         </div>
@@ -831,7 +800,7 @@ export function PolicyForm({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados (modificable).
+            El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados.
           </p>
         </div>
       </div>
