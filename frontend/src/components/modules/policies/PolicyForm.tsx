@@ -3,7 +3,7 @@
 // =====================================================
 // COMPONENTE: PolicyForm
 // Formulario para crear/editar pólizas
-// Con selección en cascada: Compañía → Grupo → Ramo
+// Con selección en cascada y carga automática de comisión
 // =====================================================
 
 import { useEffect, useState } from 'react';
@@ -90,6 +90,7 @@ interface PolicyFormData {
   gastos_expedicion: number;
   iva: number;
   total_a_pagar: number;
+  commission_pct: number;
   fecha_expedicion?: string | null;
   start_date?: string | null;
   end_date?: string | null;
@@ -120,6 +121,7 @@ export function PolicyForm({
   const [availableLines, setAvailableLines] = useState<InsuranceLine[]>([]);
   const [availableGroups, setAvailableGroups] = useState<InsuranceGroup[]>([]);
   const [loadingCatalogs, setLoadingCatalogs] = useState(true);
+  const [loadingCommission, setLoadingCommission] = useState(false);
 
   // Estados para selección en cascada
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
@@ -156,6 +158,8 @@ export function PolicyForm({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       total_a_pagar: (policy as any).total_a_pagar || 0,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      commission_pct: (policy as any).commission_pct || 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       fecha_expedicion: (policy as any).fecha_expedicion || '',
       start_date: policy.start_date || '',
       end_date: policy.end_date || '',
@@ -168,7 +172,8 @@ export function PolicyForm({
       premium: 0,
       gastos_expedicion: 0,
       iva: 0,
-      total_a_pagar: 0
+      total_a_pagar: 0,
+      commission_pct: 0
     }
   });
 
@@ -183,6 +188,38 @@ export function PolicyForm({
     const total = Number(premium) + Number(gastosExpedicion) + Number(iva);
     setValue('total_a_pagar', total);
   }, [premium, gastosExpedicion, iva, setValue]);
+
+  // Cargar comisión cuando se selecciona compañía + ramo
+  useEffect(() => {
+    async function loadCommission() {
+      if (!selectedCompanyId || !selectedGroupId) return;
+
+      setLoadingCommission(true);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from('company_group_commissions')
+          .select('commission_pct')
+          .eq('company_id', selectedCompanyId)
+          .eq('group_id', selectedGroupId)
+          .single();
+
+        if (data && !error) {
+          setValue('commission_pct', data.commission_pct);
+        } else {
+          // Si no hay comisión configurada, usar 10% por defecto
+          setValue('commission_pct', 10);
+        }
+      } catch (err) {
+        console.error('Error loading commission:', err);
+        setValue('commission_pct', 10);
+      } finally {
+        setLoadingCommission(false);
+      }
+    }
+
+    loadCommission();
+  }, [selectedCompanyId, selectedGroupId, setValue, supabase]);
 
   // Cargar compañías activas del tenant
   useEffect(() => {
@@ -570,7 +607,7 @@ export function PolicyForm({
           Valores de la Póliza
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 items-end">
           {/* Moneda */}
           <div className="space-y-2">
             <Label htmlFor="currency">Moneda</Label>
@@ -636,7 +673,7 @@ export function PolicyForm({
 
           {/* Total */}
           <div className="space-y-2">
-            <Label htmlFor="total_a_pagar">Total a Pagar</Label>
+            <Label htmlFor="total_a_pagar">Total</Label>
             <Input
               id="total_a_pagar"
               type="number"
@@ -646,8 +683,29 @@ export function PolicyForm({
               data-testid="policy-total-input"
             />
           </div>
+
+          {/* Comisión */}
+          <div className="space-y-2">
+            <Label htmlFor="commission_pct" className="flex items-center gap-1">
+              Comisión %
+              {loadingCommission && <Loader2 className="h-3 w-3 animate-spin" />}
+            </Label>
+            <Input
+              id="commission_pct"
+              type="number"
+              step="0.5"
+              min="0"
+              max="100"
+              placeholder="0"
+              {...register('commission_pct', { valueAsNumber: true })}
+              disabled={loading}
+              data-testid="policy-commission-input"
+            />
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground">El total se calcula automáticamente</p>
+        <p className="text-xs text-muted-foreground">
+          El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados (modificable).
+        </p>
       </div>
 
       {/* Fechas: Expedición, Inicio, Vencimiento */}
