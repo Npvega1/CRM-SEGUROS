@@ -124,8 +124,6 @@ export function PolicyForm({
   const [premiumDisplay, setPremiumDisplay] = useState('');
   const [gastosDisplay, setGastosDisplay] = useState('');
   const [ivaDisplay, setIvaDisplay] = useState('');
-  
-  // Estado separado para notas (para evitar problemas con Zod)
   const [notasValue, setNotasValue] = useState<string>('');
 
   const {
@@ -179,7 +177,6 @@ export function PolicyForm({
   const status = watch('status');
   const startDate = watch('start_date');
 
-  // Inicializar notas si existe la póliza
   useEffect(() => {
     if (policy) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -367,10 +364,9 @@ export function PolicyForm({
   };
 
   const handleFormSubmit = async (data: PolicyFormData) => {
-    // Agregar notas manualmente al objeto de datos
-    const dataWithNotas = {
+    const dataWithNotas: PolicyFormData = {
       ...data,
-      notas: notasValue || null
+      notas: notasValue || undefined
     };
     await onSubmit(dataWithNotas);
   };
@@ -387,7 +383,6 @@ export function PolicyForm({
     <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
       <input type="hidden" {...register('client_id')} />
 
-      {/* SECCIÓN 1: Identificación */}
       <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <FileText className="h-4 w-4" />
@@ -421,7 +416,6 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* SECCIÓN 2: Producto */}
       <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <Building className="h-4 w-4" />
@@ -472,7 +466,6 @@ export function PolicyForm({
         <input type="hidden" {...register('line')} />
       </div>
 
-      {/* SECCIÓN 3: Fechas */}
       <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <Calendar className="h-4 w-4" />
@@ -494,7 +487,6 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* SECCIÓN 4: Valores */}
       <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <FileText className="h-4 w-4" />
@@ -537,7 +529,6 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* SECCIÓN 5: Notas y Comentarios */}
       <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <MessageSquare className="h-4 w-4" />
@@ -560,7 +551,6 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* Botones */}
       <div className="flex justify-end gap-3 pt-4 border-t">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
