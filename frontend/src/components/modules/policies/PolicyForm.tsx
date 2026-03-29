@@ -65,7 +65,7 @@ interface TenantCompany {
 }
 
 // Tipo para documentos
-interface PolicyDocument {
+export interface PolicyDocument {
   id?: string;
   file: File | null;
   file_url?: string;
