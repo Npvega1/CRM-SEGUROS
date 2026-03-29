@@ -3,8 +3,7 @@
 // =====================================================
 // COMPONENTE: PolicyForm
 // Formulario para crear/editar pólizas
-// Orden: Datos básicos → Producto → Fechas → Valores → Documentos
-// Valores con formato de miles (1.000.000)
+// Con selección en cascada y carga automática de comisión
 // =====================================================
 
 import { useEffect, useState } from 'react';
@@ -29,20 +28,13 @@ import { Loader2, Save, X, Building, Layers, FileText, Upload, Trash2, File, Cal
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
 
-// Función para formatear número con separadores de miles (punto)
-const formatNumber = (value: number | string): string => {
-  const num = typeof value === 'string' ? parseFloat(value.replace(/\./g, '').replace(',', '.')) : value;
-  if (isNaN(num) || num === 0) return '';
-  return num.toLocaleString('es-CO', { maximumFractionDigits: 0 });
-};
-
-// Función para parsear número formateado a número real
-const parseFormattedNumber = (value: string): number => {
-  if (!value) return 0;
-  const cleaned = value.replace(/\./g, '').replace(',', '.');
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
-};
+// Labels para estados (sin cotización)
+const POLICY_STATUS_OPTIONS: { value: PolicyStatus; label: string }[] = [
+  { value: 'activa', label: 'Activa' },
+  { value: 'vencida', label: 'Vencida' },
+  { value: 'cancelada', label: 'Cancelada' },
+  { value: 'renovacion', label: 'En Renovación' },
+];
 
 // Tipos para catálogos de seguros
 interface InsuranceCompany {
@@ -73,7 +65,7 @@ interface TenantCompany {
 }
 
 // Tipo para documentos
-interface PolicyDocument {
+export interface PolicyDocument {
   id?: string;
   file: File | null;
   file_url?: string;
@@ -108,8 +100,12 @@ interface PolicyFormData {
 interface PolicyFormProps {
   policy?: Policy;
   clientId?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onSubmit: (data: any) => Promise<void>;
+  // ✅ ACTUALIZADO: onSubmit ahora recibe los documentos
+  onSubmit: (
+    data: PolicyFormData, 
+    polizaDocuments: PolicyDocument[], 
+    soporteDocuments: PolicyDocument[]
+  ) => Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
 }
@@ -140,12 +136,6 @@ export function PolicyForm({
   // Estados para documentos
   const [polizaDocuments, setPolizaDocuments] = useState<PolicyDocument[]>([]);
   const [soporteDocuments, setSoporteDocuments] = useState<PolicyDocument[]>([]);
-
-  // Estados para valores formateados (display)
-  const [displayPremium, setDisplayPremium] = useState('');
-  const [displayGastos, setDisplayGastos] = useState('');
-  const [displayIva, setDisplayIva] = useState('');
-  const [displayTotal, setDisplayTotal] = useState('');
 
   const {
     register,
@@ -198,59 +188,17 @@ export function PolicyForm({
   const status = watch('status');
   const startDate = watch('start_date');
 
-  // Inicializar valores formateados
-  useEffect(() => {
-    if (policy) {
-      setDisplayPremium(formatNumber(policy.premium || 0));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setDisplayGastos(formatNumber((policy as any).gastos_expedicion || 0));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setDisplayIva(formatNumber((policy as any).iva || 0));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setDisplayTotal(formatNumber((policy as any).total_a_pagar || 0));
-    }
-  }, [policy]);
-
   // Calcular total automáticamente
   useEffect(() => {
     const total = Number(premium) + Number(gastosExpedicion) + Number(iva);
     setValue('total_a_pagar', total);
-    setDisplayTotal(formatNumber(total));
   }, [premium, gastosExpedicion, iva, setValue]);
-
-  // Handlers para inputs con formato
-  const handlePremiumChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value.replace(/\./g, '');
-    if (rawValue === '' || /^\d+$/.test(rawValue)) {
-      const numValue = parseFormattedNumber(rawValue);
-      setValue('premium', numValue);
-      setDisplayPremium(rawValue ? formatNumber(numValue) : '');
-    }
-  };
-
-  const handleGastosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value.replace(/\./g, '');
-    if (rawValue === '' || /^\d+$/.test(rawValue)) {
-      const numValue = parseFormattedNumber(rawValue);
-      setValue('gastos_expedicion', numValue);
-      setDisplayGastos(rawValue ? formatNumber(numValue) : '');
-    }
-  };
-
-  const handleIvaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value.replace(/\./g, '');
-    if (rawValue === '' || /^\d+$/.test(rawValue)) {
-      const numValue = parseFormattedNumber(rawValue);
-      setValue('iva', numValue);
-      setDisplayIva(rawValue ? formatNumber(numValue) : '');
-    }
-  };
 
   // Cargar comisión cuando se selecciona compañía + ramo
   useEffect(() => {
     async function loadCommission() {
       if (!selectedCompanyId || !selectedGroupId) return;
-      
+
       setLoadingCommission(true);
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -264,6 +212,7 @@ export function PolicyForm({
         if (data && !error) {
           setValue('commission_pct', data.commission_pct);
         } else {
+          // Si no hay comisión configurada, usar 10% por defecto
           setValue('commission_pct', 10);
         }
       } catch (err) {
@@ -399,13 +348,14 @@ export function PolicyForm({
     }
   }, [selectedGroupId, setValue]);
 
+  // Actualizar client_id cuando cambie la prop
   useEffect(() => {
     if (clientId && !isEditing) {
       setValue('client_id', clientId);
     }
   }, [clientId, isEditing, setValue]);
 
-  // Auto-calcular fecha de vencimiento
+  // Auto-calcular fecha de vencimiento cuando cambia la fecha de inicio
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartDate = e.target.value;
     setValue('start_date', newStartDate);
@@ -465,9 +415,12 @@ export function PolicyForm({
     setSoporteDocuments(prev => prev.filter((_, i) => i !== index));
   };
 
+  // ✅ CORREGIDO: Ahora pasa los documentos al onSubmit
   const handleFormSubmit = async (data: PolicyFormData) => {
     console.log('Form data submitted:', data);
-    await onSubmit(data);
+    console.log('Poliza documents:', polizaDocuments);
+    console.log('Soporte documents:', soporteDocuments);
+    await onSubmit(data, polizaDocuments, soporteDocuments);
   };
 
   const onError = (errors: Record<string, unknown>) => {
@@ -482,373 +435,350 @@ export function PolicyForm({
   );
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6 max-w-4xl mx-auto">
+    <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
       {/* Client ID (oculto) */}
       <input type="hidden" {...register('client_id')} />
 
-      {/* ========== DATOS DE LA PÓLIZA ========== */}
-      <div className="p-6 border rounded-lg bg-white shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2">
-          <FileText className="h-5 w-5 text-blue-600" />
-          Datos de la Póliza
-        </h3>
-
-        {/* 1. Número de Póliza + Anexo + Estado (misma fila) */}
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
-          <div className="md:col-span-3 space-y-2">
-            <Label htmlFor="policy_number">Número de Póliza *</Label>
-            <Input
-              id="policy_number"
-              placeholder="Ej: POL-2024-001"
-              {...register('policy_number')}
-              disabled={loading}
-              data-testid="policy-number-input"
-              className="h-11"
-            />
-            {errors.policy_number && (
-              <p className="text-sm text-red-500">{errors.policy_number.message}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="anexo">Anexo</Label>
-            <Select
-              value={watch('anexo') || '00'}
-              onValueChange={(value) => setValue('anexo', value)}
-              disabled={loading}
-            >
-              <SelectTrigger id="anexo" data-testid="policy-anexo-select" className="h-11">
-                <SelectValue placeholder="00" />
-              </SelectTrigger>
-              <SelectContent>
-                {anexoOptions.map((num) => (
-                  <SelectItem key={num} value={num}>
-                    {num}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="md:col-span-2 space-y-2">
-            <Label htmlFor="status">Estado *</Label>
-            <Select
-              value={status}
-              onValueChange={(value: PolicyStatus) => setValue('status', value)}
-              disabled={loading || isEditing}
-            >
-              <SelectTrigger id="status" data-testid="policy-status-select" className="h-11">
-                <SelectValue placeholder="Seleccionar" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="activa">Activa</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* 2. Selección de Producto */}
-        <div className="space-y-4 p-5 border rounded-lg bg-slate-50 mb-6">
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-            <Building className="h-4 w-4" />
-            Selección de Producto
-          </div>
-          
-          {loadingCatalogs ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-sm text-muted-foreground">Cargando catálogos...</span>
-            </div>
-          ) : tenantCompanies.length === 0 ? (
-            <div className="text-center py-4 text-amber-600 bg-amber-50 rounded-lg">
-              <p className="text-sm">No tienes compañías activas configuradas.</p>
-              <p className="text-xs mt-1">Ve a Configuración → Compañías para activarlas.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Compañía */}
-              <div className="space-y-2">
-                <Label htmlFor="company" className="flex items-center gap-1">
-                  <Building className="h-3 w-3" />
-                  Compañía *
-                </Label>
-                <Select
-                  value={selectedCompanyId}
-                  onValueChange={(value) => {
-                    setSelectedCompanyId(value);
-                    setSelectedLineId('');
-                    setSelectedGroupId('');
-                  }}
-                  disabled={loading}
-                >
-                  <SelectTrigger id="company" data-testid="policy-company-select" className="h-11">
-                    <SelectValue placeholder="Seleccionar..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tenantCompanies.map((tc) => (
-                      <SelectItem key={tc.company_id} value={tc.company_id}>
-                        {tc.company.name}
-                        {tc.company_code && (
-                          <span className="text-muted-foreground ml-2">({tc.company_code})</span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Grupo */}
-              <div className="space-y-2">
-                <Label htmlFor="line" className="flex items-center gap-1">
-                  <Layers className="h-3 w-3" />
-                  Grupo *
-                </Label>
-                <Select
-                  value={selectedLineId}
-                  onValueChange={(value) => {
-                    setSelectedLineId(value);
-                    setSelectedGroupId('');
-                  }}
-                  disabled={loading || !selectedCompanyId || availableLines.length === 0}
-                >
-                  <SelectTrigger id="line" data-testid="policy-line-select" className="h-11">
-                    <SelectValue placeholder={!selectedCompanyId ? "Primero selecciona compañía" : "Seleccionar..."} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableLines.map((line) => (
-                      <SelectItem key={line.id} value={line.id}>
-                        {line.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Ramo */}
-              <div className="space-y-2">
-                <Label htmlFor="group" className="flex items-center gap-1">
-                  <FileText className="h-3 w-3" />
-                  Ramo *
-                </Label>
-                <Select
-                  value={selectedGroupId}
-                  onValueChange={setSelectedGroupId}
-                  disabled={loading || !selectedLineId || availableGroups.length === 0}
-                >
-                  <SelectTrigger id="group" data-testid="policy-group-select" className="h-11">
-                    <SelectValue placeholder={!selectedLineId ? "Primero selecciona grupo" : "Seleccionar..."} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableGroups.map((group) => (
-                      <SelectItem key={group.id} value={group.id}>
-                        {group.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+      {/* Número de Póliza + Anexo */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="policy_number">Número de Póliza *</Label>
+          <Input
+            id="policy_number"
+            placeholder="POL-2024-001"
+            {...register('policy_number')}
+            disabled={loading}
+          />
+          {errors.policy_number && (
+            <p className="text-sm text-destructive">
+              {errors.policy_number.message}
+            </p>
           )}
-
-          <input type="hidden" {...register('insurer')} />
-          <input type="hidden" {...register('line')} />
         </div>
 
-        {/* 3. Fechas */}
-        <div className="space-y-4 p-5 border rounded-lg bg-slate-50 mb-6">
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-            <Calendar className="h-4 w-4" />
-            Fechas
+        <div className="space-y-2">
+          <Label>Anexo</Label>
+          <Select
+            value={watch('anexo') || '00'}
+            onValueChange={(value) => setValue('anexo', value)}
+            disabled={loading}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="00" />
+            </SelectTrigger>
+            <SelectContent>
+              {anexoOptions.map((num) => (
+                <SelectItem key={num} value={num}>
+                  {num}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Selección en cascada: Compañía → Grupo → Ramo */}
+      <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+        <div className="flex items-center gap-2 text-lg font-semibold">
+          <Building className="h-5 w-5 text-primary" />
+          <span>Selección de Producto</span>
+        </div>
+
+        {loadingCatalogs ? (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Cargando catálogos...</span>
           </div>
-          
+        ) : tenantCompanies.length === 0 ? (
+          <div className="text-amber-600 bg-amber-50 p-3 rounded-md">
+            <p className="font-medium">No tienes compañías activas configuradas.</p>
+            <p className="text-sm">Ve a Configuración → Compañías para activarlas.</p>
+          </div>
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Compañía */}
             <div className="space-y-2">
-              <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
-              <Input
-                id="fecha_expedicion"
-                type="date"
-                {...register('fecha_expedicion')}
-                disabled={loading}
-                className="h-11"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="start_date">Fecha de Inicio</Label>
-              <Input
-                id="start_date"
-                type="date"
-                value={startDate || ''}
-                onChange={handleStartDateChange}
-                disabled={loading}
-                data-testid="policy-start-date-input"
-                className="h-11"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="end_date">Fecha de Vencimiento</Label>
-              <Input
-                id="end_date"
-                type="date"
-                {...register('end_date')}
-                disabled={loading}
-                data-testid="policy-end-date-input"
-                className="h-11"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* 4. Valores de la Póliza */}
-        <div className="space-y-4 p-5 border rounded-lg bg-slate-50">
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-            Valores de la Póliza
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-            {/* Moneda */}
-            <div className="space-y-2">
-              <Label htmlFor="currency">Moneda</Label>
+              <Label>Compañía *</Label>
               <Select
-                value={watch('currency') || 'COP'}
-                onValueChange={(value) => setValue('currency', value)}
+                value={selectedCompanyId}
+                onValueChange={(value) => {
+                  setSelectedCompanyId(value);
+                  setSelectedLineId('');
+                  setSelectedGroupId('');
+                }}
                 disabled={loading}
               >
-                <SelectTrigger id="currency" className="h-11">
-                  <SelectValue />
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar compañía" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="COP">COP</SelectItem>
-                  <SelectItem value="USD">USD</SelectItem>
+                  {tenantCompanies.map((tc) => (
+                    <SelectItem key={tc.company_id} value={tc.company_id}>
+                      <span className="flex items-center gap-2">
+                        {tc.company.name}
+                        {tc.company_code && (
+                          <span className="text-xs text-muted-foreground">({tc.company_code})</span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Prima */}
+            {/* Grupo (Línea de seguro) */}
             <div className="space-y-2">
-              <Label htmlFor="premium">Prima *</Label>
-              <Input
-                id="premium"
-                type="text"
-                inputMode="numeric"
-                placeholder="0"
-                value={displayPremium}
-                onChange={handlePremiumChange}
-                disabled={loading}
-                data-testid="policy-premium-input"
-                className="h-11"
-              />
+              <Label>Grupo *</Label>
+              <Select
+                value={selectedLineId}
+                onValueChange={(value) => {
+                  setSelectedLineId(value);
+                  setSelectedGroupId('');
+                }}
+                disabled={loading || !selectedCompanyId || availableLines.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={!selectedCompanyId ? 'Primero selecciona compañía' : 'Seleccionar grupo'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableLines.map((line) => (
+                    <SelectItem key={line.id} value={line.id}>
+                      {line.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* Gastos Expedición */}
+            {/* Ramo (Grupo de seguro) */}
             <div className="space-y-2">
-              <Label htmlFor="gastos_expedicion">Gastos Exp.</Label>
-              <Input
-                id="gastos_expedicion"
-                type="text"
-                inputMode="numeric"
-                placeholder="0"
-                value={displayGastos}
-                onChange={handleGastosChange}
-                disabled={loading}
-                className="h-11"
-              />
-            </div>
-
-            {/* IVA */}
-            <div className="space-y-2">
-              <Label htmlFor="iva">IVA</Label>
-              <Input
-                id="iva"
-                type="text"
-                inputMode="numeric"
-                placeholder="0"
-                value={displayIva}
-                onChange={handleIvaChange}
-                disabled={loading}
-                className="h-11"
-              />
-            </div>
-
-            {/* Total */}
-            <div className="space-y-2">
-              <Label htmlFor="total_a_pagar">Total</Label>
-              <Input
-                id="total_a_pagar"
-                type="text"
-                value={displayTotal}
-                disabled
-                className="bg-blue-50 font-semibold h-11"
-              />
-            </div>
-
-            {/* Comisión */}
-            <div className="space-y-2">
-              <Label htmlFor="commission_pct" className="flex items-center gap-1">
-                Comisión %
-                {loadingCommission && <Loader2 className="h-3 w-3 animate-spin" />}
-              </Label>
-              <Input
-                id="commission_pct"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                placeholder="0"
-                {...register('commission_pct', { valueAsNumber: true })}
-                disabled={loading}
-                className="h-11"
-              />
+              <Label>Ramo *</Label>
+              <Select
+                value={selectedGroupId}
+                onValueChange={setSelectedGroupId}
+                disabled={loading || !selectedLineId || availableGroups.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={!selectedLineId ? 'Primero selecciona grupo' : 'Seleccionar ramo'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableGroups.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
+        )}
 
+        {/* Campos ocultos */}
+        <input type="hidden" {...register('insurer')} />
+        <input type="hidden" {...register('insurer_id')} />
+        <input type="hidden" {...register('line')} />
+        <input type="hidden" {...register('line_id')} />
+        <input type="hidden" {...register('group_id')} />
+      </div>
+
+      {/* Estado */}
+      <div className="space-y-2">
+        <Label>Estado *</Label>
+        <Select
+          value={status}
+          onValueChange={(value) => setValue('status', value as PolicyStatus)}
+          disabled={loading || isEditing}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Seleccionar estado" />
+          </SelectTrigger>
+          <SelectContent>
+            {POLICY_STATUS_OPTIONS.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {isEditing && (
           <p className="text-xs text-muted-foreground">
-            El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados.
+            Para cambiar el estado, usa el stepper de estados
           </p>
+        )}
+      </div>
+
+      {/* Valores de la Póliza */}
+      <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+        <div className="flex items-center gap-2 text-lg font-semibold">
+          <Layers className="h-5 w-5 text-primary" />
+          <span>Valores de la Póliza</span>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {/* Moneda */}
+          <div className="space-y-2">
+            <Label>Moneda</Label>
+            <Select
+              value={watch('currency') || 'COP'}
+              onValueChange={(value) => setValue('currency', value)}
+              disabled={loading}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="COP">COP</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Prima */}
+          <div className="space-y-2">
+            <Label>Prima *</Label>
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              {...register('premium', { valueAsNumber: true })}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Gastos Expedición */}
+          <div className="space-y-2">
+            <Label>Gastos Exp.</Label>
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              {...register('gastos_expedicion', { valueAsNumber: true })}
+              disabled={loading}
+            />
+          </div>
+
+          {/* IVA */}
+          <div className="space-y-2">
+            <Label>IVA</Label>
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              {...register('iva', { valueAsNumber: true })}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Total */}
+          <div className="space-y-2">
+            <Label>Total</Label>
+            <Input
+              type="number"
+              step="0.01"
+              {...register('total_a_pagar', { valueAsNumber: true })}
+              disabled
+              className="bg-muted font-semibold"
+            />
+          </div>
+
+          {/* Comisión */}
+          <div className="space-y-2">
+            <Label>Comisión %</Label>
+            <div className="relative">
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="10.00"
+                {...register('commission_pct', { valueAsNumber: true })}
+                disabled={loading}
+              />
+              {loadingCommission && <Loader2 className="h-4 w-4 animate-spin absolute right-3 top-3" />}
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          El total se calcula automáticamente. La comisión se carga según la compañía y ramo seleccionados (modificable).
+        </p>
+      </div>
+
+      {/* Fechas: Expedición, Inicio, Vencimiento */}
+      <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+        <div className="flex items-center gap-2 text-lg font-semibold">
+          <Calendar className="h-5 w-5 text-primary" />
+          <span>Fechas</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label>Fecha de Expedición</Label>
+            <Input
+              type="date"
+              {...register('fecha_expedicion')}
+              disabled={loading}
+            />
+            <p className="text-xs text-muted-foreground">Fecha en que se expide la póliza</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Fecha de Inicio</Label>
+            <Input
+              type="date"
+              value={startDate || ''}
+              onChange={handleStartDateChange}
+              disabled={loading}
+            />
+            <p className="text-xs text-muted-foreground">Al cambiar, se calcula el vencimiento a 1 año</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Fecha de Vencimiento</Label>
+            <Input
+              type="date"
+              {...register('end_date')}
+              disabled={loading}
+            />
+            <p className="text-xs text-muted-foreground">Puedes ajustar manualmente</p>
+          </div>
         </div>
       </div>
 
-      {/* ========== DOCUMENTOS ADJUNTOS ========== */}
-      <div className="p-6 border rounded-lg bg-white shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2">
-          <FileText className="h-5 w-5 text-blue-600" />
-          Documentos Adjuntos
-        </h3>
+      {/* Documentos Adjuntos */}
+      <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+        <div className="flex items-center gap-2 text-lg font-semibold">
+          <FileText className="h-5 w-5 text-primary" />
+          <span>Documentos Adjuntos</span>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Documentos de Póliza */}
-          <div className="space-y-3 p-4 border rounded-lg bg-slate-50">
-            <div className="flex justify-between items-center">
-              <p className="font-medium text-slate-700">Documentos de Póliza</p>
-              <span className="text-xs text-slate-500 bg-slate-200 px-2 py-1 rounded">
-                {polizaDocuments.length} / 5
-              </span>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Documentos de Póliza</Label>
+              <span className="text-xs text-muted-foreground">{polizaDocuments.length} / 5</span>
             </div>
 
-            <input
-              type="file"
-              id="poliza-upload"
-              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-              multiple
-              onChange={handlePolizaFileChange}
-              className="hidden"
-              disabled={loading || polizaDocuments.length >= 5}
-            />
-
             {polizaDocuments.length < 5 && (
-              <label
-                htmlFor="poliza-upload"
-                className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-blue-300 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors"
-              >
-                <Upload className="h-6 w-6 text-blue-500 mb-1" />
-                <span className="text-sm text-blue-600 font-medium">Subir documento de póliza</span>
-              </label>
+              <div className="relative">
+                <Input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  onChange={handlePolizaFileChange}
+                  disabled={loading}
+                  className="cursor-pointer"
+                  multiple
+                />
+                <Upload className="h-4 w-4 absolute right-3 top-3 text-muted-foreground pointer-events-none" />
+              </div>
             )}
 
             {polizaDocuments.length > 0 && (
-              <div className="space-y-2 mt-3">
+              <div className="space-y-2">
                 {polizaDocuments.map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <File className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                      <span className="text-sm truncate">{doc.file_name}</span>
+                  <div key={index} className="flex items-center justify-between p-2 bg-background rounded border">
+                    <div className="flex items-center gap-2">
+                      <File className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm truncate max-w-[200px]">{doc.file_name}</span>
                     </div>
                     <Button
                       type="button"
@@ -856,9 +786,9 @@ export function PolicyForm({
                       size="sm"
                       onClick={() => removePolizaDoc(index)}
                       disabled={loading}
-                      className="h-8 w-8 p-0 hover:bg-red-100 flex-shrink-0"
+                      className="h-8 w-8 p-0 hover:bg-red-100"
                     >
-                      <Trash2 className="h-4 w-4 text-red-500" />
+                      <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
                   </div>
                 ))}
@@ -867,44 +797,36 @@ export function PolicyForm({
           </div>
 
           {/* Documentos de Soporte */}
-          <div className="space-y-3 p-4 border rounded-lg bg-slate-50">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="font-medium text-slate-700">Documentos de Soporte</p>
-                <p className="text-xs text-slate-500">Sarlaft, Cédula, CCB, RUT, Estados Financieros</p>
-              </div>
-              <span className="text-xs text-slate-500 bg-slate-200 px-2 py-1 rounded">
-                {soporteDocuments.length} / 8
-              </span>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Documentos de Soporte</Label>
+              <span className="text-xs text-muted-foreground">{soporteDocuments.length} / 8</span>
             </div>
-
-            <input
-              type="file"
-              id="soporte-upload"
-              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-              multiple
-              onChange={handleSoporteFileChange}
-              className="hidden"
-              disabled={loading || soporteDocuments.length >= 8}
-            />
+            <p className="text-xs text-muted-foreground -mt-2">
+              Sarlaft, Cédula, CCB, RUT, Estados Financieros
+            </p>
 
             {soporteDocuments.length < 8 && (
-              <label
-                htmlFor="soporte-upload"
-                className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-emerald-300 rounded-lg cursor-pointer hover:bg-emerald-50 transition-colors"
-              >
-                <Upload className="h-6 w-6 text-emerald-500 mb-1" />
-                <span className="text-sm text-emerald-600 font-medium">Subir documentos soporte</span>
-              </label>
+              <div className="relative">
+                <Input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  onChange={handleSoporteFileChange}
+                  disabled={loading}
+                  className="cursor-pointer"
+                  multiple
+                />
+                <Upload className="h-4 w-4 absolute right-3 top-3 text-muted-foreground pointer-events-none" />
+              </div>
             )}
 
             {soporteDocuments.length > 0 && (
-              <div className="space-y-2 mt-3">
+              <div className="space-y-2">
                 {soporteDocuments.map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <File className="h-4 w-4 text-emerald-500 flex-shrink-0" />
-                      <span className="text-sm truncate">{doc.file_name}</span>
+                  <div key={index} className="flex items-center justify-between p-2 bg-background rounded border">
+                    <div className="flex items-center gap-2">
+                      <File className="h-4 w-4 text-green-600" />
+                      <span className="text-sm truncate max-w-[200px]">{doc.file_name}</span>
                     </div>
                     <Button
                       type="button"
@@ -912,9 +834,9 @@ export function PolicyForm({
                       size="sm"
                       onClick={() => removeSoporteDoc(index)}
                       disabled={loading}
-                      className="h-8 w-8 p-0 hover:bg-red-100 flex-shrink-0"
+                      className="h-8 w-8 p-0 hover:bg-red-100"
                     >
-                      <Trash2 className="h-4 w-4 text-red-500" />
+                      <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
                   </div>
                 ))}
@@ -927,21 +849,16 @@ export function PolicyForm({
       {/* Botones */}
       <div className="flex justify-end gap-3 pt-4 border-t">
         {onCancel && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            disabled={loading}
-          >
-            <X className="w-4 h-4 mr-2" />
+          <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
+            <X className="h-4 w-4 mr-2" />
             Cancelar
           </Button>
         )}
-        <Button type="submit" disabled={loading} data-testid="policy-submit-button">
+        <Button type="submit" disabled={loading}>
           {loading ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
-            <Save className="w-4 h-4 mr-2" />
+            <Save className="h-4 w-4 mr-2" />
           )}
           {isEditing ? 'Guardar Cambios' : 'Crear Póliza'}
         </Button>
