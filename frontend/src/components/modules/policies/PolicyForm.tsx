@@ -6,7 +6,7 @@
 // Con selección en cascada: Compañía → Grupo → Ramo
 // =====================================================
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
@@ -129,7 +129,6 @@ export function PolicyForm({
   // Estados para documentos
   const [polizaDocuments, setPolizaDocuments] = useState<PolicyDocument[]>([]);
   const [soporteDocuments, setSoporteDocuments] = useState<PolicyDocument[]>([]);
-  const [uploadingDocs, setUploadingDocs] = useState(false);
 
   const {
     register,
@@ -143,15 +142,20 @@ export function PolicyForm({
     defaultValues: policy ? {
       client_id: policy.client_id,
       policy_number: policy.policy_number,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       anexo: (policy as any).anexo || '00',
       insurer: policy.insurer,
       line: policy.line,
       status: policy.status as PolicyStatus,
       currency: policy.currency || 'COP',
       premium: policy.premium,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       gastos_expedicion: (policy as any).gastos_expedicion || 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       iva: (policy as any).iva || 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       total_a_pagar: (policy as any).total_a_pagar || 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       fecha_expedicion: (policy as any).fecha_expedicion || '',
       start_date: policy.start_date || '',
       end_date: policy.end_date || '',
@@ -172,7 +176,6 @@ export function PolicyForm({
   const gastosExpedicion = watch('gastos_expedicion') || 0;
   const iva = watch('iva') || 0;
   const status = watch('status');
-  const fechaExpedicion = watch('fecha_expedicion');
   const startDate = watch('start_date');
 
   // Calcular total automáticamente
@@ -372,7 +375,6 @@ export function PolicyForm({
 
   const handleFormSubmit = async (data: PolicyFormData) => {
     console.log('Form data submitted:', data);
-    // TODO: Subir documentos al storage antes de guardar la póliza
     await onSubmit(data);
   };
 
@@ -562,32 +564,32 @@ export function PolicyForm({
         )}
       </div>
 
-      {/* Valores: Moneda + Prima + Gastos + IVA + Total */}
+      {/* Valores de la Póliza */}
       <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
           Valores de la Póliza
         </div>
 
-        {/* Moneda */}
-        <div className="space-y-2">
-          <Label htmlFor="currency">Moneda</Label>
-          <Select
-            value={watch('currency') || 'COP'}
-            onValueChange={(value) => setValue('currency', value)}
-            disabled={loading}
-          >
-            <SelectTrigger id="currency" className="w-full md:w-1/4">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="COP">COP (Peso Colombiano)</SelectItem>
-              <SelectItem value="USD">USD (Dólar)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
+          {/* Moneda */}
+          <div className="space-y-2">
+            <Label htmlFor="currency">Moneda</Label>
+            <Select
+              value={watch('currency') || 'COP'}
+              onValueChange={(value) => setValue('currency', value)}
+              disabled={loading}
+            >
+              <SelectTrigger id="currency">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="COP">COP</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* Prima, Gastos, IVA, Total */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Prima */}
           <div className="space-y-2">
             <Label htmlFor="premium">Prima *</Label>
             <Input
@@ -600,13 +602,11 @@ export function PolicyForm({
               disabled={loading}
               data-testid="policy-premium-input"
             />
-            {errors.premium && (
-              <p className="text-sm text-red-500">{errors.premium.message}</p>
-            )}
           </div>
 
+          {/* Gastos Expedición */}
           <div className="space-y-2">
-            <Label htmlFor="gastos_expedicion">Gastos Expedición</Label>
+            <Label htmlFor="gastos_expedicion">Gastos Exp.</Label>
             <Input
               id="gastos_expedicion"
               type="number"
@@ -619,6 +619,7 @@ export function PolicyForm({
             />
           </div>
 
+          {/* IVA */}
           <div className="space-y-2">
             <Label htmlFor="iva">IVA</Label>
             <Input
@@ -633,21 +634,20 @@ export function PolicyForm({
             />
           </div>
 
+          {/* Total */}
           <div className="space-y-2">
             <Label htmlFor="total_a_pagar">Total a Pagar</Label>
             <Input
               id="total_a_pagar"
               type="number"
-              step="0.01"
-              min="0"
               value={watch('total_a_pagar') || 0}
               disabled
-              className="bg-slate-100 font-semibold"
+              className="bg-slate-200 font-semibold"
               data-testid="policy-total-input"
             />
-            <p className="text-xs text-muted-foreground">Calculado automáticamente</p>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">El total se calcula automáticamente</p>
       </div>
 
       {/* Fechas: Expedición, Inicio, Vencimiento */}
@@ -703,7 +703,7 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* Documentos */}
+      {/* Documentos Adjuntos */}
       <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <FileText className="h-4 w-4" />
@@ -712,10 +712,12 @@ export function PolicyForm({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Documentos de Póliza */}
-          <div className="space-y-3">
+          <div className="space-y-3 p-4 bg-white rounded-lg border">
             <div className="flex items-center justify-between">
-              <Label>Documentos de Póliza</Label>
-              <span className="text-xs text-muted-foreground">{polizaDocuments.length}/5</span>
+              <Label className="text-base font-medium">Documentos de Póliza</Label>
+              <span className="text-sm text-muted-foreground bg-slate-100 px-2 py-1 rounded">
+                {polizaDocuments.length} / 5
+              </span>
             </div>
             
             {polizaDocuments.length < 5 && (
@@ -728,20 +730,20 @@ export function PolicyForm({
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   disabled={loading}
                 />
-                <div className="flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
-                  <Upload className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Subir documento de póliza</span>
+                <div className="flex items-center justify-center gap-2 p-6 border-2 border-dashed border-blue-300 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer">
+                  <Upload className="h-5 w-5 text-blue-500" />
+                  <span className="text-sm text-blue-600 font-medium">Subir documento de póliza</span>
                 </div>
               </div>
             )}
 
             {polizaDocuments.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-2 mt-3">
                 {polizaDocuments.map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
+                  <div key={index} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
                     <div className="flex items-center gap-2">
                       <File className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm truncate max-w-[180px]">{doc.file_name}</span>
+                      <span className="text-sm truncate max-w-[200px]">{doc.file_name}</span>
                     </div>
                     <Button
                       type="button"
@@ -749,6 +751,7 @@ export function PolicyForm({
                       size="sm"
                       onClick={() => removePolizaDoc(index)}
                       disabled={loading}
+                      className="h-8 w-8 p-0 hover:bg-red-100"
                     >
                       <Trash2 className="h-4 w-4 text-red-500" />
                     </Button>
@@ -759,14 +762,18 @@ export function PolicyForm({
           </div>
 
           {/* Documentos de Soporte */}
-          <div className="space-y-3">
+          <div className="space-y-3 p-4 bg-white rounded-lg border">
             <div className="flex items-center justify-between">
-              <Label>Documentos de Soporte</Label>
-              <span className="text-xs text-muted-foreground">{soporteDocuments.length}/8</span>
+              <div>
+                <Label className="text-base font-medium">Documentos de Soporte</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Sarlaft, Cédula, CCB, RUT, Estados Financieros
+                </p>
+              </div>
+              <span className="text-sm text-muted-foreground bg-slate-100 px-2 py-1 rounded">
+                {soporteDocuments.length} / 8
+              </span>
             </div>
-            <p className="text-xs text-muted-foreground -mt-2">
-              Sarlaft, Cédula, CCB, RUT, Estados Financieros, etc.
-            </p>
             
             {soporteDocuments.length < 8 && (
               <div className="relative">
@@ -778,20 +785,20 @@ export function PolicyForm({
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   disabled={loading}
                 />
-                <div className="flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
-                  <Upload className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Subir documentos soporte</span>
+                <div className="flex items-center justify-center gap-2 p-6 border-2 border-dashed border-green-300 rounded-lg hover:bg-green-50 transition-colors cursor-pointer">
+                  <Upload className="h-5 w-5 text-green-500" />
+                  <span className="text-sm text-green-600 font-medium">Subir documentos soporte</span>
                 </div>
               </div>
             )}
 
             {soporteDocuments.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-2 mt-3">
                 {soporteDocuments.map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
+                  <div key={index} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
                     <div className="flex items-center gap-2">
                       <File className="h-4 w-4 text-green-600" />
-                      <span className="text-sm truncate max-w-[180px]">{doc.file_name}</span>
+                      <span className="text-sm truncate max-w-[200px]">{doc.file_name}</span>
                     </div>
                     <Button
                       type="button"
@@ -799,6 +806,7 @@ export function PolicyForm({
                       size="sm"
                       onClick={() => removeSoporteDoc(index)}
                       disabled={loading}
+                      className="h-8 w-8 p-0 hover:bg-red-100"
                     >
                       <Trash2 className="h-4 w-4 text-red-500" />
                     </Button>
