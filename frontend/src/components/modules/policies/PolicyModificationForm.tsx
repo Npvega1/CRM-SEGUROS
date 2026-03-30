@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Save, X, AlertTriangle, FileEdit } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
@@ -149,7 +148,6 @@ export function PolicyModificationForm({
     setValue,
     watch,
     formState: { errors, isSubmitting }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<ModificationFormData>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(ModificationSchema) as any,
@@ -367,16 +365,16 @@ export function PolicyModificationForm({
   return (
     <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
       {/* Indicador de Modificación */}
-      <Alert className="bg-amber-50 border-amber-200">
-        <FileEdit className="h-4 w-4 text-amber-600" />
-        <AlertDescription className="text-amber-800">
+      <div className="relative w-full rounded-lg border px-4 py-3 text-sm bg-amber-50 border-amber-200">
+        <FileEdit className="h-4 w-4 text-amber-600 absolute left-4 top-4" />
+        <div className="pl-7 text-amber-800">
           <strong>Creando Modificación (Anexo {nextAnexo})</strong> sobre la Póliza{' '}
           <strong>{parentPolicy.policy_number}</strong>
           {parentPolicy.anexo !== '00' && ` - Anexo ${parentPolicy.anexo}`}
           <br />
           <span className="text-sm">Cliente: {parentPolicy.client_name}</span>
-        </AlertDescription>
-      </Alert>
+        </div>
+      </div>
 
       {/* Identificación de la Póliza */}
       <div className="bg-white p-6 rounded-lg border space-y-4">
@@ -542,13 +540,13 @@ export function PolicyModificationForm({
         </h3>
 
         {/* Información sobre valores negativos */}
-        <Alert className="bg-blue-50 border-blue-200">
-          <AlertTriangle className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="text-blue-800 text-sm">
+        <div className="relative w-full rounded-lg border px-4 py-3 text-sm bg-blue-50 border-blue-200">
+          <AlertTriangle className="h-4 w-4 text-blue-600 absolute left-4 top-4" />
+          <div className="pl-7 text-blue-800 text-sm">
             <strong>Nota:</strong> Si la modificación reduce la prima, usa el botón &quot;Negativo&quot; 
             para ingresar valores negativos. Una prima negativa genera un crédito a favor del cliente.
-          </AlertDescription>
-        </Alert>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
           <div className="space-y-2">
