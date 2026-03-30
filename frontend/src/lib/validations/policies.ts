@@ -19,7 +19,7 @@ export type PolicyLine = z.infer<typeof PolicyLineEnum>;
 /**
  * Estado de póliza
  */
-export const PolicyStatusEnum = z.enum(['cotizacion', 'activa', 'vencida', 'cancelada', 'renovacion']);
+export const PolicyStatusEnum = z.enum(['cotizacion', 'activa', 'vencida', 'cancelada', 'renovacion', 'renovada']);
 export type PolicyStatus = z.infer<typeof PolicyStatusEnum>;
 
 /**
@@ -171,7 +171,7 @@ export type ExpiringPolicy = z.infer<typeof ExpiringPolicySchema>;
 /**
  * Labels para líneas de seguro
  */
-export const POLICY_LINE_LABELS: Record<PolicyLine, string> = {
+export const POLICY_LINE_LABELS: Record<string, string> = {
   vida: 'Vida',
   auto: 'Auto',
   salud: 'Salud',
@@ -183,29 +183,31 @@ export const POLICY_LINE_LABELS: Record<PolicyLine, string> = {
 /**
  * Labels para estados de póliza
  */
-export const POLICY_STATUS_LABELS: Record<PolicyStatus, string> = {
+export const POLICY_STATUS_LABELS: Record<string, string> = {
   cotizacion: 'Cotización',
   activa: 'Activa',
   vencida: 'Vencida',
   cancelada: 'Cancelada',
-  renovacion: 'En Renovación'
+  renovacion: 'En Renovación',
+  renovada: 'Renovada'
 };
 
 /**
  * Colores para estados de póliza (Tailwind classes)
  */
-export const POLICY_STATUS_COLORS: Record<PolicyStatus, string> = {
+export const POLICY_STATUS_COLORS: Record<string, string> = {
   cotizacion: 'bg-gray-100 text-gray-800',
   activa: 'bg-green-100 text-green-800',
   vencida: 'bg-red-100 text-red-800',
   cancelada: 'bg-slate-100 text-slate-800',
-  renovacion: 'bg-yellow-100 text-yellow-800'
+  renovacion: 'bg-yellow-100 text-yellow-800',
+  renovada: 'bg-blue-100 text-blue-800'
 };
 
 /**
  * Iconos para líneas de seguro (Lucide icon names)
  */
-export const POLICY_LINE_ICONS: Record<PolicyLine, string> = {
+export const POLICY_LINE_ICONS: Record<string, string> = {
   vida: 'Heart',
   auto: 'Car',
   salud: 'Stethoscope',
@@ -217,11 +219,12 @@ export const POLICY_LINE_ICONS: Record<PolicyLine, string> = {
 /**
  * Transiciones de estado válidas
  */
-export const VALID_STATUS_TRANSITIONS: Record<PolicyStatus, PolicyStatus[]> = {
+export const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
   cotizacion: ['activa', 'cancelada'],
-  activa: ['vencida', 'cancelada', 'renovacion'],
+  activa: ['vencida', 'cancelada', 'renovacion', 'renovada'],
   vencida: ['renovacion', 'cancelada'],
   renovacion: ['activa', 'cancelada'],
+  renovada: [],
   cancelada: []
 };
 
