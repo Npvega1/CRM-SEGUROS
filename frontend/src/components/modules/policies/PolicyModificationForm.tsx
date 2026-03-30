@@ -19,7 +19,7 @@ import { Loader2, Save, X, AlertTriangle, FileEdit } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
 
-// Schema especial para modificaciones (permite prima negativa)
+// Schema especial para modificaciones (permite valores negativos)
 const ModificationSchema = z.object({
   client_id: z.string().uuid('Cliente inválido'),
   policy_number: z.string().min(1, 'El número de póliza es requerido'),
@@ -31,15 +31,15 @@ const ModificationSchema = z.object({
   group_id: z.string().uuid().optional().nullable(),
   status: z.enum(['cotizacion', 'activa', 'vencida', 'cancelada', 'renovacion']),
   premium: z.coerce.number(),
-  gastos_expedicion: z.coerce.number().min(0).default(0),
-  iva: z.coerce.number().min(0).default(0),
+  gastos_expedicion: z.coerce.number().default(0),
+  iva: z.coerce.number().default(0),
   total_a_pagar: z.coerce.number().default(0),
   currency: z.string().default('COP'),
   start_date: z.string().optional().nullable(),
   end_date: z.string().optional().nullable(),
   fecha_expedicion: z.string().optional().nullable(),
   commission_pct: z.coerce.number().min(0).max(100).default(0),
-  policy_type: z.string().default('modificacion'),
+  policy_type: z.string().default('anexo'),
   parent_policy_id: z.string().uuid(),
   notas: z.string().optional()
 });
@@ -169,7 +169,7 @@ export function PolicyModificationForm({
       commission_pct: parentPolicy.commission_pct || 0,
       start_date: parentPolicy.start_date,
       end_date: parentPolicy.end_date,
-      policy_type: 'modificacion',
+      policy_type: 'anexo',
       parent_policy_id: parentPolicy.id
     }
   });
@@ -178,9 +178,21 @@ export function PolicyModificationForm({
   const gastosExpedicion = watch('gastos_expedicion') || 0;
   const iva = watch('iva') || 0;
 
-  // Calcular total (permite negativos)
+  // Calcular total - cuando prima es negativa, gastos e IVA también son negativos
   useEffect(() => {
-    const total = Number(premium) + Number(gastosExpedicion) + Number(iva);
+    const premiumNum = Number(premium);
+    const gastosNum = Math.abs(Number(gastosExpedicion));
+    const ivaNum = Math.abs(Number(iva));
+    
+    let total: number;
+    if (premiumNum < 0) {
+      // Si prima es negativa, gastos e IVA se suman al negativo
+      total = premiumNum - gastosNum - ivaNum;
+    } else {
+      // Si prima es positiva, cálculo normal
+      total = premiumNum + gastosNum + ivaNum;
+    }
+    
     setValue('total_a_pagar', total);
   }, [premium, gastosExpedicion, iva, setValue]);
 
@@ -336,22 +348,32 @@ export function PolicyModificationForm({
 
   const handleGastosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = parseCurrencyValue(e.target.value);
-    setValue('gastos_expedicion', numericValue);
-    setGastosDisplay(formatCurrency(numericValue));
+    // Siempre guardamos el valor absoluto, el signo lo determina la prima
+    setValue('gastos_expedicion', Math.abs(numericValue));
+    setGastosDisplay(formatCurrency(Math.abs(numericValue)));
   };
 
   const handleIvaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = parseCurrencyValue(e.target.value);
-    setValue('iva', numericValue);
-    setIvaDisplay(formatCurrency(numericValue));
+    // Siempre guardamos el valor absoluto, el signo lo determina la prima
+    setValue('iva', Math.abs(numericValue));
+    setIvaDisplay(formatCurrency(Math.abs(numericValue)));
   };
 
   const handleFormSubmit = async (data: ModificationFormData) => {
-    const dataWithNotas: ModificationFormData = {
+    // Ajustar gastos e IVA según el signo de la prima
+    const premiumNum = Number(data.premium);
+    const gastosNum = Math.abs(Number(data.gastos_expedicion));
+    const ivaNum = Math.abs(Number(data.iva));
+    
+    const adjustedData: ModificationFormData = {
       ...data,
+      gastos_expedicion: premiumNum < 0 ? -gastosNum : gastosNum,
+      iva: premiumNum < 0 ? -ivaNum : ivaNum,
       notas: notasValue || undefined
     };
-    await onSubmit(dataWithNotas);
+    
+    await onSubmit(adjustedData);
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -360,7 +382,14 @@ export function PolicyModificationForm({
   };
 
   const loading = isLoading || isSubmitting;
-  const totalAPagar = Number(premium) + Number(gastosExpedicion) + Number(iva);
+  
+  // Calcular total para mostrar
+  const premiumNum = Number(premium);
+  const gastosNum = Math.abs(Number(gastosExpedicion));
+  const ivaNum = Math.abs(Number(iva));
+  const totalAPagar = premiumNum < 0 
+    ? premiumNum - gastosNum - ivaNum 
+    : premiumNum + gastosNum + ivaNum;
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
@@ -543,8 +572,8 @@ export function PolicyModificationForm({
         <div className="relative w-full rounded-lg border px-4 py-3 text-sm bg-blue-50 border-blue-200">
           <AlertTriangle className="h-4 w-4 text-blue-600 absolute left-4 top-4" />
           <div className="pl-7 text-blue-800 text-sm">
-            <strong>Nota:</strong> Si la modificación reduce la prima, usa el botón &quot;Negativo&quot; 
-            para ingresar valores negativos. Una prima negativa genera un crédito a favor del cliente.
+            <strong>Nota:</strong> Si la modificación reduce la prima, usa el botón &quot;Negativo&quot;. 
+            Cuando la prima es negativa, los gastos e IVA también se aplicarán como negativos automáticamente.
           </div>
         </div>
 
@@ -593,22 +622,24 @@ export function PolicyModificationForm({
           </div>
 
           <div className="space-y-2">
-            <Label>Gastos Exp.</Label>
+            <Label>Gastos Exp. {isNegativePremium && <span className="text-red-500">(−)</span>}</Label>
             <Input
               value={gastosDisplay}
               onChange={handleGastosChange}
               onFocus={(e) => e.target.select()}
               disabled={loading}
+              className={isNegativePremium ? 'text-red-600' : ''}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>IVA</Label>
+            <Label>IVA {isNegativePremium && <span className="text-red-500">(−)</span>}</Label>
             <Input
               value={ivaDisplay}
               onChange={handleIvaChange}
               onFocus={(e) => e.target.select()}
               disabled={loading}
+              className={isNegativePremium ? 'text-red-600' : ''}
             />
           </div>
 
