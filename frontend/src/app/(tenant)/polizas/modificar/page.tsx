@@ -178,7 +178,7 @@ export default function ModificarPolizaPage() {
         start_date: data.start_date || null,
         end_date: data.end_date || null,
         fecha_expedicion: data.fecha_expedicion || null,
-        policy_type: 'modificacion',
+        policy_type: 'anexo',
         parent_policy_id: data.parent_policy_id,
         notas: data.notas || null
       };
