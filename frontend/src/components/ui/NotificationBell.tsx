@@ -5,7 +5,7 @@
 // Campana de notificaciones con Supabase Realtime
 // =====================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { getBrowserClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -42,12 +42,12 @@ interface NotificationItem {
 
 // Iconos según tipo de entidad
 const ENTITY_ICONS: Record<string, React.ReactNode> = {
-  'policy': <FileText className="h-4 w-4 text-blue-500" />,
-  'claim': <AlertTriangle className="h-4 w-4 text-orange-500" />,
-  'opportunity': <TrendingUp className="h-4 w-4 text-green-500" />,
-  'client': <Users className="h-4 w-4 text-purple-500" />,
-  'invoice': <FileText className="h-4 w-4 text-yellow-500" />,
-  'default': <Bell className="h-4 w-4 text-gray-500" />
+  'policy': <FileText className="h-4 w-4" />,
+  'claim': <AlertTriangle className="h-4 w-4" />,
+  'opportunity': <TrendingUp className="h-4 w-4" />,
+  'client': <Users className="h-4 w-4" />,
+  'invoice': <FileText className="h-4 w-4" />,
+  'default': <Bell className="h-4 w-4" />
 };
 
 export function NotificationBell() {
@@ -56,14 +56,14 @@ export function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
-  const supabase = getBrowserClient();
+  const channelRef = useRef<ReturnType<ReturnType<typeof getBrowserClient>['channel']> | null>(null);
 
   // Cargar notificaciones
   const loadNotifications = useCallback(async () => {
     if (!userId) return;
 
     try {
+      const supabase = getBrowserClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('notifications')
@@ -82,7 +82,7 @@ export function NotificationBell() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, supabase]);
+  }, [userId]);
 
   // Cargar al montar y cuando cambia el usuario
   useEffect(() => {
@@ -93,32 +93,53 @@ export function NotificationBell() {
   useEffect(() => {
     if (!userId || !tenantId) return;
 
-    const channel = supabase
-      .channel('notifications-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`
-        },
-        (payload) => {
-          const newNotification = payload.new as NotificationItem;
-          setNotifications(prev => [newNotification, ...prev].slice(0, 20));
-          setUnreadCount(prev => prev + 1);
-        }
-      )
-      .subscribe();
+    const supabase = getBrowserClient();
+
+    // Limpiar canal previo si existe
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    // Usar nombre de canal único para evitar colisiones
+    const channelName = `notifications-${userId}-${Date.now()}`;
+
+    try {
+      const channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${userId}`
+          },
+          (payload) => {
+            const newNotification = payload.new as NotificationItem;
+            setNotifications(prev => [newNotification, ...prev].slice(0, 20));
+            setUnreadCount(prev => prev + 1);
+          }
+        )
+        .subscribe();
+
+      channelRef.current = channel;
+    } catch (err) {
+      console.error('Error subscribing to notifications:', err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
-  }, [userId, tenantId, supabase]);
+  }, [userId, tenantId]);
 
   // Marcar como leída
   const markAsRead = async (notificationId: string) => {
     try {
+      const supabase = getBrowserClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('notifications')
@@ -141,6 +162,7 @@ export function NotificationBell() {
     if (!userId) return;
 
     try {
+      const supabase = getBrowserClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('notifications')
@@ -165,40 +187,21 @@ export function NotificationBell() {
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="relative"
-          data-testid="notification-bell"
-        >
+        <Button variant="ghost" size="icon" className="relative" data-testid="notification-bell">
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
-            <Badge 
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-red-500 text-white"
-              data-testid="notification-count"
-            >
+            <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-red-500" data-testid="notification-count">
               {unreadCount > 9 ? '9+' : unreadCount}
             </Badge>
           )}
         </Button>
       </PopoverTrigger>
-
-      <PopoverContent 
-        className="w-80 p-0" 
-        align="end"
-        data-testid="notification-dropdown"
-      >
+      <PopoverContent className="w-80 p-0" align="end">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
+        <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-semibold">Notificaciones</h3>
           {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs h-auto py-1"
-              onClick={markAllAsRead}
-              data-testid="mark-all-read-btn"
-            >
+            <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-xs" data-testid="mark-all-read">
               <CheckCheck className="h-3 w-3 mr-1" />
               Marcar todas
             </Button>
@@ -209,22 +212,20 @@ export function NotificationBell() {
         <div className="max-h-[400px] overflow-y-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Clock className="h-5 w-5 animate-pulse text-muted-foreground" />
+              <Clock className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : notifications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <Bell className="h-8 w-8 text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">
-                No tienes notificaciones
-              </p>
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <Bell className="h-8 w-8 mb-2 opacity-50" />
+              <p className="text-sm">No tienes notificaciones</p>
             </div>
           ) : (
-            <div>
+            <div className="divide-y">
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
                   className={cn(
-                    'px-4 py-3 border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors',
+                    'p-3 hover:bg-muted/50 cursor-pointer transition-colors',
                     !notification.is_read && 'bg-blue-50/50'
                   )}
                   onClick={() => {
@@ -235,17 +236,12 @@ export function NotificationBell() {
                   data-testid={`notification-item-${notification.id}`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 mt-0.5">
+                    <div className="mt-0.5 text-muted-foreground">
                       {getEntityIcon(notification.entity_type)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className={cn(
-                          'text-sm truncate',
-                          !notification.is_read && 'font-medium'
-                        )}>
-                          {notification.title}
-                        </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium truncate">{notification.title}</p>
                         {!notification.is_read && (
                           <div className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0" />
                         )}
@@ -268,8 +264,8 @@ export function NotificationBell() {
 
         {/* Footer */}
         {notifications.length > 0 && (
-          <div className="px-4 py-2 border-t bg-muted/30">
-            <p className="text-xs text-center text-muted-foreground">
+          <div className="p-2 border-t text-center">
+            <p className="text-xs text-muted-foreground">
               Mostrando las últimas {notifications.length} notificaciones
             </p>
           </div>
