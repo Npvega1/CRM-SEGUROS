@@ -137,7 +137,6 @@ export default function PoliciesPage() {
           .in('policy_number', policyNumbers);
 
         if (allRelatedPolicies) {
-          // Agrupar por policy_number y sumar primas
           allRelatedPolicies.forEach((p: Record<string, unknown>) => {
             const pn = p.policy_number as string;
             const premium = (p.premium as number) || 0;
@@ -148,7 +147,6 @@ export default function PoliciesPage() {
             }
             consolidatedPremiums[pn].premium += premium;
 
-            // Contar anexos (excluir el 00)
             if (anexo && anexo !== '00') {
               consolidatedPremiums[pn].count += 1;
             }
@@ -185,14 +183,12 @@ export default function PoliciesPage() {
     try {
       const supabase = getBrowserClient();
 
-      // Cargar todas las pólizas para calcular stats con primas consolidadas
       const { data: allPolicies } = await supabase
         .from('policies')
         .select('policy_number, status, line, premium, end_date, anexo')
         .eq('tenant_id', tenantId);
 
       if (allPolicies) {
-        // Agrupar por policy_number para calcular prima consolidada
         const policyGroups: Record<string, {
           status: string;
           line: string;
@@ -218,7 +214,6 @@ export default function PoliciesPage() {
 
           policyGroups[pn].totalPremium += (p.premium as number) || 0;
 
-          // Usar datos de la póliza base
           if (isBase) {
             policyGroups[pn].status = p.status as string;
             policyGroups[pn].line = p.line as string;
@@ -227,7 +222,6 @@ export default function PoliciesPage() {
           }
         });
 
-        // Filtrar solo pólizas que tienen base
         const basePolicies = Object.values(policyGroups).filter(p => p.isBase);
 
         const byStatus: Record<string, number> = {};
@@ -280,7 +274,7 @@ export default function PoliciesPage() {
         <span className={isNegative ? 'text-red-600' : ''}>
           {formatted}
         </span>
-        {anexoCount && anexoCount > 0 && (
+        {typeof anexoCount === 'number' && anexoCount > 0 && (
           <Badge variant="outline" className="text-xs px-1 py-0">
             <Layers className="h-3 w-3 mr-1" />
             {anexoCount}
