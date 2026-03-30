@@ -383,7 +383,7 @@ export default function PolicyDetailPage() {
             <DropdownMenuItem onClick={() => router.push(`/polizas/${policyId}/editar`)} className="cursor-pointer">
               <Edit className="h-4 w-4 mr-2" />Editar Póliza
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push(`/polizas/nueva?modificacion=${policyId}`)} className="cursor-pointer">
+            <DropdownMenuItem onClick={() => router.push(`/polizas/modificar?poliza=${policyId}`)} className="cursor-pointer">
               <FilePlus className="h-4 w-4 mr-2" />Incluir Modificación
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => router.push(`/polizas/nueva?renovacion=${policyId}`)} className="cursor-pointer">
