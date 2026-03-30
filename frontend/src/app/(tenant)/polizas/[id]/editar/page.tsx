@@ -12,27 +12,51 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PolicyForm } from '@/components/modules/policies/PolicyForm';
-import type { Policy, PolicyStatus } from '@/lib/validations/policies';
 import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { getBrowserClient } from '@/lib/supabase/client';
 
-interface PolicyFormData {
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface Insurer {
+  id: string;
+  name: string;
+}
+
+interface Line {
+  id: string;
+  name: string;
+}
+
+interface Group {
+  id: string;
+  name: string;
+}
+
+interface PolicyData {
+  id: string;
+  tenant_id: string;
   client_id: string;
   policy_number: string;
-  insurer: string;
-  insurer_id?: string;
-  line: string;
-  line_id?: string;
-  group_id?: string;
-  status: PolicyStatus;
+  anexo: string;
+  insurer_id: string;
+  line_id: string;
+  group_id: string | null;
+  status: string;
   premium: number;
-  currency?: string;
-  start_date?: string | null;
-  end_date?: string | null;
-  commission_pct?: number;
-  metadata?: Record<string, unknown>;
+  gastos_expedicion: number;
+  iva: number;
+  total_a_pagar: number;
+  commission_pct: number;
+  start_date: string;
+  end_date: string;
+  fecha_expedicion: string | null;
+  notas: string | null;
 }
 
 export default function EditPolicyPage() {
@@ -41,32 +65,47 @@ export default function EditPolicyPage() {
   const policyId = params.id as string;
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
   
-  const [policy, setPolicy] = useState<Policy | null>(null);
+  const [policy, setPolicy] = useState<PolicyData | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [insurers, setInsurers] = useState<Insurer[]>([]);
+  const [lines, setLines] = useState<Line[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadPolicy = useCallback(async () => {
+  const loadData = useCallback(async () => {
     if (!tenantId || !policyId) return;
     
     setIsLoading(true);
     try {
       const supabase = getBrowserClient();
       
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error: fetchError } = await (supabase as any)
-        .from('policies')
-        .select('*')
-        .eq('id', policyId)
-        .eq('tenant_id', tenantId)
-        .single();
+      // Cargar póliza y catálogos en paralelo
+      const [policyRes, clientsRes, insurersRes, linesRes, groupsRes] = await Promise.all([
+        supabase
+          .from('policies')
+          .select('*')
+          .eq('id', policyId)
+          .eq('tenant_id', tenantId)
+          .single(),
+        supabase.from('clients').select('id, name, email').eq('tenant_id', tenantId).order('name'),
+        supabase.from('insurers').select('id, name').eq('tenant_id', tenantId).order('name'),
+        supabase.from('lines').select('id, name').eq('tenant_id', tenantId).order('name'),
+        supabase.from('groups').select('id, name').eq('tenant_id', tenantId).order('name'),
+      ]);
       
-      if (fetchError) {
-        console.error('Error fetching policy:', fetchError);
-        setError(fetchError.message || 'Error al cargar la póliza');
+      if (policyRes.error) {
+        console.error('Error fetching policy:', policyRes.error);
+        setError(policyRes.error.message || 'Error al cargar la póliza');
       } else {
-        setPolicy(data as Policy);
+        setPolicy(policyRes.data as PolicyData);
       }
+
+      setClients(clientsRes.data || []);
+      setInsurers(insurersRes.data || []);
+      setLines(linesRes.data || []);
+      setGroups(groupsRes.data || []);
     } catch (err) {
       console.error('Error:', err);
       setError('Error de conexión');
@@ -76,11 +115,11 @@ export default function EditPolicyPage() {
 
   useEffect(() => {
     if (!isLoadingTenant && tenantId && policyId) {
-      loadPolicy();
+      loadData();
     }
-  }, [isLoadingTenant, tenantId, policyId, loadPolicy]);
+  }, [isLoadingTenant, tenantId, policyId, loadData]);
 
-  const handleSubmit = async (data: PolicyFormData) => {
+  const handleSubmit = async (data: Record<string, unknown>) => {
     if (!tenantId || !policyId) return;
     
     setIsSaving(true);
@@ -89,22 +128,25 @@ export default function EditPolicyPage() {
     try {
       const supabase = getBrowserClient();
       
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase as any)
+      const { error: updateError } = await supabase
         .from('policies')
         .update({
           policy_number: data.policy_number,
-          insurer: data.insurer,
-          insurer_id: data.insurer_id || null,
-          line: data.line,
-          line_id: data.line_id || null,
+          anexo: data.anexo,
+          client_id: data.client_id,
+          insurer_id: data.insurer_id,
+          line_id: data.line_id,
           group_id: data.group_id || null,
+          status: data.status,
           premium: data.premium,
-          currency: data.currency || 'COP',
-          start_date: data.start_date || null,
-          end_date: data.end_date || null,
-          commission_pct: data.commission_pct || 0,
-          metadata: data.metadata || {},
+          gastos_expedicion: data.gastos_expedicion,
+          iva: data.iva,
+          total_a_pagar: data.total_a_pagar,
+          commission_pct: data.commission_pct,
+          start_date: data.start_date,
+          end_date: data.end_date,
+          fecha_expedicion: data.fecha_expedicion || null,
+          notas: data.notas || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', policyId)
@@ -129,10 +171,6 @@ export default function EditPolicyPage() {
     }
   };
 
-  const handleCancel = () => {
-    router.push(`/polizas/${policyId}`);
-  };
-
   if (isLoadingTenant || isLoading) {
     return <LoadingScreen message="Cargando póliza..." />;
   }
@@ -151,6 +189,26 @@ export default function EditPolicyPage() {
       </div>
     );
   }
+
+  // Preparar valores por defecto para el formulario
+  const defaultValues = policy ? {
+    policy_number: policy.policy_number,
+    anexo: policy.anexo || '00',
+    client_id: policy.client_id,
+    insurer_id: policy.insurer_id,
+    line_id: policy.line_id,
+    group_id: policy.group_id || '',
+    status: policy.status || 'vigente',
+    premium: policy.premium || 0,
+    gastos_expedicion: policy.gastos_expedicion || 0,
+    iva: policy.iva || 0,
+    total_a_pagar: policy.total_a_pagar || 0,
+    commission_pct: policy.commission_pct || 0,
+    start_date: policy.start_date || '',
+    end_date: policy.end_date || '',
+    fecha_expedicion: policy.fecha_expedicion || '',
+    notas: policy.notas || '',
+  } : undefined;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -173,7 +231,7 @@ export default function EditPolicyPage() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {error && policy && (
           <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-2 text-destructive">
             <AlertCircle className="h-5 w-5" />
@@ -181,24 +239,26 @@ export default function EditPolicyPage() {
           </div>
         )}
 
-        <Card>
+        <Card className="mb-6">
           <CardHeader>
             <CardTitle>Editar Póliza</CardTitle>
             <CardDescription>
               Actualiza la información de la póliza {policy?.policy_number}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            {policy && (
-              <PolicyForm
-                policy={policy}
-                onSubmit={handleSubmit}
-                onCancel={handleCancel}
-                isLoading={isSaving}
-              />
-            )}
-          </CardContent>
         </Card>
+
+        {policy && (
+          <PolicyForm
+            clients={clients}
+            insurers={insurers}
+            lines={lines}
+            groups={groups}
+            onSubmit={handleSubmit}
+            isLoading={isSaving}
+            defaultValues={defaultValues}
+          />
+        )}
       </main>
     </div>
   );
