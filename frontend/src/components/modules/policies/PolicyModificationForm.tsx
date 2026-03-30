@@ -31,7 +31,7 @@ const ModificationSchema = z.object({
   line_id: z.string().uuid().optional().nullable(),
   group_id: z.string().uuid().optional().nullable(),
   status: z.enum(['cotizacion', 'activa', 'vencida', 'cancelada', 'renovacion']),
-  premium: z.coerce.number(), // Permite negativos
+  premium: z.coerce.number(),
   gastos_expedicion: z.coerce.number().min(0).default(0),
   iva: z.coerce.number().min(0).default(0),
   total_a_pagar: z.coerce.number().default(0),
@@ -149,8 +149,10 @@ export function PolicyModificationForm({
     setValue,
     watch,
     formState: { errors, isSubmitting }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<ModificationFormData>({
-    resolver: zodResolver(ModificationSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(ModificationSchema) as any,
     defaultValues: {
       client_id: parentPolicy.client_id,
       policy_number: parentPolicy.policy_number,
@@ -646,8 +648,8 @@ export function PolicyModificationForm({
           <div className={`p-4 rounded-lg ${totalAPagar < 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
             <p className={`font-semibold ${totalAPagar < 0 ? 'text-red-700' : 'text-green-700'}`}>
               {totalAPagar < 0 
-                ? `⚠️ Esta modificación genera un CRÉDITO de ${formatCurrency(Math.abs(totalAPagar))} a favor del cliente`
-                : `✓ Esta modificación genera un CARGO adicional de ${formatCurrency(totalAPagar)}`
+                ? `Esta modificación genera un CRÉDITO de ${formatCurrency(Math.abs(totalAPagar))} a favor del cliente`
+                : `Esta modificación genera un CARGO adicional de ${formatCurrency(totalAPagar)}`
               }
             </p>
           </div>
