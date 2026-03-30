@@ -26,19 +26,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileEdit } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
+// Schema de validación - todos los campos requeridos tienen tipos estrictos
 const policyFormSchema = z.object({
   policy_number: z.string().min(1, 'Número de póliza requerido'),
-  anexo: z.string().default('00'),
+  anexo: z.string().min(1, 'Anexo requerido'),
   client_id: z.string().min(1, 'Cliente requerido'),
   insurer_id: z.string().min(1, 'Aseguradora requerida'),
   line_id: z.string().min(1, 'Ramo requerido'),
   group_id: z.string().optional(),
-  status: z.string().default('vigente'),
+  status: z.string().min(1, 'Estado requerido'),
   premium: z.number(),
-  gastos_expedicion: z.number().default(0),
-  iva: z.number().default(0),
-  total_a_pagar: z.number().default(0),
-  commission_pct: z.number().min(0).max(100).default(0),
+  gastos_expedicion: z.number(),
+  iva: z.number(),
+  total_a_pagar: z.number(),
+  commission_pct: z.number().min(0).max(100),
   start_date: z.string().min(1, 'Fecha de inicio requerida'),
   end_date: z.string().min(1, 'Fecha de fin requerida'),
   fecha_expedicion: z.string().optional(),
@@ -90,7 +91,7 @@ interface PolicyFormProps {
   parentPolicyInfo?: ParentPolicyInfo | null;
 }
 
-// ✅ ACTUALIZADO: Parsea valores de moneda INCLUYENDO negativos
+// Parsea valores de moneda INCLUYENDO negativos
 const parseCurrencyValue = (value: string): number => {
   if (!value) return 0;
   const isNegative = value.includes('-');
@@ -99,7 +100,7 @@ const parseCurrencyValue = (value: string): number => {
   return isNegative ? -numericValue : numericValue;
 };
 
-// ✅ ACTUALIZADO: Formatea moneda INCLUYENDO negativos
+// Formatea moneda INCLUYENDO negativos
 const formatCurrency = (value: number): string => {
   if (value === 0) return '$0';
   const isNegative = value < 0;
@@ -134,25 +135,42 @@ export function PolicyForm({
   const form = useForm<PolicyFormValues>({
     resolver: zodResolver(policyFormSchema),
     defaultValues: {
-      policy_number: '',
-      anexo: '00',
-      client_id: '',
-      insurer_id: '',
-      line_id: '',
-      group_id: '',
-      status: 'vigente',
-      premium: 0,
-      gastos_expedicion: 0,
-      iva: 0,
-      total_a_pagar: 0,
-      commission_pct: 0,
-      start_date: '',
-      end_date: '',
-      fecha_expedicion: '',
-      notas: '',
-      ...defaultValues,
+      policy_number: defaultValues?.policy_number || '',
+      anexo: defaultValues?.anexo || '00',
+      client_id: defaultValues?.client_id || '',
+      insurer_id: defaultValues?.insurer_id || '',
+      line_id: defaultValues?.line_id || '',
+      group_id: defaultValues?.group_id || '',
+      status: defaultValues?.status || 'vigente',
+      premium: defaultValues?.premium || 0,
+      gastos_expedicion: defaultValues?.gastos_expedicion || 0,
+      iva: defaultValues?.iva || 0,
+      total_a_pagar: defaultValues?.total_a_pagar || 0,
+      commission_pct: defaultValues?.commission_pct || 0,
+      start_date: defaultValues?.start_date || '',
+      end_date: defaultValues?.end_date || '',
+      fecha_expedicion: defaultValues?.fecha_expedicion || '',
+      notas: defaultValues?.notas || '',
     },
   });
+
+  // Actualizar form cuando cambian defaultValues
+  useEffect(() => {
+    if (defaultValues) {
+      Object.entries(defaultValues).forEach(([key, value]) => {
+        if (value !== undefined) {
+          form.setValue(key as keyof PolicyFormValues, value as never);
+        }
+      });
+      // Actualizar display values para campos de moneda
+      setDisplayValues({
+        premium: defaultValues.premium ? formatCurrency(defaultValues.premium) : '$0',
+        gastos_expedicion: defaultValues.gastos_expedicion ? formatCurrency(defaultValues.gastos_expedicion) : '$0',
+        iva: defaultValues.iva ? formatCurrency(defaultValues.iva) : '$0',
+        total_a_pagar: defaultValues.total_a_pagar ? formatCurrency(defaultValues.total_a_pagar) : '$0',
+      });
+    }
+  }, [defaultValues, form]);
 
   // Calcular totales automáticamente
   const watchPremium = form.watch('premium');
@@ -212,7 +230,7 @@ export function PolicyForm({
         policy_type: 'modificacion',
       } : {}),
     };
-    await onSubmit(submitData);
+    await onSubmit(submitData as PolicyFormValues & { parent_policy_id?: string; policy_type?: string });
   };
 
   return (
@@ -223,7 +241,7 @@ export function PolicyForm({
           <Alert className="border-amber-500 bg-amber-50">
             <FileEdit className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-800">
-              <strong>Creando Modificación (Anexo {defaultValues?.anexo})</strong>
+              <strong>Creando Modificación (Anexo {form.getValues('anexo')})</strong>
               <br />
               Póliza Original: <strong>{parentPolicyInfo.policy_number}</strong> - Anexo {parentPolicyInfo.anexo}
               {parentPolicyInfo.client_name && (
@@ -282,7 +300,7 @@ export function PolicyForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Estado</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar estado" />
@@ -314,7 +332,7 @@ export function PolicyForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Cliente *</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar cliente" />
@@ -339,7 +357,7 @@ export function PolicyForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Aseguradora *</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar aseguradora" />
@@ -364,7 +382,7 @@ export function PolicyForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Ramo *</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar ramo" />
@@ -389,7 +407,7 @@ export function PolicyForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Grupo (Opcional)</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value || ''}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar grupo" />
@@ -612,3 +630,5 @@ export function PolicyForm({
     </Form>
   );
 }
+
+export default PolicyForm;
