@@ -44,7 +44,8 @@ import {
   Upload,
   Trash2,
   File,
-  MessageSquare
+  MessageSquare,
+  Layers
 } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -52,7 +53,9 @@ import { getBrowserClient } from '@/lib/supabase/client';
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '$0';
-  return '$' + value.toLocaleString('es-CO', { maximumFractionDigits: 0 });
+  const absValue = Math.abs(value);
+  const formatted = '$' + absValue.toLocaleString('es-CO', { maximumFractionDigits: 0 });
+  return value < 0 ? `-${formatted}` : formatted;
 };
 
 const formatDate = (date: string | null | undefined): string => {
@@ -70,6 +73,16 @@ interface PolicyDocument {
   document_name: string;
   file_url: string;
   file_name: string;
+  created_at: string;
+}
+
+interface RelatedAnexo {
+  id: string;
+  anexo: string;
+  premium: number;
+  total_a_pagar: number;
+  status: string;
+  fecha_expedicion: string | null;
   created_at: string;
 }
 
@@ -108,6 +121,7 @@ export default function PolicyDetailPage() {
 
   const [policy, setPolicy] = useState<PolicyWithClient | null>(null);
   const [documents, setDocuments] = useState<PolicyDocument[]>([]);
+  const [relatedAnexos, setRelatedAnexos] = useState<RelatedAnexo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -159,6 +173,20 @@ export default function PolicyDetailPage() {
           insurance_line: data.insurance_line,
           insurance_group: data.insurance_group
         } as PolicyWithClient);
+
+        // Cargar anexos relacionados (si esta es la póliza base anexo 00)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: anexosData } = await (supabase as any)
+          .from('policies')
+          .select('id, anexo, premium, total_a_pagar, status, fecha_expedicion, created_at')
+          .eq('policy_number', data.policy_number)
+          .eq('tenant_id', tenantId)
+          .neq('id', policyId)
+          .order('anexo', { ascending: true });
+
+        if (anexosData) {
+          setRelatedAnexos(anexosData as RelatedAnexo[]);
+        }
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -332,12 +360,20 @@ export default function PolicyDetailPage() {
 
   if (error || !policy) {
     return (
-      <div className="container mx-auto py-12 text-center">
-        <AlertCircle className="h-12 w-12 mx-auto text-red-500 mb-4" />
-        <p className="text-lg text-red-600 mb-4">{error || 'Póliza no encontrada'}</p>
-        <Link href="/polizas">
-          <Button variant="outline">Volver a Pólizas</Button>
-        </Link>
+      <div className="container mx-auto py-8 px-4">
+        <Card className="max-w-lg mx-auto">
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center text-center gap-4">
+              <AlertCircle className="h-12 w-12 text-red-500" />
+              <p className="text-lg font-medium text-slate-800">
+                {error || 'Póliza no encontrada'}
+              </p>
+              <Button onClick={() => router.push('/polizas')}>
+                Volver a Pólizas
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -349,23 +385,24 @@ export default function PolicyDetailPage() {
   const calculatedTotal = (policy.premium || 0) + (policyAny.gastos_expedicion || 0) + (policyAny.iva || 0);
   const displayTotal = policyAny.total_a_pagar || calculatedTotal;
 
+  // Calcular el total consolidado de la póliza (base + anexos)
+  const totalConsolidado = (policyAny.total_a_pagar || 0) + relatedAnexos.reduce((sum, anexo) => sum + (anexo.total_a_pagar || 0), 0);
+
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto py-6 px-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="p-2 hover:bg-muted rounded-lg">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="p-2 hover:bg-muted rounded-lg">
             <ArrowLeft className="h-5 w-5" />
-          </button>
+          </Button>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Shield className="h-6 w-6 text-primary" />
-            </div>
+            <Shield className="h-8 w-8 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
                 Póliza {policy.policy_number}
                 {policyAny.anexo && policyAny.anexo !== '00' && (
-                  <Badge variant="outline">Anexo {policyAny.anexo}</Badge>
+                  <Badge variant="outline" className="ml-2">Anexo {policyAny.anexo}</Badge>
                 )}
               </h1>
               <Badge className={getStatusColor(policy.status as PolicyStatus)}>
@@ -374,24 +411,30 @@ export default function PolicyDetailPage() {
             </div>
           </div>
         </div>
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline"><MoreVertical className="h-4 w-4 mr-2" />Acciones</Button>
+            <Button variant="outline" size="icon">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => router.push(`/polizas/${policyId}/editar`)} className="cursor-pointer">
-              <Edit className="h-4 w-4 mr-2" />Editar Póliza
+              <Edit className="mr-2 h-4 w-4" />
+              Editar Póliza
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => router.push(`/polizas/modificar?poliza=${policyId}`)} className="cursor-pointer">
-              <FilePlus className="h-4 w-4 mr-2" />Incluir Modificación
+              <FilePlus className="mr-2 h-4 w-4" />
+              Incluir Modificación
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => router.push(`/polizas/nueva?renovacion=${policyId}`)} className="cursor-pointer">
-              <RefreshCw className="h-4 w-4 mr-2" />Renovar Póliza
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Renovar Póliza
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setShowCancelDialog(true)} className="cursor-pointer text-red-600" disabled={policy.status === 'cancelada'}>
-              <XCircle className="h-4 w-4 mr-2" />Cancelar Póliza
+              <XCircle className="mr-2 h-4 w-4" />
+              Cancelar Póliza
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -400,20 +443,38 @@ export default function PolicyDetailPage() {
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-
           {/* Detalles de la Póliza */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" />Detalles de la Póliza</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Detalles de la Póliza
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Número</span><p className="font-medium">{policy.policy_number}</p></div>
-                <div><span className="text-muted-foreground">Anexo</span><p className="font-medium">{policyAny.anexo || '00'}</p></div>
-                <div><span className="text-muted-foreground">Aseguradora</span><p className="font-medium">{policy.insurance_company?.name || policy.insurer}</p></div>
-                <div><span className="text-muted-foreground">Grupo</span><p className="font-medium">{policy.insurance_line?.name || '-'}</p></div>
-                <div><span className="text-muted-foreground">Ramo</span><p className="font-medium">{policy.insurance_group?.name || '-'}</p></div>
-                <div><span className="text-muted-foreground">Comisión</span><p className="font-medium">{policyAny.commission_pct || 0}%</p></div>
+            <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Número</p>
+                <p className="font-medium">{policy.policy_number}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Anexo</p>
+                <p className="font-medium">{policyAny.anexo || '00'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Aseguradora</p>
+                <p className="font-medium">{policy.insurance_company?.name || policy.insurer}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Grupo</p>
+                <p className="font-medium">{policy.insurance_line?.name || '-'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Ramo</p>
+                <p className="font-medium">{policy.insurance_group?.name || '-'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Comisión</p>
+                <p className="font-medium">{policyAny.commission_pct || 0}%</p>
               </div>
             </CardContent>
           </Card>
@@ -421,13 +482,23 @@ export default function PolicyDetailPage() {
           {/* Vigencia */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" />Vigencia</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Vigencia
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Expedición</span><p className="font-medium">{formatDate(policyAny.fecha_expedicion)}</p></div>
-                <div><span className="text-muted-foreground">Inicio</span><p className="font-medium">{formatDate(policy.start_date)}</p></div>
-                <div><span className="text-muted-foreground">Vencimiento</span><p className="font-medium">{formatDate(policy.end_date)}</p></div>
+            <CardContent className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Expedición</p>
+                <p className="font-medium">{formatDate(policyAny.fecha_expedicion)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Inicio</p>
+                <p className="font-medium">{formatDate(policy.start_date)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Vencimiento</p>
+                <p className="font-medium">{formatDate(policy.end_date)}</p>
               </div>
             </CardContent>
           </Card>
@@ -435,14 +506,35 @@ export default function PolicyDetailPage() {
           {/* Valores */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" />Valores de la Póliza</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Valores de la Póliza
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Prima</span><p className="font-medium text-lg">{formatCurrency(policy.premium)}</p></div>
-                <div><span className="text-muted-foreground">Gastos Exp.</span><p className="font-medium text-lg">{formatCurrency(policyAny.gastos_expedicion)}</p></div>
-                <div><span className="text-muted-foreground">IVA</span><p className="font-medium text-lg">{formatCurrency(policyAny.iva)}</p></div>
-                <div><span className="text-muted-foreground">Total</span><p className="font-semibold text-lg text-green-600">{formatCurrency(displayTotal)}</p></div>
+            <CardContent className="grid grid-cols-4 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Prima</p>
+                <p className={`font-medium ${(policy.premium || 0) < 0 ? 'text-red-600' : ''}`}>
+                  {formatCurrency(policy.premium)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Gastos Exp.</p>
+                <p className={`font-medium ${(policyAny.gastos_expedicion || 0) < 0 ? 'text-red-600' : ''}`}>
+                  {formatCurrency(policyAny.gastos_expedicion)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">IVA</p>
+                <p className={`font-medium ${(policyAny.iva || 0) < 0 ? 'text-red-600' : ''}`}>
+                  {formatCurrency(policyAny.iva)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total</p>
+                <p className={`font-semibold text-lg ${displayTotal < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {formatCurrency(displayTotal)}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -450,15 +542,20 @@ export default function PolicyDetailPage() {
           {/* Notas y Comentarios */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5" />Notas y Comentarios</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Notas y Comentarios
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {policyAny.notas ? (
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <p className="text-sm whitespace-pre-wrap">{policyAny.notas}</p>
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <p className="text-slate-700 whitespace-pre-wrap">{policyAny.notas}</p>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground italic">No hay comentarios registrados para esta póliza.</p>
+                <p className="text-muted-foreground text-sm">
+                  No hay comentarios registrados para esta póliza.
+                </p>
               )}
             </CardContent>
           </Card>
@@ -466,72 +563,113 @@ export default function PolicyDetailPage() {
           {/* Documentos */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" />Documentos</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Documentos
+              </CardTitle>
               <CardDescription>Documentos adjuntos de la póliza</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Documentos de Póliza */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium flex items-center gap-2"><File className="h-4 w-4 text-blue-600" />Documentos de Póliza</h4>
-                  <span className="text-xs text-muted-foreground">{polizaDocs.length} / 5</span>
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium">Documentos de Póliza</h4>
+                  <span className="text-sm text-muted-foreground">{polizaDocs.length} / 5</span>
                 </div>
-
                 {polizaDocs.length < 5 && (
-                  <div className="border-2 border-dashed border-blue-200 rounded-lg p-4 bg-blue-50/50">
-                    <label className="flex flex-col items-center justify-center cursor-pointer">
-                      <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDocument(file, 'poliza'); e.target.value = ''; }} className="hidden" disabled={isUploadingPoliza} />
-                      {isUploadingPoliza ? <Loader2 className="h-8 w-8 text-blue-400 mb-2 animate-spin" /> : <Upload className="h-8 w-8 text-blue-400 mb-2" />}
-                      <span className="text-sm text-blue-600 font-medium">{isUploadingPoliza ? 'Subiendo...' : 'Subir documento'}</span>
+                  <div className="mb-3">
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadDocument(file, 'poliza');
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                        disabled={isUploadingPoliza}
+                      />
+                      <div className="flex items-center gap-2 text-sm text-primary hover:underline">
+                        {isUploadingPoliza ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {isUploadingPoliza ? 'Subiendo...' : 'Subir documento'}
+                      </div>
                     </label>
                   </div>
                 )}
-
                 {polizaDocs.length > 0 ? (
                   <div className="space-y-2">
                     {polizaDocs.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between p-2 bg-white border rounded-lg">
-                        <div className="flex items-center gap-2 min-w-0"><File className="h-4 w-4 text-blue-600" /><span className="text-sm truncate">{doc.file_name}</span></div>
-                        <div className="flex items-center gap-1">
-                          <Button type="button" variant="ghost" size="sm" onClick={() => handleViewDocument(doc)} className="h-8 w-8 p-0"><Eye className="h-4 w-4" /></Button>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setDeleteDocId(doc.id)} className="h-8 w-8 p-0 hover:bg-red-100"><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                      <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <File className="h-4 w-4 text-slate-500" />
+                          <span className="text-sm">{doc.file_name}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => handleViewDocument(doc)} className="h-8 w-8 p-0">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => setDeleteDocId(doc.id)} className="h-8 w-8 p-0 hover:bg-red-100">
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : (<p className="text-sm text-muted-foreground text-center py-4">No hay documentos de póliza</p>)}
+                ) : (
+                  <p className="text-sm text-muted-foreground">No hay documentos de póliza</p>
+                )}
               </div>
 
               {/* Documentos de Soporte */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium flex items-center gap-2"><File className="h-4 w-4 text-green-600" />Documentos de Soporte</h4>
-                  <span className="text-xs text-muted-foreground">{soporteDocs.length} / 8</span>
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium">Documentos de Soporte</h4>
+                  <span className="text-sm text-muted-foreground">{soporteDocs.length} / 8</span>
                 </div>
-
                 {soporteDocs.length < 8 && (
-                  <div className="border-2 border-dashed border-green-200 rounded-lg p-4 bg-green-50/50">
-                    <label className="flex flex-col items-center justify-center cursor-pointer">
-                      <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDocument(file, 'soporte'); e.target.value = ''; }} className="hidden" disabled={isUploadingSoporte} />
-                      {isUploadingSoporte ? <Loader2 className="h-8 w-8 text-green-400 mb-2 animate-spin" /> : <Upload className="h-8 w-8 text-green-400 mb-2" />}
-                      <span className="text-sm text-green-600 font-medium">{isUploadingSoporte ? 'Subiendo...' : 'Subir documento'}</span>
+                  <div className="mb-3">
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadDocument(file, 'soporte');
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                        disabled={isUploadingSoporte}
+                      />
+                      <div className="flex items-center gap-2 text-sm text-primary hover:underline">
+                        {isUploadingSoporte ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {isUploadingSoporte ? 'Subiendo...' : 'Subir documento'}
+                      </div>
                     </label>
                   </div>
                 )}
-
                 {soporteDocs.length > 0 ? (
                   <div className="space-y-2">
                     {soporteDocs.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between p-2 bg-white border rounded-lg">
-                        <div className="flex items-center gap-2 min-w-0"><File className="h-4 w-4 text-green-600" /><span className="text-sm truncate">{doc.file_name}</span></div>
-                        <div className="flex items-center gap-1">
-                          <Button type="button" variant="ghost" size="sm" onClick={() => handleViewDocument(doc)} className="h-8 w-8 p-0"><Eye className="h-4 w-4" /></Button>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setDeleteDocId(doc.id)} className="h-8 w-8 p-0 hover:bg-red-100"><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                      <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <File className="h-4 w-4 text-slate-500" />
+                          <span className="text-sm">{doc.file_name}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => handleViewDocument(doc)} className="h-8 w-8 p-0">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => setDeleteDocId(doc.id)} className="h-8 w-8 p-0 hover:bg-red-100">
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : (<p className="text-sm text-muted-foreground text-center py-4">No hay documentos de soporte</p>)}
+                ) : (
+                  <p className="text-sm text-muted-foreground">No hay documentos de soporte</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -542,33 +680,115 @@ export default function PolicyDetailPage() {
           {policy.client && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" />Cliente</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Cliente
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  <p className="font-medium">{policy.client.full_name}</p>
-                  <p className="text-sm text-muted-foreground">{policy.client.doc_type.toUpperCase()}: {policy.client.doc_number}</p>
-                  {policy.client.email && <p className="text-sm">{policy.client.email}</p>}
-                  {policy.client.phone && <p className="text-sm">{policy.client.phone}</p>}
-                </div>
-                <Button variant="outline" className="w-full mt-4" onClick={() => router.push(`/clientes/${policy.client?.id}`)}>Ver Cliente</Button>
+                <p className="font-medium text-lg">{policy.client.full_name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {policy.client.doc_type.toUpperCase()}: {policy.client.doc_number}
+                </p>
+                {policy.client.email && (
+                  <p className="text-sm text-muted-foreground">{policy.client.email}</p>
+                )}
+                {policy.client.phone && (
+                  <p className="text-sm text-muted-foreground">{policy.client.phone}</p>
+                )}
+                <Button variant="outline" className="w-full mt-4" onClick={() => router.push(`/clientes/${policy.client?.id}`)}>
+                  Ver Cliente
+                </Button>
               </CardContent>
             </Card>
           )}
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" />Resumen</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Resumen
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Prima</span><span className="font-medium">{formatCurrency(policy.premium)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Gastos</span><span className="font-medium">{formatCurrency(policyAny.gastos_expedicion)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">IVA</span><span className="font-medium">{formatCurrency(policyAny.iva)}</span></div>
-                <div className="flex justify-between pt-2 border-t"><span className="font-medium">Total</span><span className="font-bold text-green-600">{formatCurrency(displayTotal)}</span></div>
+            <CardContent className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Prima</span>
+                <span className={`font-medium ${(policy.premium || 0) < 0 ? 'text-red-600' : ''}`}>
+                  {formatCurrency(policy.premium)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Gastos</span>
+                <span className={`font-medium ${(policyAny.gastos_expedicion || 0) < 0 ? 'text-red-600' : ''}`}>
+                  {formatCurrency(policyAny.gastos_expedicion)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">IVA</span>
+                <span className={`font-medium ${(policyAny.iva || 0) < 0 ? 'text-red-600' : ''}`}>
+                  {formatCurrency(policyAny.iva)}
+                </span>
+              </div>
+              <div className="border-t pt-2 flex justify-between">
+                <span className="font-medium">Total</span>
+                <span className={`font-bold ${displayTotal < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {formatCurrency(displayTotal)}
+                </span>
               </div>
             </CardContent>
           </Card>
+
+          {/* Anexos Relacionados */}
+          {relatedAnexos.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Layers className="h-5 w-5" />
+                  Anexos Relacionados
+                </CardTitle>
+                <CardDescription>
+                  Modificaciones de esta póliza
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {relatedAnexos.map((anexo) => (
+                  <div 
+                    key={anexo.id} 
+                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
+                    onClick={() => router.push(`/polizas/${anexo.id}`)}
+                  >
+                    <div>
+                      <p className="font-medium">Anexo {anexo.anexo}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(anexo.fecha_expedicion || anexo.created_at)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-semibold ${(anexo.total_a_pagar || anexo.premium || 0) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrency(anexo.total_a_pagar || anexo.premium)}
+                      </p>
+                      <Badge variant="outline" className="text-xs">
+                        {POLICY_STATUS_LABELS[anexo.status as PolicyStatus] || anexo.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Total Consolidado */}
+                <div className="border-t pt-3 mt-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium text-sm">Total Consolidado</span>
+                    <span className={`font-bold text-lg ${totalConsolidado < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatCurrency(totalConsolidado)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Póliza base + {relatedAnexos.length} anexo(s)
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
@@ -577,12 +797,14 @@ export default function PolicyDetailPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancelar Póliza</DialogTitle>
-            <DialogDescription>¿Estás seguro de que deseas cancelar la póliza <strong>{policy.policy_number}</strong>? Esta acción no se puede deshacer.</DialogDescription>
+            <DialogDescription>
+              ¿Estás seguro de que deseas cancelar la póliza <strong>{policy.policy_number}</strong>? Esta acción no se puede deshacer.
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCancelDialog(false)}>No, mantener</Button>
             <Button variant="destructive" onClick={handleCancelPolicy} disabled={isCanceling}>
-              {isCanceling ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Cancelando...</> : 'Sí, cancelar'}
+              {isCanceling ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Cancelando...</> : 'Sí, cancelar'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -593,12 +815,14 @@ export default function PolicyDetailPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Eliminar Documento</DialogTitle>
-            <DialogDescription>¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer.</DialogDescription>
+            <DialogDescription>
+              ¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer.
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDocId(null)}>Cancelar</Button>
             <Button variant="destructive" onClick={handleDeleteDocument} disabled={isDeletingDoc}>
-              {isDeletingDoc ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Eliminando...</> : 'Eliminar'}
+              {isDeletingDoc ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Eliminando...</> : 'Eliminar'}
             </Button>
           </DialogFooter>
         </DialogContent>
