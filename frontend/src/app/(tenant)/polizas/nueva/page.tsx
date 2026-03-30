@@ -1,240 +1,332 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PolicyForm, type PolicyFormData } from '@/components/modules/policies/PolicyForm';
-import type { Client } from '@/lib/validations/clients';
-import { ArrowLeft, Shield, AlertCircle, Search, Loader2, User, Check } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { PolicyForm } from '@/components/modules/policies/PolicyForm';
+import { ArrowLeft, Shield, AlertCircle } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
-import { Input } from '@/components/ui/input';
 import { getBrowserClient } from '@/lib/supabase/client';
-import Link from 'next/link';
+import { toast } from 'sonner';
 
-function NewPolicyContent() {
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface Insurer {
+  id: string;
+  name: string;
+}
+
+interface Line {
+  id: string;
+  name: string;
+}
+
+interface Group {
+  id: string;
+  name: string;
+}
+
+interface ParentPolicyInfo {
+  id: string;
+  policy_number: string;
+  anexo: string;
+  client_name?: string;
+}
+
+interface PolicyData {
+  id: string;
+  policy_number: string;
+  anexo: string;
+  client_id: string;
+  insurer_id: string;
+  line_id: string;
+  group_id: string | null;
+  status: string;
+  premium: number;
+  gastos_expedicion: number;
+  iva: number;
+  total_a_pagar: number;
+  commission_pct: number;
+  start_date: string;
+  end_date: string;
+  fecha_expedicion: string | null;
+  notas: string | null;
+  clients?: { name: string };
+}
+
+interface PolicyFormSubmitData {
+  policy_number: string;
+  anexo: string;
+  client_id: string;
+  insurer_id: string;
+  line_id: string;
+  group_id?: string | null;
+  status: string;
+  premium: number;
+  gastos_expedicion: number;
+  iva: number;
+  total_a_pagar: number;
+  commission_pct: number;
+  start_date: string;
+  end_date: string;
+  fecha_expedicion?: string | null;
+  notas?: string | null;
+  parent_policy_id?: string;
+  policy_type?: string;
+}
+
+// Función para incrementar el número de anexo
+const incrementAnexo = (currentAnexo: string): string => {
+  const num = parseInt(currentAnexo, 10);
+  if (isNaN(num)) return '01';
+  const nextNum = num + 1;
+  return nextNum.toString().padStart(2, '0');
+};
+
+export default function NuevaPólizaPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const preselectedClientId = searchParams.get('clientId');
-  const { isLoading: isLoadingTenant, tenantId, userId } = useTenant();
+  const modificacionId = searchParams.get('modificacion');
+  const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string>(preselectedClientId || '');
-  const [clientSearch, setClientSearch] = useState('');
-  const [isLoadingClients, setIsLoadingClients] = useState(true);
+  const [insurers, setInsurers] = useState<Insurer[]>([]);
+  const [lines, setLines] = useState<Line[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  
+  // Estado para modificaciones
+  const [isModification, setIsModification] = useState(false);
+  const [parentPolicyInfo, setParentPolicyInfo] = useState<ParentPolicyInfo | null>(null);
+  const [defaultValues, setDefaultValues] = useState<Record<string, unknown> | undefined>(undefined);
+
+  const loadData = useCallback(async () => {
+    if (!tenantId) return;
+
+    setLoading(true);
+    try {
+      const supabase = getBrowserClient();
+
+      // Cargar catálogos en paralelo
+      const [clientsRes, insurersRes, linesRes, groupsRes] = await Promise.all([
+        supabase.from('clients').select('id, name, email').eq('tenant_id', tenantId).order('name'),
+        supabase.from('insurers').select('id, name').eq('tenant_id', tenantId).order('name'),
+        supabase.from('lines').select('id, name').eq('tenant_id', tenantId).order('name'),
+        supabase.from('groups').select('id, name').eq('tenant_id', tenantId).order('name'),
+      ]);
+
+      setClients(clientsRes.data || []);
+      setInsurers(insurersRes.data || []);
+      setLines(linesRes.data || []);
+      setGroups(groupsRes.data || []);
+
+      // Si es una modificación, cargar datos de la póliza padre
+      if (modificacionId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: parentPolicy, error: parentError } = await (supabase as any)
+          .from('policies')
+          .select('*, clients(name)')
+          .eq('id', modificacionId)
+          .single();
+
+        if (parentError || !parentPolicy) {
+          toast.error('Póliza no encontrada para modificar');
+          setLoading(false);
+          return;
+        }
+
+        // Buscar el último anexo de esta póliza para incrementar
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: latestAnexoData } = await (supabase as any)
+          .from('policies')
+          .select('anexo')
+          .eq('policy_number', parentPolicy.policy_number)
+          .eq('tenant_id', tenantId)
+          .order('anexo', { ascending: false })
+          .limit(1)
+          .single();
+
+        const currentAnexo = latestAnexoData?.anexo || parentPolicy.anexo || '00';
+        const newAnexo = incrementAnexo(currentAnexo);
+
+        setIsModification(true);
+        setParentPolicyInfo({
+          id: parentPolicy.id,
+          policy_number: parentPolicy.policy_number,
+          anexo: currentAnexo,
+          client_name: parentPolicy.clients?.name,
+        });
+
+        // Pre-llenar valores (prima y valores financieros en 0 para la modificación)
+        setDefaultValues({
+          policy_number: parentPolicy.policy_number,
+          anexo: newAnexo,
+          client_id: parentPolicy.client_id,
+          insurer_id: parentPolicy.insurer_id,
+          line_id: parentPolicy.line_id,
+          group_id: parentPolicy.group_id || '',
+          status: 'vigente',
+          premium: 0, // Nuevo anexo empieza en 0, usuario ingresa el ajuste
+          gastos_expedicion: 0,
+          iva: 0,
+          total_a_pagar: 0,
+          commission_pct: parentPolicy.commission_pct || 0,
+          start_date: parentPolicy.start_date,
+          end_date: parentPolicy.end_date,
+          fecha_expedicion: new Date().toISOString().split('T')[0],
+          notas: '',
+        });
+      }
+
+      setLoading(false);
+    } catch (err) {
+      console.error('Error loading data:', err);
+      setError('Error al cargar datos');
+      setLoading(false);
+    }
+  }, [tenantId, modificacionId]);
 
   useEffect(() => {
-    async function loadClients() {
-      if (!tenantId) return;
-      setIsLoadingClients(true);
-      try {
-        const supabase = getBrowserClient();
-        const { data } = await supabase
-          .from('clients')
-          .select('*')
-          .eq('tenant_id', tenantId)
-          .order('full_name', { ascending: true })
-          .limit(100);
-        setClients((data || []) as Client[]);
-      } catch (err) {
-        console.error('Error loading clients:', err);
-      }
-      setIsLoadingClients(false);
+    if (!isLoadingTenant && tenantId) {
+      loadData();
     }
-    if (tenantId) {
-      loadClients();
-    }
-  }, [tenantId]);
+  }, [isLoadingTenant, tenantId, loadData]);
 
-  const filteredClients = clients.filter(client =>
-    client.full_name.toLowerCase().includes(clientSearch.toLowerCase()) ||
-    client.doc_number.includes(clientSearch)
-  );
+  const handleSubmit = async (data: PolicyFormSubmitData) => {
+    if (!tenantId) return;
 
-  const handleSubmit = async (data: PolicyFormData) => {
-    if (!selectedClientId) {
-      setError('Debes seleccionar un cliente');
-      return;
-    }
-    if (!tenantId || !userId) {
-      setError('No hay sesión activa');
-      return;
-    }
-
-    setIsLoading(true);
+    setSubmitting(true);
     setError(null);
 
     try {
       const supabase = getBrowserClient();
 
+      // Preparar datos para insertar
+      const insertData = {
+        tenant_id: tenantId,
+        policy_number: data.policy_number,
+        anexo: data.anexo,
+        client_id: data.client_id,
+        insurer_id: data.insurer_id,
+        line_id: data.line_id,
+        group_id: data.group_id || null,
+        status: data.status,
+        premium: data.premium,
+        gastos_expedicion: data.gastos_expedicion,
+        iva: data.iva,
+        total_a_pagar: data.total_a_pagar,
+        commission_pct: data.commission_pct,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        fecha_expedicion: data.fecha_expedicion || null,
+        notas: data.notas || null,
+        // Campos para modificaciones
+        parent_policy_id: data.parent_policy_id || null,
+        policy_type: data.policy_type || 'nueva',
+      };
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: newPolicy, error: insertError } = await (supabase as any)
         .from('policies')
-        .insert({
-          tenant_id: tenantId,
-          client_id: selectedClientId,
-          policy_number: data.policy_number,
-          anexo: data.anexo || '00',
-          insurer: data.insurer,
-          insurer_id: data.insurer_id || null,
-          line: data.line,
-          line_id: data.line_id || null,
-          group_id: data.group_id || null,
-          status: data.status || 'activa',
-          currency: data.currency || 'COP',
-          premium: data.premium || 0,
-          gastos_expedicion: data.gastos_expedicion || 0,
-          iva: data.iva || 0,
-          total_a_pagar: data.total_a_pagar || 0,
-          commission_pct: data.commission_pct || 10,
-          fecha_expedicion: data.fecha_expedicion || null,
-          start_date: data.start_date || null,
-          end_date: data.end_date || null,
-          notas: data.notas || null,
-          metadata: data.metadata || {}
-        })
+        .insert(insertData)
         .select()
         .single();
 
       if (insertError) {
-        setError(insertError.message || 'Error al crear la póliza');
-        setIsLoading(false);
+        console.error('Error creating policy:', insertError);
+        if (insertError.code === '23505') {
+          setError('Ya existe una póliza con este número y anexo.');
+        } else {
+          setError(insertError.message || 'Error al crear la póliza');
+        }
+        setSubmitting(false);
         return;
       }
 
+      toast.success(
+        isModification 
+          ? `Modificación (Anexo ${data.anexo}) creada exitosamente` 
+          : 'Póliza creada exitosamente'
+      );
+      
       router.push(`/polizas/${newPolicy.id}`);
     } catch (err) {
-      console.error('Error creating policy:', err);
+      console.error('Error:', err);
       setError('Error de conexión');
-      setIsLoading(false);
+      setSubmitting(false);
     }
   };
 
-  if (isLoadingTenant) {
-    return <LoadingScreen />;
+  if (isLoadingTenant || loading) {
+    return <LoadingScreen message="Cargando..." />;
   }
 
-  const selectedClient = clients.find(c => c.id === selectedClientId);
-
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/polizas">
-          <button className="p-2 hover:bg-muted rounded-lg transition-colors">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-        </Link>
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Shield className="h-6 w-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">Crear Nueva Póliza</h1>
-            <p className="text-sm text-muted-foreground">Registra una nueva póliza de seguro</p>
+    <div className="min-h-screen bg-slate-50">
+      <header className="bg-white border-b sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-4">
+              <Link href="/polizas">
+                <Button variant="ghost" size="icon" data-testid="back-button">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </Link>
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-green-600" />
+                <span className="font-semibold">
+                  {isModification ? 'Nueva Modificación de Póliza' : 'Nueva Póliza'}
+                </span>
+              </div>
+            </div>
+            <span className="text-sm text-muted-foreground">{tenantName}</span>
           </div>
         </div>
-      </div>
+      </header>
 
-      {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          <AlertCircle className="h-5 w-5 flex-shrink-0" />
-          <p>{error}</p>
-        </div>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Seleccionar Cliente
-          </CardTitle>
-          <CardDescription>Busca y selecciona el cliente para la póliza</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nombre o documento..."
-                value={clientSearch}
-                onChange={(e) => setClientSearch(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            {isLoadingClients ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-muted-foreground">Cargando clientes...</span>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
-                {filteredClients.map((client) => (
-                  <button
-                    key={client.id}
-                    type="button"
-                    onClick={() => setSelectedClientId(client.id)}
-                    className={`w-full text-left p-3 rounded-lg border transition-all ${
-                      selectedClientId === client.id
-                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                        : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-sm">{client.full_name}</p>
-                        <p className="text-xs text-muted-foreground">{client.doc_number}</p>
-                      </div>
-                      {selectedClientId === client.id && <Check className="h-5 w-5 text-primary" />}
-                    </div>
-                  </button>
-                ))}
-                {filteredClients.length === 0 && (
-                  <div className="col-span-full text-center py-8 text-muted-foreground">
-                    No se encontraron clientes
-                  </div>
-                )}
-              </div>
-            )}
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-2 text-destructive">
+            <AlertCircle className="h-5 w-5" />
+            <span>{error}</span>
           </div>
-        </CardContent>
-      </Card>
+        )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Datos de la Póliza
-          </CardTitle>
-          <CardDescription>
-            {selectedClient ? `Póliza para: ${selectedClient.full_name}` : 'Selecciona un cliente primero'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!selectedClientId ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Selecciona un cliente para crear la póliza</p>
-            </div>
-          ) : (
-            <PolicyForm
-              clientId={selectedClientId}
-              onSubmit={handleSubmit}
-              isLoading={isLoading}
-            />
-          )}
-        </CardContent>
-      </Card>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>
+              {isModification ? 'Nueva Modificación de Póliza' : 'Nueva Póliza'}
+            </CardTitle>
+            <CardDescription>
+              {isModification 
+                ? 'Cree un nuevo anexo para modificar los términos de la póliza existente'
+                : 'Complete los datos para crear una nueva póliza'
+              }
+            </CardDescription>
+          </CardHeader>
+        </Card>
+
+        <PolicyForm
+          clients={clients}
+          insurers={insurers}
+          lines={lines}
+          groups={groups}
+          onSubmit={handleSubmit}
+          isLoading={submitting}
+          defaultValues={defaultValues}
+          isModification={isModification}
+          parentPolicyInfo={parentPolicyInfo}
+        />
+      </main>
     </div>
-  );
-}
-
-export default function NewPolicyPage() {
-  return (
-    <Suspense fallback={<LoadingScreen />}>
-      <NewPolicyContent />
-    </Suspense>
   );
 }
