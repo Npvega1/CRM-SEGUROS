@@ -3,7 +3,6 @@
 // =====================================================
 // PÁGINA: Editar Póliza
 // /polizas/[id]/editar
-// Usa Supabase Client directo (evita API Routes)
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -21,17 +20,23 @@ import { getBrowserClient } from '@/lib/supabase/client';
 interface PolicyFormData {
   client_id: string;
   policy_number: string;
+  anexo: string;
   insurer: string;
   insurer_id?: string;
   line: string;
   line_id?: string;
   group_id?: string;
   status: PolicyStatus;
+  currency: string;
   premium: number;
-  currency?: string;
+  gastos_expedicion: number;
+  iva: number;
+  total_a_pagar: number;
+  commission_pct: number;
+  fecha_expedicion?: string | null;
   start_date?: string | null;
   end_date?: string | null;
-  commission_pct?: number;
+  notas?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -40,7 +45,7 @@ export default function EditPolicyPage() {
   const router = useRouter();
   const policyId = params.id as string;
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
-  
+
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -48,11 +53,11 @@ export default function EditPolicyPage() {
 
   const loadPolicy = useCallback(async () => {
     if (!tenantId || !policyId) return;
-    
+
     setIsLoading(true);
     try {
       const supabase = getBrowserClient();
-      
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error: fetchError } = await (supabase as any)
         .from('policies')
@@ -60,7 +65,7 @@ export default function EditPolicyPage() {
         .eq('id', policyId)
         .eq('tenant_id', tenantId)
         .single();
-      
+
       if (fetchError) {
         console.error('Error fetching policy:', fetchError);
         setError(fetchError.message || 'Error al cargar la póliza');
@@ -82,28 +87,35 @@ export default function EditPolicyPage() {
 
   const handleSubmit = async (data: PolicyFormData) => {
     if (!tenantId || !policyId) return;
-    
+
     setIsSaving(true);
     setError(null);
 
     try {
       const supabase = getBrowserClient();
-      
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: updateError } = await (supabase as any)
         .from('policies')
         .update({
           policy_number: data.policy_number,
+          anexo: data.anexo || '00',
           insurer: data.insurer,
           insurer_id: data.insurer_id || null,
           line: data.line,
           line_id: data.line_id || null,
           group_id: data.group_id || null,
+          status: data.status || 'activa',
           premium: data.premium,
+          gastos_expedicion: data.gastos_expedicion || 0,
+          iva: data.iva || 0,
+          total_a_pagar: data.total_a_pagar || 0,
           currency: data.currency || 'COP',
+          fecha_expedicion: data.fecha_expedicion || null,
           start_date: data.start_date || null,
           end_date: data.end_date || null,
           commission_pct: data.commission_pct || 0,
+          notas: data.notas || null,
           metadata: data.metadata || {},
           updated_at: new Date().toISOString(),
         })
@@ -134,72 +146,45 @@ export default function EditPolicyPage() {
   };
 
   if (isLoadingTenant || isLoading) {
-    return <LoadingScreen message="Cargando póliza..." />;
+    return <LoadingScreen />;
   }
 
   if (error && !policy) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 mx-auto text-red-500 mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Error</h2>
-          <p className="text-muted-foreground mb-4">{error}</p>
-          <Link href="/polizas">
-            <Button>Volver a Pólizas</Button>
-          </Link>
-        </div>
+      <div className="container mx-auto py-6 px-4 text-center">
+        <h2 className="text-xl font-bold text-red-600">Error</h2>
+        <p className="text-muted-foreground mt-2">{error}</p>
+        <Link href="/polizas">
+          <Button variant="outline" className="mt-4">Volver a Pólizas</Button>
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
-              <Link href={`/polizas/${policyId}`}>
-                <Button variant="ghost" size="icon" data-testid="back-button">
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              </Link>
-              <div className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-green-600" />
-                <span className="font-semibold">Editar Póliza</span>
-              </div>
-            </div>
-            <span className="text-sm text-muted-foreground">{tenantName}</span>
-          </div>
+    <div className="container mx-auto py-6 px-4 max-w-4xl">
+      {error && policy && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          {error}
         </div>
-      </header>
+      )}
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && policy && (
-          <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-2 text-destructive">
-            <AlertCircle className="h-5 w-5" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Editar Póliza</CardTitle>
-            <CardDescription>
-              Actualiza la información de la póliza {policy?.policy_number}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {policy && (
-              <PolicyForm
-                policy={policy}
-                onSubmit={handleSubmit}
-                onCancel={handleCancel}
-                isLoading={isSaving}
-              />
-            )}
-          </CardContent>
-        </Card>
-      </main>
+      <Card>
+        <CardHeader>
+          <CardTitle>Editar Póliza</CardTitle>
+          <CardDescription>Actualiza la información de la póliza {policy?.policy_number}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {policy && (
+            <PolicyForm
+              policy={policy}
+              onSubmit={handleSubmit}
+              onCancel={handleCancel}
+              isLoading={isSaving}
+            />
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
