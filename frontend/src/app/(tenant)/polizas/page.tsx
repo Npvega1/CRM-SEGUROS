@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -47,10 +47,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
-  ArrowLeft,
   Shield,
   AlertTriangle,
-  Clock,
   Layers
 } from 'lucide-react';
 
@@ -63,20 +61,6 @@ interface PolicyWithRelations extends Policy {
   };
   consolidated_premium?: number;
   anexo_count?: number;
-}
-
-interface ExpiringPolicy {
-  id: string;
-  policy_number: string;
-  insurer: string;
-  line: string;
-  premium: number;
-  end_date: string;
-  days_remaining: number;
-  client_id: string;
-  client_name: string;
-  client_email: string | null;
-  client_phone: string | null;
 }
 
 interface PolicyStats {
@@ -100,7 +84,6 @@ export default function PoliciesPage() {
   const [lineFilter, setLineFilter] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<PolicyStats | null>(null);
-  const [expiringPolicies, setExpiringPolicies] = useState<ExpiringPolicy[]>([]);
 
   const loadPolicies = useCallback(async () => {
     if (!tenantId) return;
@@ -142,10 +125,10 @@ export default function PoliciesPage() {
 
       // Paso 2: Obtener todos los policy_numbers de las pólizas base cargadas
       const policyNumbers = (data || []).map((p: Record<string, unknown>) => p.policy_number as string);
-      
+
       // Paso 3: Cargar TODOS los anexos para calcular primas consolidadas
       let consolidatedPremiums: Record<string, { premium: number; count: number }> = {};
-      
+
       if (policyNumbers.length > 0) {
         const { data: allRelatedPolicies } = await supabase
           .from('policies')
@@ -159,11 +142,12 @@ export default function PoliciesPage() {
             const pn = p.policy_number as string;
             const premium = (p.premium as number) || 0;
             const anexo = p.anexo as string;
-            
+
             if (!consolidatedPremiums[pn]) {
               consolidatedPremiums[pn] = { premium: 0, count: 0 };
             }
             consolidatedPremiums[pn].premium += premium;
+
             // Contar anexos (excluir el 00)
             if (anexo && anexo !== '00') {
               consolidatedPremiums[pn].count += 1;
@@ -176,7 +160,7 @@ export default function PoliciesPage() {
       const mappedPolicies = (data || []).map((p: Record<string, unknown>) => {
         const policyNumber = p.policy_number as string;
         const consolidated = consolidatedPremiums[policyNumber];
-        
+
         return {
           ...p,
           client_name: (p.clients as { full_name: string })?.full_name,
@@ -188,6 +172,7 @@ export default function PoliciesPage() {
 
       setPolicies(mappedPolicies);
       setTotal(count || 0);
+
     } catch (error) {
       console.error('Error loading policies:', error);
     }
@@ -208,10 +193,10 @@ export default function PoliciesPage() {
 
       if (allPolicies) {
         // Agrupar por policy_number para calcular prima consolidada
-        const policyGroups: Record<string, { 
-          status: string; 
-          line: string; 
-          totalPremium: number; 
+        const policyGroups: Record<string, {
+          status: string;
+          line: string;
+          totalPremium: number;
           end_date: string | null;
           isBase: boolean;
         }> = {};
@@ -220,7 +205,7 @@ export default function PoliciesPage() {
           const pn = p.policy_number as string;
           const anexo = p.anexo as string;
           const isBase = !anexo || anexo === '00';
-          
+
           if (!policyGroups[pn]) {
             policyGroups[pn] = {
               status: p.status as string,
@@ -230,9 +215,9 @@ export default function PoliciesPage() {
               isBase: false
             };
           }
-          
+
           policyGroups[pn].totalPremium += (p.premium as number) || 0;
-          
+
           // Usar datos de la póliza base
           if (isBase) {
             policyGroups[pn].status = p.status as string;
@@ -277,66 +262,12 @@ export default function PoliciesPage() {
     }
   }, [tenantId]);
 
-  const loadExpiringPolicies = useCallback(async () => {
-    if (!tenantId) return;
-
-    try {
-      const supabase = getBrowserClient();
-
-      const thirtyDaysFromNow = new Date();
-      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-
-      // Solo pólizas base próximas a vencer
-      const { data } = await supabase
-        .from('policies')
-        .select(`
-          id, policy_number, insurer, line, premium, end_date,
-          clients!inner(id, full_name, email, phone)
-        `)
-        .eq('tenant_id', tenantId)
-        .eq('status', 'activa')
-        .or('anexo.eq.00,anexo.is.null')
-        .lte('end_date', thirtyDaysFromNow.toISOString())
-        .gte('end_date', new Date().toISOString())
-        .order('end_date', { ascending: true })
-        .limit(5);
-
-      if (data) {
-        const mapped = data.map((p: Record<string, unknown>) => {
-          const client = p.clients as { id: string; full_name: string; email: string | null; phone: string | null };
-          const endDate = new Date(p.end_date as string);
-          const today = new Date();
-          const diffTime = endDate.getTime() - today.getTime();
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-          return {
-            id: p.id as string,
-            policy_number: p.policy_number as string,
-            insurer: p.insurer as string,
-            line: p.line as string,
-            premium: p.premium as number,
-            end_date: p.end_date as string,
-            days_remaining: diffDays,
-            client_id: client.id,
-            client_name: client.full_name,
-            client_email: client.email,
-            client_phone: client.phone
-          };
-        });
-        setExpiringPolicies(mapped);
-      }
-    } catch (error) {
-      console.error('Error loading expiring policies:', error);
-    }
-  }, [tenantId]);
-
   useEffect(() => {
     if (!isLoadingTenant && tenantId) {
       loadPolicies();
       loadStats();
-      loadExpiringPolicies();
     }
-  }, [isLoadingTenant, tenantId, loadPolicies, loadStats, loadExpiringPolicies]);
+  }, [isLoadingTenant, tenantId, loadPolicies, loadStats]);
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -415,38 +346,6 @@ export default function PoliciesPage() {
             </CardContent>
           </Card>
         </div>
-      )}
-
-      {/* Expiring Policies Alert */}
-      {expiringPolicies.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2 text-amber-800">
-              <Clock className="h-5 w-5" />
-              Pólizas Próximas a Vencer
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {expiringPolicies.map(policy => (
-                <Link key={policy.id} href={`/polizas/${policy.id}`}>
-                  <div className="flex items-center justify-between p-2 rounded-lg hover:bg-amber-100 transition-colors">
-                    <div>
-                      <span className="font-medium">{policy.policy_number}</span>
-                      <span className="text-sm text-muted-foreground ml-2">{policy.client_name}</span>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant="outline" className="text-amber-700 border-amber-300">
-                        {policy.days_remaining} días
-                      </Badge>
-                      <p className="text-xs text-muted-foreground mt-1">{formatDate(policy.end_date)}</p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       )}
 
       {/* Filters */}
