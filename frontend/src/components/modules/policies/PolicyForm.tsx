@@ -1,20 +1,12 @@
 'use client';
 
-import { useForm, ControllerRenderProps } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
 import {
   Select,
   SelectContent,
@@ -90,7 +82,6 @@ interface PolicyFormProps {
   parentPolicyInfo?: ParentPolicyInfo | null;
 }
 
-// Parsea valores de moneda INCLUYENDO negativos
 const parseCurrencyValue = (value: string): number => {
   if (!value) return 0;
   const isNegative = value.includes('-');
@@ -99,7 +90,6 @@ const parseCurrencyValue = (value: string): number => {
   return isNegative ? -numericValue : numericValue;
 };
 
-// Formatea moneda INCLUYENDO negativos
 const formatCurrency = (value: number): string => {
   if (value === 0) return '$0';
   const isNegative = value < 0;
@@ -124,14 +114,18 @@ export function PolicyForm({
   isModification = false,
   parentPolicyInfo = null,
 }: PolicyFormProps) {
-  const [displayValues, setDisplayValues] = useState({
-    premium: defaultValues?.premium ? formatCurrency(defaultValues.premium) : '$0',
-    gastos_expedicion: defaultValues?.gastos_expedicion ? formatCurrency(defaultValues.gastos_expedicion) : '$0',
-    iva: defaultValues?.iva ? formatCurrency(defaultValues.iva) : '$0',
-    total_a_pagar: defaultValues?.total_a_pagar ? formatCurrency(defaultValues.total_a_pagar) : '$0',
-  });
+  const [displayPremium, setDisplayPremium] = useState(defaultValues?.premium ? formatCurrency(defaultValues.premium) : '$0');
+  const [displayGastos, setDisplayGastos] = useState(defaultValues?.gastos_expedicion ? formatCurrency(defaultValues.gastos_expedicion) : '$0');
+  const [displayIva, setDisplayIva] = useState(defaultValues?.iva ? formatCurrency(defaultValues.iva) : '$0');
+  const [displayTotal, setDisplayTotal] = useState(defaultValues?.total_a_pagar ? formatCurrency(defaultValues.total_a_pagar) : '$0');
 
-  const form = useForm<PolicyFormValues>({
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<PolicyFormValues>({
     resolver: zodResolver(policyFormSchema),
     defaultValues: {
       policy_number: defaultValues?.policy_number || '',
@@ -153,73 +147,47 @@ export function PolicyForm({
     },
   });
 
-  // Actualizar form cuando cambian defaultValues
+  const watchPremium = watch('premium');
+  const watchGastos = watch('gastos_expedicion');
+  const watchIva = watch('iva');
+  const watchAnexo = watch('anexo');
+
+  useEffect(() => {
+    const total = (watchPremium || 0) + (watchGastos || 0) + (watchIva || 0);
+    setValue('total_a_pagar', total);
+    setDisplayTotal(formatCurrency(total));
+  }, [watchPremium, watchGastos, watchIva, setValue]);
+
   useEffect(() => {
     if (defaultValues) {
       Object.entries(defaultValues).forEach(([key, value]) => {
         if (value !== undefined) {
-          form.setValue(key as keyof PolicyFormValues, value as never);
+          setValue(key as keyof PolicyFormValues, value as never);
         }
       });
-      setDisplayValues({
-        premium: defaultValues.premium ? formatCurrency(defaultValues.premium) : '$0',
-        gastos_expedicion: defaultValues.gastos_expedicion ? formatCurrency(defaultValues.gastos_expedicion) : '$0',
-        iva: defaultValues.iva ? formatCurrency(defaultValues.iva) : '$0',
-        total_a_pagar: defaultValues.total_a_pagar ? formatCurrency(defaultValues.total_a_pagar) : '$0',
-      });
+      setDisplayPremium(defaultValues.premium ? formatCurrency(defaultValues.premium) : '$0');
+      setDisplayGastos(defaultValues.gastos_expedicion ? formatCurrency(defaultValues.gastos_expedicion) : '$0');
+      setDisplayIva(defaultValues.iva ? formatCurrency(defaultValues.iva) : '$0');
+      setDisplayTotal(defaultValues.total_a_pagar ? formatCurrency(defaultValues.total_a_pagar) : '$0');
     }
-  }, [defaultValues, form]);
-
-  // Calcular totales automáticamente
-  const watchPremium = form.watch('premium');
-  const watchGastos = form.watch('gastos_expedicion');
-  const watchIva = form.watch('iva');
-
-  useEffect(() => {
-    const total = (watchPremium || 0) + (watchGastos || 0) + (watchIva || 0);
-    form.setValue('total_a_pagar', total);
-    setDisplayValues(prev => ({
-      ...prev,
-      total_a_pagar: formatCurrency(total),
-    }));
-  }, [watchPremium, watchGastos, watchIva, form]);
-
-  const handleCurrencyChange = (
-    field: 'premium' | 'gastos_expedicion' | 'iva',
-    value: string
-  ) => {
-    const numericValue = parseCurrencyValue(value);
-    form.setValue(field, numericValue);
-    setDisplayValues(prev => ({
-      ...prev,
-      [field]: formatCurrency(numericValue),
-    }));
-  };
+  }, [defaultValues, setValue]);
 
   const handleCurrencyInput = (
-    e: React.ChangeEvent<HTMLInputElement>,
+    value: string,
     field: 'premium' | 'gastos_expedicion' | 'iva'
   ) => {
-    const value = e.target.value.replace(/[^0-9,.$-]/g, '');
-    handleCurrencyChange(field, value);
+    const numericValue = parseCurrencyValue(value);
+    setValue(field, numericValue);
+    const formatted = formatCurrency(numericValue);
+    if (field === 'premium') setDisplayPremium(formatted);
+    if (field === 'gastos_expedicion') setDisplayGastos(formatted);
+    if (field === 'iva') setDisplayIva(formatted);
   };
 
-  const handleFormSubmit = async (data: PolicyFormValues) => {
+  const onFormSubmit = async (data: PolicyFormValues) => {
     const submitData = {
-      policy_number: data.policy_number,
-      anexo: data.anexo,
-      client_id: data.client_id,
-      insurer_id: data.insurer_id,
-      line_id: data.line_id,
+      ...data,
       group_id: data.group_id || null,
-      status: data.status,
-      premium: data.premium,
-      gastos_expedicion: data.gastos_expedicion,
-      iva: data.iva,
-      total_a_pagar: data.total_a_pagar,
-      commission_pct: data.commission_pct,
-      start_date: data.start_date,
-      end_date: data.end_date,
       fecha_expedicion: data.fecha_expedicion || null,
       notas: data.notas || null,
       ...(isModification && parentPolicyInfo ? {
@@ -230,381 +198,258 @@ export function PolicyForm({
     await onSubmit(submitData as PolicyFormValues & { parent_policy_id?: string; policy_type?: string });
   };
 
-  // Helper para renderizar campos de texto
-  const renderTextField = (
-    name: keyof PolicyFormValues,
-    label: string,
-    placeholder: string,
-    disabled?: boolean
-  ) => (
-    <FormField
-      control={form.control}
-      name={name}
-      render={({ field }: { field: ControllerRenderProps<PolicyFormValues, typeof name> }) => (
-        <FormItem>
-          <FormLabel>{label}</FormLabel>
-          <FormControl>
-            <Input 
-              placeholder={placeholder} 
-              {...field} 
-              value={field.value as string}
-              disabled={disabled}
-              className={disabled ? 'bg-gray-100' : ''}
-            />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  );
-
-  // Helper para renderizar campos de fecha
-  const renderDateField = (
-    name: keyof PolicyFormValues,
-    label: string
-  ) => (
-    <FormField
-      control={form.control}
-      name={name}
-      render={({ field }: { field: ControllerRenderProps<PolicyFormValues, typeof name> }) => (
-        <FormItem>
-          <FormLabel>{label}</FormLabel>
-          <FormControl>
-            <Input type="date" {...field} value={field.value as string} />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  );
-
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
-        {/* Indicador visual de modificación */}
-        {isModification && parentPolicyInfo && (
-          <div className="border border-amber-500 bg-amber-50 rounded-lg p-4 flex gap-3">
-            <FileEdit className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="text-amber-800">
-              <strong>Creando Modificación (Anexo {form.getValues('anexo')})</strong>
-              <br />
-              Póliza Original: <strong>{parentPolicyInfo.policy_number}</strong> - Anexo {parentPolicyInfo.anexo}
-              {parentPolicyInfo.client_name && (
-                <> | Cliente: <strong>{parentPolicyInfo.client_name}</strong></>
-              )}
-              <br />
-              <span className="text-sm">
-                Los valores negativos en prima representan reducciones/créditos a favor del cliente.
-              </span>
-            </div>
+    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
+      {/* Indicador visual de modificación */}
+      {isModification && parentPolicyInfo && (
+        <div className="border border-amber-500 bg-amber-50 rounded-lg p-4 flex gap-3">
+          <FileEdit className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="text-amber-800">
+            <strong>Creando Modificación (Anexo {watchAnexo})</strong>
+            <br />
+            Póliza Original: <strong>{parentPolicyInfo.policy_number}</strong> - Anexo {parentPolicyInfo.anexo}
+            {parentPolicyInfo.client_name && (
+              <> | Cliente: <strong>{parentPolicyInfo.client_name}</strong></>
+            )}
+            <br />
+            <span className="text-sm">
+              Los valores negativos en prima representan reducciones/créditos a favor del cliente.
+            </span>
           </div>
-        )}
-
-        {/* Información básica */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Información de la Póliza</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {renderTextField('policy_number', 'Número de Póliza *', 'Ej: POL-2024-001')}
-            {renderTextField('anexo', 'Anexo', '00', isModification)}
-            
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'status'> }) => (
-                <FormItem>
-                  <FormLabel>Estado</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar estado" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="vigente">Vigente</SelectItem>
-                      <SelectItem value="pendiente">Pendiente</SelectItem>
-                      <SelectItem value="cancelada">Cancelada</SelectItem>
-                      <SelectItem value="vencida">Vencida</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Cliente y Aseguradora */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Cliente y Aseguradora</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="client_id"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'client_id'> }) => (
-                <FormItem>
-                  <FormLabel>Cliente *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar cliente" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {clients.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="insurer_id"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'insurer_id'> }) => (
-                <FormItem>
-                  <FormLabel>Aseguradora *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar aseguradora" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {insurers.map((insurer) => (
-                        <SelectItem key={insurer.id} value={insurer.id}>
-                          {insurer.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="line_id"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'line_id'> }) => (
-                <FormItem>
-                  <FormLabel>Ramo *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar ramo" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {lines.map((line) => (
-                        <SelectItem key={line.id} value={line.id}>
-                          {line.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="group_id"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'group_id'> }) => (
-                <FormItem>
-                  <FormLabel>Grupo (Opcional)</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || ''}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar grupo" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="">Sin grupo</SelectItem>
-                      {groups.map((group) => (
-                        <SelectItem key={group.id} value={group.id}>
-                          {group.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Fechas */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Vigencia</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {renderDateField('start_date', 'Fecha de Inicio *')}
-            {renderDateField('end_date', 'Fecha de Fin *')}
-            {renderDateField('fecha_expedicion', 'Fecha de Expedición')}
-          </CardContent>
-        </Card>
-
-        {/* Valores Financieros */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Valores Financieros
-              {isModification && (
-                <span className="text-sm font-normal text-amber-600 ml-2">
-                  (Use valores negativos para reducciones)
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <FormField
-              control={form.control}
-              name="premium"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'premium'> }) => (
-                <FormItem>
-                  <FormLabel>Prima Neta *</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="$0"
-                      value={displayValues.premium}
-                      onChange={(e) => handleCurrencyInput(e, 'premium')}
-                      className={field.value < 0 ? 'text-red-600 font-semibold' : ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="gastos_expedicion"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'gastos_expedicion'> }) => (
-                <FormItem>
-                  <FormLabel>Gastos Expedición</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="$0"
-                      value={displayValues.gastos_expedicion}
-                      onChange={(e) => handleCurrencyInput(e, 'gastos_expedicion')}
-                      className={field.value < 0 ? 'text-red-600 font-semibold' : ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="iva"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'iva'> }) => (
-                <FormItem>
-                  <FormLabel>IVA</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="$0"
-                      value={displayValues.iva}
-                      onChange={(e) => handleCurrencyInput(e, 'iva')}
-                      className={field.value < 0 ? 'text-red-600 font-semibold' : ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="total_a_pagar"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'total_a_pagar'> }) => (
-                <FormItem>
-                  <FormLabel>Total a Pagar</FormLabel>
-                  <FormControl>
-                    <Input
-                      value={displayValues.total_a_pagar}
-                      disabled
-                      className={`bg-gray-100 ${field.value < 0 ? 'text-red-600 font-bold' : 'font-semibold'}`}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="commission_pct"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'commission_pct'> }) => (
-                <FormItem>
-                  <FormLabel>Comisión %</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      placeholder="0"
-                      value={field.value}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Notas */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Notas / Observaciones</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <FormField
-              control={form.control}
-              name="notas"
-              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'notas'> }) => (
-                <FormItem>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Agregue notas o comentarios sobre esta póliza..."
-                      className="min-h-[100px]"
-                      value={field.value || ''}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Botones */}
-        <div className="flex justify-end gap-4">
-          <Button type="button" variant="outline" onClick={() => window.history.back()}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? 'Guardando...' : isModification ? 'Crear Modificación' : 'Crear Póliza'}
-          </Button>
         </div>
-      </form>
-    </Form>
+      )}
+
+      {/* Información básica */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Información de la Póliza</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Número de Póliza *</label>
+            <Input placeholder="Ej: POL-2024-001" {...register('policy_number')} />
+            {errors.policy_number && <p className="text-sm text-red-500">{errors.policy_number.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Anexo</label>
+            <Input 
+              placeholder="00" 
+              {...register('anexo')} 
+              disabled={isModification}
+              className={isModification ? 'bg-gray-100' : ''}
+            />
+            {errors.anexo && <p className="text-sm text-red-500">{errors.anexo.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Estado</label>
+            <Select onValueChange={(val) => setValue('status', val)} defaultValue={defaultValues?.status || 'vigente'}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="vigente">Vigente</SelectItem>
+                <SelectItem value="pendiente">Pendiente</SelectItem>
+                <SelectItem value="cancelada">Cancelada</SelectItem>
+                <SelectItem value="vencida">Vencida</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Cliente y Aseguradora */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Cliente y Aseguradora</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Cliente *</label>
+            <Select onValueChange={(val) => setValue('client_id', val)} defaultValue={defaultValues?.client_id}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar cliente" />
+              </SelectTrigger>
+              <SelectContent>
+                {clients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.client_id && <p className="text-sm text-red-500">{errors.client_id.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Aseguradora *</label>
+            <Select onValueChange={(val) => setValue('insurer_id', val)} defaultValue={defaultValues?.insurer_id}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar aseguradora" />
+              </SelectTrigger>
+              <SelectContent>
+                {insurers.map((insurer) => (
+                  <SelectItem key={insurer.id} value={insurer.id}>
+                    {insurer.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.insurer_id && <p className="text-sm text-red-500">{errors.insurer_id.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Ramo *</label>
+            <Select onValueChange={(val) => setValue('line_id', val)} defaultValue={defaultValues?.line_id}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar ramo" />
+              </SelectTrigger>
+              <SelectContent>
+                {lines.map((line) => (
+                  <SelectItem key={line.id} value={line.id}>
+                    {line.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.line_id && <p className="text-sm text-red-500">{errors.line_id.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Grupo (Opcional)</label>
+            <Select onValueChange={(val) => setValue('group_id', val)} defaultValue={defaultValues?.group_id || ''}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar grupo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Sin grupo</SelectItem>
+                {groups.map((group) => (
+                  <SelectItem key={group.id} value={group.id}>
+                    {group.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Fechas */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Vigencia</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Fecha de Inicio *</label>
+            <Input type="date" {...register('start_date')} />
+            {errors.start_date && <p className="text-sm text-red-500">{errors.start_date.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Fecha de Fin *</label>
+            <Input type="date" {...register('end_date')} />
+            {errors.end_date && <p className="text-sm text-red-500">{errors.end_date.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Fecha de Expedición</label>
+            <Input type="date" {...register('fecha_expedicion')} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Valores Financieros */}
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            Valores Financieros
+            {isModification && (
+              <span className="text-sm font-normal text-amber-600 ml-2">
+                (Use valores negativos para reducciones)
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Prima Neta *</label>
+            <Input
+              placeholder="$0"
+              value={displayPremium}
+              onChange={(e) => handleCurrencyInput(e.target.value, 'premium')}
+              className={watchPremium < 0 ? 'text-red-600 font-semibold' : ''}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Gastos Expedición</label>
+            <Input
+              placeholder="$0"
+              value={displayGastos}
+              onChange={(e) => handleCurrencyInput(e.target.value, 'gastos_expedicion')}
+              className={watchGastos < 0 ? 'text-red-600 font-semibold' : ''}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">IVA</label>
+            <Input
+              placeholder="$0"
+              value={displayIva}
+              onChange={(e) => handleCurrencyInput(e.target.value, 'iva')}
+              className={watchIva < 0 ? 'text-red-600 font-semibold' : ''}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Total a Pagar</label>
+            <Input
+              value={displayTotal}
+              disabled
+              className={`bg-gray-100 ${(watchPremium + watchGastos + watchIva) < 0 ? 'text-red-600 font-bold' : 'font-semibold'}`}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Comisión %</label>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              placeholder="0"
+              {...register('commission_pct', { valueAsNumber: true })}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Notas */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Notas / Observaciones</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            placeholder="Agregue notas o comentarios sobre esta póliza..."
+            className="min-h-[100px]"
+            {...register('notas')}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Botones */}
+      <div className="flex justify-end gap-4">
+        <Button type="button" variant="outline" onClick={() => window.history.back()}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? 'Guardando...' : isModification ? 'Crear Modificación' : 'Crear Póliza'}
+        </Button>
+      </div>
+    </form>
   );
 }
 
