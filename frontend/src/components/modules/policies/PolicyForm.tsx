@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useForm, ControllerRenderProps } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEffect, useState } from 'react';
@@ -25,7 +25,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileEdit } from 'lucide-react';
 
-// Schema de validación - todos los campos requeridos tienen tipos estrictos
+// Schema de validación
 const policyFormSchema = z.object({
   policy_number: z.string().min(1, 'Número de póliza requerido'),
   anexo: z.string().min(1, 'Anexo requerido'),
@@ -161,7 +161,6 @@ export function PolicyForm({
           form.setValue(key as keyof PolicyFormValues, value as never);
         }
       });
-      // Actualizar display values para campos de moneda
       setDisplayValues({
         premium: defaultValues.premium ? formatCurrency(defaultValues.premium) : '$0',
         gastos_expedicion: defaultValues.gastos_expedicion ? formatCurrency(defaultValues.gastos_expedicion) : '$0',
@@ -201,12 +200,11 @@ export function PolicyForm({
     e: React.ChangeEvent<HTMLInputElement>,
     field: 'premium' | 'gastos_expedicion' | 'iva'
   ) => {
-    let value = e.target.value;
-    value = value.replace(/[^0-9,.$-]/g, '');
+    const value = e.target.value.replace(/[^0-9,.$-]/g, '');
     handleCurrencyChange(field, value);
   };
 
-  const handleSubmit = async (data: PolicyFormValues) => {
+  const handleFormSubmit = async (data: PolicyFormValues) => {
     const submitData = {
       policy_number: data.policy_number,
       anexo: data.anexo,
@@ -232,9 +230,57 @@ export function PolicyForm({
     await onSubmit(submitData as PolicyFormValues & { parent_policy_id?: string; policy_type?: string });
   };
 
+  // Helper para renderizar campos de texto
+  const renderTextField = (
+    name: keyof PolicyFormValues,
+    label: string,
+    placeholder: string,
+    disabled?: boolean
+  ) => (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }: { field: ControllerRenderProps<PolicyFormValues, typeof name> }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <Input 
+              placeholder={placeholder} 
+              {...field} 
+              value={field.value as string}
+              disabled={disabled}
+              className={disabled ? 'bg-gray-100' : ''}
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+
+  // Helper para renderizar campos de fecha
+  const renderDateField = (
+    name: keyof PolicyFormValues,
+    label: string
+  ) => (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }: { field: ControllerRenderProps<PolicyFormValues, typeof name> }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <Input type="date" {...field} value={field.value as string} />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
         {/* Indicador visual de modificación */}
         {isModification && parentPolicyInfo && (
           <div className="border border-amber-500 bg-amber-50 rounded-lg p-4 flex gap-3">
@@ -260,43 +306,13 @@ export function PolicyForm({
             <CardTitle>Información de la Póliza</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <FormField
-              control={form.control}
-              name="policy_number"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Número de Póliza *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ej: POL-2024-001" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="anexo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Anexo</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="00" 
-                      {...field} 
-                      disabled={isModification}
-                      className={isModification ? 'bg-gray-100' : ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
+            {renderTextField('policy_number', 'Número de Póliza *', 'Ej: POL-2024-001')}
+            {renderTextField('anexo', 'Anexo', '00', isModification)}
+            
             <FormField
               control={form.control}
               name="status"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'status'> }) => (
                 <FormItem>
                   <FormLabel>Estado</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
@@ -328,7 +344,7 @@ export function PolicyForm({
             <FormField
               control={form.control}
               name="client_id"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'client_id'> }) => (
                 <FormItem>
                   <FormLabel>Cliente *</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
@@ -353,7 +369,7 @@ export function PolicyForm({
             <FormField
               control={form.control}
               name="insurer_id"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'insurer_id'> }) => (
                 <FormItem>
                   <FormLabel>Aseguradora *</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
@@ -378,7 +394,7 @@ export function PolicyForm({
             <FormField
               control={form.control}
               name="line_id"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'line_id'> }) => (
                 <FormItem>
                   <FormLabel>Ramo *</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
@@ -403,7 +419,7 @@ export function PolicyForm({
             <FormField
               control={form.control}
               name="group_id"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'group_id'> }) => (
                 <FormItem>
                   <FormLabel>Grupo (Opcional)</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value || ''}>
@@ -434,47 +450,9 @@ export function PolicyForm({
             <CardTitle>Vigencia</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <FormField
-              control={form.control}
-              name="start_date"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Fecha de Inicio *</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="end_date"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Fecha de Fin *</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="fecha_expedicion"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Fecha de Expedición</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {renderDateField('start_date', 'Fecha de Inicio *')}
+            {renderDateField('end_date', 'Fecha de Fin *')}
+            {renderDateField('fecha_expedicion', 'Fecha de Expedición')}
           </CardContent>
         </Card>
 
@@ -494,7 +472,7 @@ export function PolicyForm({
             <FormField
               control={form.control}
               name="premium"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'premium'> }) => (
                 <FormItem>
                   <FormLabel>Prima Neta *</FormLabel>
                   <FormControl>
@@ -513,7 +491,7 @@ export function PolicyForm({
             <FormField
               control={form.control}
               name="gastos_expedicion"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'gastos_expedicion'> }) => (
                 <FormItem>
                   <FormLabel>Gastos Expedición</FormLabel>
                   <FormControl>
@@ -532,7 +510,7 @@ export function PolicyForm({
             <FormField
               control={form.control}
               name="iva"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'iva'> }) => (
                 <FormItem>
                   <FormLabel>IVA</FormLabel>
                   <FormControl>
@@ -551,7 +529,7 @@ export function PolicyForm({
             <FormField
               control={form.control}
               name="total_a_pagar"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'total_a_pagar'> }) => (
                 <FormItem>
                   <FormLabel>Total a Pagar</FormLabel>
                   <FormControl>
@@ -569,7 +547,7 @@ export function PolicyForm({
             <FormField
               control={form.control}
               name="commission_pct"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'commission_pct'> }) => (
                 <FormItem>
                   <FormLabel>Comisión %</FormLabel>
                   <FormControl>
@@ -579,7 +557,7 @@ export function PolicyForm({
                       max="100"
                       step="0.1"
                       placeholder="0"
-                      {...field}
+                      value={field.value}
                       onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                     />
                   </FormControl>
@@ -599,14 +577,14 @@ export function PolicyForm({
             <FormField
               control={form.control}
               name="notas"
-              render={({ field }) => (
+              render={({ field }: { field: ControllerRenderProps<PolicyFormValues, 'notas'> }) => (
                 <FormItem>
                   <FormControl>
                     <Textarea
                       placeholder="Agregue notas o comentarios sobre esta póliza..."
                       className="min-h-[100px]"
-                      {...field}
                       value={field.value || ''}
+                      onChange={field.onChange}
                     />
                   </FormControl>
                   <FormMessage />
