@@ -4,6 +4,7 @@
 // PÁGINA: Lista de Pólizas
 // /polizas
 // Usa Supabase Client directo (evita API Routes con problemas de proxy)
+// NOTA: Solo muestra pólizas base (anexo 00), los anexos se ven en el detalle
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -60,6 +61,7 @@ interface PolicyWithRelations extends Policy {
     name: string;
     slug: string;
   };
+  anexo_count?: number;
 }
 
 interface ExpiringPolicy {
@@ -101,12 +103,12 @@ export default function PoliciesPage() {
 
   const loadPolicies = useCallback(async () => {
     if (!tenantId) return;
-    
+
     setIsLoading(true);
     try {
       const supabase = getBrowserClient();
-      
-      // Build query
+
+      // Build query - SOLO pólizas base (anexo 00 o null)
       let query = supabase
         .from('policies')
         .select(`
@@ -115,9 +117,10 @@ export default function PoliciesPage() {
           insurance_line:insurance_lines(id, name, slug)
         `, { count: 'exact' })
         .eq('tenant_id', tenantId)
+        .or('anexo.eq.00,anexo.is.null')
         .order('created_at', { ascending: false })
         .range((page - 1) * pageSize, page * pageSize - 1);
-      
+
       if (searchQuery) {
         query = query.or(`policy_number.ilike.%${searchQuery}%,insurer.ilike.%${searchQuery}%`);
       }
@@ -127,9 +130,9 @@ export default function PoliciesPage() {
       if (lineFilter && lineFilter !== 'all') {
         query = query.eq('line', lineFilter);
       }
-      
+
       const { data, count, error } = await query;
-      
+
       if (error) {
         console.error('Error loading policies:', error);
       } else {
@@ -150,29 +153,31 @@ export default function PoliciesPage() {
 
   const loadStats = useCallback(async () => {
     if (!tenantId) return;
-    
+
     try {
       const supabase = getBrowserClient();
-      
+
+      // Stats solo de pólizas base (anexo 00 o null)
       const { data: allPolicies } = await supabase
         .from('policies')
-        .select('status, line, premium, end_date')
-        .eq('tenant_id', tenantId);
-      
+        .select('status, line, premium, end_date, anexo')
+        .eq('tenant_id', tenantId)
+        .or('anexo.eq.00,anexo.is.null');
+
       if (allPolicies) {
-        type PolicyStats = { status: string; line: string; premium: number; end_date: string | null };
+        type PolicyStats = { status: string; line: string; premium: number; end_date: string | null; anexo: string | null };
         const policiesTyped = allPolicies as PolicyStats[];
-        
+
         const byStatus: Record<string, number> = {};
         const byLine: Record<string, number> = {};
         let totalPremium = 0;
         let active = 0;
         let expiringThisMonth = 0;
-        
+
         const endOfMonth = new Date();
         endOfMonth.setMonth(endOfMonth.getMonth() + 1);
         endOfMonth.setDate(0);
-        
+
         policiesTyped.forEach(p => {
           byStatus[p.status] = (byStatus[p.status] || 0) + 1;
           byLine[p.line] = (byLine[p.line] || 0) + 1;
@@ -180,7 +185,7 @@ export default function PoliciesPage() {
           if (p.status === 'activa') active++;
           if (p.end_date && new Date(p.end_date) <= endOfMonth) expiringThisMonth++;
         });
-        
+
         setStats({
           total: policiesTyped.length,
           active,
@@ -197,13 +202,14 @@ export default function PoliciesPage() {
 
   const loadExpiringPolicies = useCallback(async () => {
     if (!tenantId) return;
-    
+
     try {
       const supabase = getBrowserClient();
-      
+
       const thirtyDaysFromNow = new Date();
       thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-      
+
+      // Solo pólizas base próximas a vencer
       const { data } = await supabase
         .from('policies')
         .select(`
@@ -211,12 +217,13 @@ export default function PoliciesPage() {
           clients!inner(id, full_name, email, phone)
         `)
         .eq('tenant_id', tenantId)
-        .eq('status', 'active')
+        .eq('status', 'activa')
+        .or('anexo.eq.00,anexo.is.null')
         .lte('end_date', thirtyDaysFromNow.toISOString())
         .gte('end_date', new Date().toISOString())
         .order('end_date', { ascending: true })
         .limit(5);
-      
+
       if (data) {
         const mapped = data.map((p: Record<string, unknown>) => {
           const client = p.clients as { id: string; full_name: string; email: string | null; phone: string | null };
@@ -224,7 +231,7 @@ export default function PoliciesPage() {
           const today = new Date();
           const diffTime = endDate.getTime() - today.getTime();
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          
+
           return {
             id: p.id as string,
             policy_number: p.policy_number as string,
@@ -256,30 +263,34 @@ export default function PoliciesPage() {
 
   const totalPages = Math.ceil(total / pageSize);
 
+  // Función para formatear moneda con color dinámico
+  const formatPremiumWithColor = (value: number) => {
+    const formatted = formatPremium(value);
+    const isNegative = value < 0;
+    return (
+      <span className={isNegative ? 'text-red-600' : ''}>
+        {formatted}
+      </span>
+    );
+  };
+
   if (isLoadingTenant) {
-    return <LoadingScreen message="Cargando..." />;
+    return <LoadingScreen />;
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto py-6 px-4 space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          </Link>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Shield className="h-8 w-8 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Shield className="h-6 w-6 text-primary" />
-              Pólizas
-            </h1>
-            <p className="text-muted-foreground">{tenantName}</p>
+            <h1 className="text-2xl font-bold text-slate-900">Pólizas</h1>
+            <p className="text-sm text-muted-foreground">{tenantName}</p>
           </div>
         </div>
-        <Link href="/polizas/nuevo">
-          <Button data-testid="new-policy-btn">
+        <Link href="/polizas/nueva">
+          <Button>
             <Plus className="mr-2 h-4 w-4" />
             Nueva Póliza
           </Button>
@@ -288,42 +299,42 @@ export default function PoliciesPage() {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Total Pólizas</CardDescription>
-              <CardTitle className="text-3xl">{stats.total}</CardTitle>
-            </CardHeader>
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">Total Pólizas</p>
+              <p className="text-3xl font-bold">{stats.total}</p>
+            </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Activas</CardDescription>
-              <CardTitle className="text-3xl text-green-600">{stats.active}</CardTitle>
-            </CardHeader>
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">Activas</p>
+              <p className="text-3xl font-bold text-green-600">{stats.active}</p>
+            </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Prima Total</CardDescription>
-              <CardTitle className="text-3xl">{formatPremium(stats.totalPremium)}</CardTitle>
-            </CardHeader>
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">Prima Total</p>
+              <p className="text-3xl font-bold">{formatPremium(stats.totalPremium)}</p>
+            </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1">
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
                 Vencen este mes
-              </CardDescription>
-              <CardTitle className="text-3xl text-amber-600">{stats.expiringThisMonth}</CardTitle>
-            </CardHeader>
+              </p>
+              <p className="text-3xl font-bold text-amber-600">{stats.expiringThisMonth}</p>
+            </CardContent>
           </Card>
         </div>
       )}
 
       {/* Expiring Policies Alert */}
       {expiringPolicies.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+        <Card className="border-amber-200 bg-amber-50">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2 text-amber-700 dark:text-amber-400">
+            <CardTitle className="text-lg flex items-center gap-2 text-amber-800">
               <Clock className="h-5 w-5" />
               Pólizas Próximas a Vencer
             </CardTitle>
@@ -331,18 +342,20 @@ export default function PoliciesPage() {
           <CardContent>
             <div className="space-y-2">
               {expiringPolicies.map(policy => (
-                <div key={policy.id} className="flex items-center justify-between p-2 bg-background rounded">
-                  <div>
-                    <p className="font-medium">{policy.policy_number}</p>
-                    <p className="text-sm text-muted-foreground">{policy.client_name}</p>
+                <Link key={policy.id} href={`/polizas/${policy.id}`}>
+                  <div className="flex items-center justify-between p-2 rounded-lg hover:bg-amber-100 transition-colors">
+                    <div>
+                      <span className="font-medium">{policy.policy_number}</span>
+                      <span className="text-sm text-muted-foreground ml-2">{policy.client_name}</span>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant="outline" className="text-amber-700 border-amber-300">
+                        {policy.days_remaining} días
+                      </Badge>
+                      <p className="text-xs text-muted-foreground mt-1">{formatDate(policy.end_date)}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <Badge variant={policy.days_remaining <= 7 ? "destructive" : "secondary"}>
-                      {policy.days_remaining} días
-                    </Badge>
-                    <p className="text-sm text-muted-foreground">{formatDate(policy.end_date)}</p>
-                  </div>
-                </div>
+                </Link>
               ))}
             </div>
           </CardContent>
@@ -350,54 +363,50 @@ export default function PoliciesPage() {
       )}
 
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por número o aseguradora..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-                data-testid="search-policies-input"
-              />
-            </div>
-            <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? undefined : v)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                {Object.entries(POLICY_STATUS_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={lineFilter || 'all'} onValueChange={(v) => setLineFilter(v === 'all' ? undefined : v)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Ramo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los ramos</SelectItem>
-                {Object.entries(POLICY_LINE_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por número o aseguradora..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+            data-testid="search-policies-input"
+          />
+        </div>
+        <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? undefined : v)}>
+          <SelectTrigger className="w-full md:w-48">
+            <SelectValue placeholder="Estado" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los estados</SelectItem>
+            {Object.entries(POLICY_STATUS_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={lineFilter || 'all'} onValueChange={(v) => setLineFilter(v === 'all' ? undefined : v)}>
+          <SelectTrigger className="w-full md:w-48">
+            <SelectValue placeholder="Ramo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los ramos</SelectItem>
+            {Object.entries(POLICY_LINE_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Table */}
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div className="flex items-center justify-center py-12">
+              <LoadingScreen />
             </div>
           ) : policies.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <FileText className="h-12 w-12 mb-4" />
               <p>No se encontraron pólizas</p>
             </div>
@@ -417,7 +426,7 @@ export default function PoliciesPage() {
               </TableHeader>
               <TableBody>
                 {policies.map((policy) => (
-                  <TableRow key={policy.id} data-testid={`policy-row-${policy.id}`}>
+                  <TableRow key={policy.id}>
                     <TableCell className="font-medium">{policy.policy_number}</TableCell>
                     <TableCell>{policy.client_name || 'N/A'}</TableCell>
                     <TableCell>{policy.insurer}</TableCell>
@@ -426,7 +435,7 @@ export default function PoliciesPage() {
                         {policy.insurance_line?.name || POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line || '-'}
                       </Badge>
                     </TableCell>
-                    <TableCell>{formatPremium(policy.premium)}</TableCell>
+                    <TableCell>{formatPremiumWithColor(policy.premium)}</TableCell>
                     <TableCell>
                       <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus]}>
                         {POLICY_STATUS_LABELS[policy.status as PolicyStatus]}
@@ -457,7 +466,7 @@ export default function PoliciesPage() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
             >
@@ -466,7 +475,7 @@ export default function PoliciesPage() {
             <span className="text-sm">Página {page} de {totalPages}</span>
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
             >
