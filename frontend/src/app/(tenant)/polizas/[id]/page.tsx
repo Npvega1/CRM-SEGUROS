@@ -81,6 +81,8 @@ interface RelatedAnexo {
   anexo: string;
   premium: number;
   total_a_pagar: number;
+  gastos_expedicion: number;
+  iva: number;
   status: string;
   fecha_expedicion: string | null;
   created_at: string;
@@ -174,11 +176,11 @@ export default function PolicyDetailPage() {
           insurance_group: data.insurance_group
         } as PolicyWithClient);
 
-        // Cargar anexos relacionados (si esta es la póliza base anexo 00)
+        // Cargar anexos relacionados (todas las pólizas con el mismo policy_number excepto esta)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: anexosData } = await (supabase as any)
           .from('policies')
-          .select('id, anexo, premium, total_a_pagar, status, fecha_expedicion, created_at')
+          .select('id, anexo, premium, total_a_pagar, gastos_expedicion, iva, status, fecha_expedicion, created_at')
           .eq('policy_number', data.policy_number)
           .eq('tenant_id', tenantId)
           .neq('id', policyId)
@@ -385,8 +387,21 @@ export default function PolicyDetailPage() {
   const calculatedTotal = (policy.premium || 0) + (policyAny.gastos_expedicion || 0) + (policyAny.iva || 0);
   const displayTotal = policyAny.total_a_pagar || calculatedTotal;
 
-  // Calcular el total consolidado de la póliza (base + anexos)
-  const totalConsolidado = (policyAny.total_a_pagar || 0) + relatedAnexos.reduce((sum, anexo) => sum + (anexo.total_a_pagar || 0), 0);
+  // Calcular totales consolidados
+  const basePrima = policy.premium || 0;
+  const baseGastos = policyAny.gastos_expedicion || 0;
+  const baseIva = policyAny.iva || 0;
+  const baseTotal = policyAny.total_a_pagar || calculatedTotal;
+
+  const anexosPrima = relatedAnexos.reduce((sum, anexo) => sum + (anexo.premium || 0), 0);
+  const anexosGastos = relatedAnexos.reduce((sum, anexo) => sum + (anexo.gastos_expedicion || 0), 0);
+  const anexosIva = relatedAnexos.reduce((sum, anexo) => sum + (anexo.iva || 0), 0);
+  const anexosTotal = relatedAnexos.reduce((sum, anexo) => sum + (anexo.total_a_pagar || anexo.premium || 0), 0);
+
+  const primaConsolidada = basePrima + anexosPrima;
+  const gastosConsolidados = baseGastos + anexosGastos;
+  const ivaConsolidado = baseIva + anexosIva;
+  const totalConsolidado = baseTotal + anexosTotal;
 
   return (
     <div className="container mx-auto py-6 px-4">
@@ -508,7 +523,7 @@ export default function PolicyDetailPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <DollarSign className="h-5 w-5" />
-                Valores de la Póliza
+                Valores de la Póliza {policyAny.anexo && policyAny.anexo !== '00' && `(Anexo ${policyAny.anexo})`}
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-4 gap-4">
@@ -707,7 +722,7 @@ export default function PolicyDetailPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <DollarSign className="h-5 w-5" />
-                Resumen
+                Resumen {policyAny.anexo && policyAny.anexo !== '00' && `(Anexo ${policyAny.anexo})`}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -751,6 +766,21 @@ export default function PolicyDetailPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                {/* Póliza Base */}
+                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div>
+                    <p className="font-medium">Póliza Base (Anexo {policyAny.anexo || '00'})</p>
+                    <p className="text-xs text-muted-foreground">Este documento</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-semibold ${basePrima < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatCurrency(basePrima)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Prima</p>
+                  </div>
+                </div>
+
+                {/* Otros Anexos */}
                 {relatedAnexos.map((anexo) => (
                   <div 
                     key={anexo.id} 
@@ -764,8 +794,8 @@ export default function PolicyDetailPage() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className={`font-semibold ${(anexo.total_a_pagar || anexo.premium || 0) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {formatCurrency(anexo.total_a_pagar || anexo.premium)}
+                      <p className={`font-semibold ${(anexo.premium || 0) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrency(anexo.premium)}
                       </p>
                       <Badge variant="outline" className="text-xs">
                         {POLICY_STATUS_LABELS[anexo.status as PolicyStatus] || anexo.status}
@@ -774,16 +804,34 @@ export default function PolicyDetailPage() {
                   </div>
                 ))}
                 
-                {/* Total Consolidado */}
-                <div className="border-t pt-3 mt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium text-sm">Total Consolidado</span>
+                {/* Totales Consolidados */}
+                <div className="border-t pt-3 mt-3 space-y-2">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Prima Consolidada</span>
+                    <span className={`font-semibold ${primaConsolidada < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatCurrency(primaConsolidada)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Gastos Consolidados</span>
+                    <span className={`font-semibold ${gastosConsolidados < 0 ? 'text-red-600' : ''}`}>
+                      {formatCurrency(gastosConsolidados)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">IVA Consolidado</span>
+                    <span className={`font-semibold ${ivaConsolidado < 0 ? 'text-red-600' : ''}`}>
+                      {formatCurrency(ivaConsolidado)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t">
+                    <span className="font-medium">Total Consolidado</span>
                     <span className={`font-bold text-lg ${totalConsolidado < 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatCurrency(totalConsolidado)}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Póliza base + {relatedAnexos.length} anexo(s)
+                  <p className="text-xs text-muted-foreground">
+                    Este documento + {relatedAnexos.length} anexo(s)
                   </p>
                 </div>
               </CardContent>
