@@ -118,18 +118,28 @@ export function PolicyForm({
   const [availableGroups, setAvailableGroups] = useState<InsuranceGroup[]>([]);
   const [loadingCatalogs, setLoadingCatalogs] = useState(true);
   const [loadingCommission, setLoadingCommission] = useState(false);
-  const [selectedCompanyId, setSelectedCompanyId] = useState('');
-  const [selectedLineId, setSelectedLineId] = useState('');
-  const [selectedGroupId, setSelectedGroupId] = useState('');
+
+  // Inicializar directamente desde la póliza cuando se edita
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [selectedCompanyId, setSelectedCompanyId] = useState(() => {
+    if (isEditing && policy) return (policy as any).insurer_id || '';
+    return '';
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [selectedLineId, setSelectedLineId] = useState(() => {
+    if (isEditing && policy) return (policy as any).line_id || '';
+    return '';
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [selectedGroupId, setSelectedGroupId] = useState(() => {
+    if (isEditing && policy) return (policy as any).group_id || '';
+    return '';
+  });
+
   const [premiumDisplay, setPremiumDisplay] = useState('');
   const [gastosDisplay, setGastosDisplay] = useState('');
   const [ivaDisplay, setIvaDisplay] = useState('');
   const [notasValue, setNotasValue] = useState('');
-
-  // Flags para inicialización en modo edición
-  const [initializedCompany, setInitializedCompany] = useState(false);
-  const [initializedLine, setInitializedLine] = useState(false);
-  const [initializedGroup, setInitializedGroup] = useState(false);
 
   const {
     register,
@@ -182,7 +192,7 @@ export function PolicyForm({
   const status = watch('status');
   const startDate = watch('start_date');
 
-  // Determinar opciones de estado según modo
+  // Opciones de estado: solo "Activa" al editar
   const statusOptions = isEditing
     ? POLICY_STATUS_OPTIONS.filter(o => o.value === 'activa')
     : POLICY_STATUS_OPTIONS;
@@ -204,6 +214,7 @@ export function PolicyForm({
     setValue('total_a_pagar', total);
   }, [premium, gastosExpedicion, iva, setValue]);
 
+  // Cargar comisión cuando cambia compañía + grupo
   useEffect(() => {
     async function loadCommission() {
       if (!selectedCompanyId || !selectedGroupId) return;
@@ -231,6 +242,7 @@ export function PolicyForm({
     loadCommission();
   }, [selectedCompanyId, selectedGroupId, setValue, supabase]);
 
+  // Cargar compañías del tenant
   useEffect(() => {
     async function loadTenantCompanies() {
       if (!tenantId) return;
@@ -261,57 +273,11 @@ export function PolicyForm({
     loadTenantCompanies();
   }, [tenantId, supabase]);
 
-  // --- INICIALIZACIÓN EN MODO EDICIÓN ---
-  // Paso 1: Cuando las compañías cargan, pre-seleccionar la compañía de la póliza
-  useEffect(() => {
-    if (isEditing && policy && tenantCompanies.length > 0 && !initializedCompany) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const policyInsurerId = (policy as any).insurer_id;
-      if (policyInsurerId) {
-        const found = tenantCompanies.find(tc => tc.company_id === policyInsurerId);
-        if (found) {
-          setSelectedCompanyId(policyInsurerId);
-          setInitializedCompany(true);
-        }
-      }
-    }
-  }, [isEditing, policy, tenantCompanies, initializedCompany]);
-
-  // Paso 2: Cuando las líneas cargan, pre-seleccionar la línea (grupo) de la póliza
-  useEffect(() => {
-    if (isEditing && policy && availableLines.length > 0 && !initializedLine && initializedCompany) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const policyLineId = (policy as any).line_id;
-      if (policyLineId) {
-        const found = availableLines.find(l => l.id === policyLineId);
-        if (found) {
-          setSelectedLineId(policyLineId);
-          setInitializedLine(true);
-        }
-      }
-    }
-  }, [isEditing, policy, availableLines, initializedLine, initializedCompany]);
-
-  // Paso 3: Cuando los grupos cargan, pre-seleccionar el ramo de la póliza
-  useEffect(() => {
-    if (isEditing && policy && availableGroups.length > 0 && !initializedGroup && initializedLine) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const policyGroupId = (policy as any).group_id;
-      if (policyGroupId) {
-        const found = availableGroups.find(g => g.id === policyGroupId);
-        if (found) {
-          setSelectedGroupId(policyGroupId);
-          setInitializedGroup(true);
-        }
-      }
-    }
-  }, [isEditing, policy, availableGroups, initializedGroup, initializedLine]);
-
+  // Cargar líneas cuando cambia la compañía seleccionada
   useEffect(() => {
     async function loadLinesForCompany() {
       if (!selectedCompanyId) {
         setAvailableLines([]);
-        setSelectedLineId('');
         return;
       }
       try {
@@ -333,11 +299,11 @@ export function PolicyForm({
     loadLinesForCompany();
   }, [selectedCompanyId, supabase]);
 
+  // Cargar grupos cuando cambia la línea seleccionada
   useEffect(() => {
     async function loadGroupsForLine() {
       if (!selectedLineId) {
         setAvailableGroups([]);
-        setSelectedGroupId('');
         return;
       }
       try {
@@ -358,6 +324,7 @@ export function PolicyForm({
     loadGroupsForLine();
   }, [selectedLineId, supabase]);
 
+  // Sincronizar compañía seleccionada → form values
   useEffect(() => {
     if (selectedCompanyId) {
       const company = tenantCompanies.find(tc => tc.company_id === selectedCompanyId)?.company;
@@ -368,6 +335,7 @@ export function PolicyForm({
     }
   }, [selectedCompanyId, tenantCompanies, setValue]);
 
+  // Sincronizar línea seleccionada → form values
   useEffect(() => {
     if (selectedLineId) {
       const line = availableLines.find(l => l.id === selectedLineId);
@@ -378,6 +346,7 @@ export function PolicyForm({
     }
   }, [selectedLineId, availableLines, setValue]);
 
+  // Sincronizar grupo seleccionado → form values
   useEffect(() => {
     if (selectedGroupId) {
       setValue('group_id', selectedGroupId);
@@ -511,6 +480,7 @@ export function PolicyForm({
                 setSelectedCompanyId(value);
                 setSelectedLineId('');
                 setSelectedGroupId('');
+                setAvailableGroups([]);
               }} disabled={loading}>
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar compañía" />
@@ -530,6 +500,7 @@ export function PolicyForm({
               <Select value={selectedLineId} onValueChange={(value) => {
                 setSelectedLineId(value);
                 setSelectedGroupId('');
+                setAvailableGroups([]);
               }} disabled={loading || !selectedCompanyId || availableLines.length === 0}>
                 <SelectTrigger>
                   <SelectValue placeholder={!selectedCompanyId ? 'Primero selecciona compañía' : 'Seleccionar grupo'} />
