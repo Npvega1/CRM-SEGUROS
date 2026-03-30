@@ -59,6 +59,28 @@ interface PolicyData {
   notas: string | null;
 }
 
+// Tipo para los datos del formulario
+interface PolicyFormSubmitData {
+  policy_number: string;
+  anexo: string;
+  client_id: string;
+  insurer_id: string;
+  line_id: string;
+  group_id?: string | null;
+  status: string;
+  premium: number;
+  gastos_expedicion: number;
+  iva: number;
+  total_a_pagar: number;
+  commission_pct: number;
+  start_date: string;
+  end_date: string;
+  fecha_expedicion?: string | null;
+  notas?: string | null;
+  parent_policy_id?: string;
+  policy_type?: string;
+}
+
 export default function EditPolicyPage() {
   const params = useParams();
   const router = useRouter();
@@ -119,7 +141,7 @@ export default function EditPolicyPage() {
     }
   }, [isLoadingTenant, tenantId, policyId, loadData]);
 
-  const handleSubmit = async (data: Record<string, unknown>) => {
+  const handleSubmit = async (data: PolicyFormSubmitData) => {
     if (!tenantId || !policyId) return;
     
     setIsSaving(true);
@@ -128,27 +150,30 @@ export default function EditPolicyPage() {
     try {
       const supabase = getBrowserClient();
       
-      const { error: updateError } = await supabase
+      const updatePayload = {
+        policy_number: data.policy_number,
+        anexo: data.anexo,
+        client_id: data.client_id,
+        insurer_id: data.insurer_id,
+        line_id: data.line_id,
+        group_id: data.group_id || null,
+        status: data.status,
+        premium: data.premium,
+        gastos_expedicion: data.gastos_expedicion,
+        iva: data.iva,
+        total_a_pagar: data.total_a_pagar,
+        commission_pct: data.commission_pct,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        fecha_expedicion: data.fecha_expedicion || null,
+        notas: data.notas || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: updateError } = await (supabase as any)
         .from('policies')
-        .update({
-          policy_number: data.policy_number,
-          anexo: data.anexo,
-          client_id: data.client_id,
-          insurer_id: data.insurer_id,
-          line_id: data.line_id,
-          group_id: data.group_id || null,
-          status: data.status,
-          premium: data.premium,
-          gastos_expedicion: data.gastos_expedicion,
-          iva: data.iva,
-          total_a_pagar: data.total_a_pagar,
-          commission_pct: data.commission_pct,
-          start_date: data.start_date,
-          end_date: data.end_date,
-          fecha_expedicion: data.fecha_expedicion || null,
-          notas: data.notas || null,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', policyId)
         .eq('tenant_id', tenantId);
 
