@@ -118,13 +118,18 @@ export function PolicyForm({
   const [availableGroups, setAvailableGroups] = useState<InsuranceGroup[]>([]);
   const [loadingCatalogs, setLoadingCatalogs] = useState(true);
   const [loadingCommission, setLoadingCommission] = useState(false);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
-  const [selectedLineId, setSelectedLineId] = useState<string>('');
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [selectedLineId, setSelectedLineId] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState('');
   const [premiumDisplay, setPremiumDisplay] = useState('');
   const [gastosDisplay, setGastosDisplay] = useState('');
   const [ivaDisplay, setIvaDisplay] = useState('');
-  const [notasValue, setNotasValue] = useState<string>('');
+  const [notasValue, setNotasValue] = useState('');
+
+  // Flags para inicialización en modo edición
+  const [initializedCompany, setInitializedCompany] = useState(false);
+  const [initializedLine, setInitializedLine] = useState(false);
+  const [initializedGroup, setInitializedGroup] = useState(false);
 
   const {
     register,
@@ -176,6 +181,11 @@ export function PolicyForm({
   const iva = watch('iva') || 0;
   const status = watch('status');
   const startDate = watch('start_date');
+
+  // Determinar opciones de estado según modo
+  const statusOptions = isEditing
+    ? POLICY_STATUS_OPTIONS.filter(o => o.value === 'activa')
+    : POLICY_STATUS_OPTIONS;
 
   useEffect(() => {
     if (policy) {
@@ -250,6 +260,52 @@ export function PolicyForm({
     }
     loadTenantCompanies();
   }, [tenantId, supabase]);
+
+  // --- INICIALIZACIÓN EN MODO EDICIÓN ---
+  // Paso 1: Cuando las compañías cargan, pre-seleccionar la compañía de la póliza
+  useEffect(() => {
+    if (isEditing && policy && tenantCompanies.length > 0 && !initializedCompany) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const policyInsurerId = (policy as any).insurer_id;
+      if (policyInsurerId) {
+        const found = tenantCompanies.find(tc => tc.company_id === policyInsurerId);
+        if (found) {
+          setSelectedCompanyId(policyInsurerId);
+          setInitializedCompany(true);
+        }
+      }
+    }
+  }, [isEditing, policy, tenantCompanies, initializedCompany]);
+
+  // Paso 2: Cuando las líneas cargan, pre-seleccionar la línea (grupo) de la póliza
+  useEffect(() => {
+    if (isEditing && policy && availableLines.length > 0 && !initializedLine && initializedCompany) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const policyLineId = (policy as any).line_id;
+      if (policyLineId) {
+        const found = availableLines.find(l => l.id === policyLineId);
+        if (found) {
+          setSelectedLineId(policyLineId);
+          setInitializedLine(true);
+        }
+      }
+    }
+  }, [isEditing, policy, availableLines, initializedLine, initializedCompany]);
+
+  // Paso 3: Cuando los grupos cargan, pre-seleccionar el ramo de la póliza
+  useEffect(() => {
+    if (isEditing && policy && availableGroups.length > 0 && !initializedGroup && initializedLine) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const policyGroupId = (policy as any).group_id;
+      if (policyGroupId) {
+        const found = availableGroups.find(g => g.id === policyGroupId);
+        if (found) {
+          setSelectedGroupId(policyGroupId);
+          setInitializedGroup(true);
+        }
+      }
+    }
+  }, [isEditing, policy, availableGroups, initializedGroup, initializedLine]);
 
   useEffect(() => {
     async function loadLinesForCompany() {
@@ -381,184 +437,260 @@ export function PolicyForm({
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
-      <input type="hidden" {...register('client_id')} />
-
-      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+      {/* Identificación */}
+      <div className="border rounded-lg p-4 space-y-4">
+        <h3 className="font-semibold flex items-center gap-2">
           <FileText className="h-4 w-4" />
           Identificación de la Póliza
-        </div>
+        </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
+          <div>
             <Label htmlFor="policy_number">Número de Póliza *</Label>
-            <Input id="policy_number" placeholder="Ej: POL-2024-001" {...register('policy_number')} disabled={loading} />
-            {errors.policy_number && <p className="text-sm text-red-500">{errors.policy_number.message}</p>}
+            <Input
+              id="policy_number"
+              {...register('policy_number')}
+              disabled={loading}
+            />
+            {errors.policy_number && (
+              <p className="text-sm text-red-500 mt-1">{errors.policy_number.message}</p>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="anexo">Anexo</Label>
+          <div>
+            <Label>Anexo</Label>
             <Select value={watch('anexo') || '00'} onValueChange={(value) => setValue('anexo', value)} disabled={loading}>
-              <SelectTrigger id="anexo"><SelectValue placeholder="00" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {anexoOptions.map((num) => (<SelectItem key={num} value={num}>{num}</SelectItem>))}
+                {anexoOptions.map((num) => (
+                  <SelectItem key={num} value={num}>{num}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="status">Estado *</Label>
-            <Select value={status} onValueChange={(value: PolicyStatus) => setValue('status', value)} disabled={loading || !isEditing}>
-              <SelectTrigger id="status"><SelectValue placeholder="Seleccionar estado" /></SelectTrigger>
+          <div>
+            <Label>Estado *</Label>
+            <Select value={status || 'activa'} onValueChange={(value) => setValue('status', value as PolicyStatus)} disabled={loading || !isEditing}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {POLICY_STATUS_OPTIONS.map(({ value, label }) => (<SelectItem key={value} value={value}>{label}</SelectItem>))}
+                {statusOptions.map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            {!isEditing && <p className="text-xs text-muted-foreground">Estado inicial: Activa</p>}
+            {!isEditing && (
+              <p className="text-xs text-muted-foreground mt-1">Estado inicial: Activa</p>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+      {/* Selección de Producto */}
+      <div className="border rounded-lg p-4 space-y-4">
+        <h3 className="font-semibold flex items-center gap-2">
           <Building className="h-4 w-4" />
           Selección de Producto
-        </div>
+        </h3>
         {loadingCatalogs ? (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-sm text-muted-foreground">Cargando catálogos...</span>
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Cargando catálogos...
           </div>
         ) : tenantCompanies.length === 0 ? (
-          <div className="text-center py-4 text-amber-600 bg-amber-50 rounded-lg">
-            <p className="text-sm">No tienes compañías activas configuradas.</p>
-            <p className="text-xs mt-1">Ve a Configuración → Compañías para activarlas.</p>
+          <div className="text-sm text-muted-foreground p-4 border rounded-lg bg-slate-50">
+            <p>No tienes compañías activas configuradas.</p>
+            <p>Ve a Configuración → Compañías para activarlas.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1"><Building className="h-3 w-3" />Compañía *</Label>
-              <Select value={selectedCompanyId} onValueChange={(value) => { setSelectedCompanyId(value); setSelectedLineId(''); setSelectedGroupId(''); }} disabled={loading}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar compañía" /></SelectTrigger>
+            <div>
+              <Label>Compañía *</Label>
+              <Select value={selectedCompanyId} onValueChange={(value) => {
+                setSelectedCompanyId(value);
+                setSelectedLineId('');
+                setSelectedGroupId('');
+              }} disabled={loading}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar compañía" />
+                </SelectTrigger>
                 <SelectContent>
-                  {tenantCompanies.map((tc) => (<SelectItem key={tc.company_id} value={tc.company_id}>{tc.company.name}{tc.company_code && <span className="text-muted-foreground ml-2">({tc.company_code})</span>}</SelectItem>))}
+                  {tenantCompanies.map((tc) => (
+                    <SelectItem key={tc.company_id} value={tc.company_id}>
+                      {tc.company.name}
+                      {tc.company_code && <span className="text-muted-foreground ml-1">({tc.company_code})</span>}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1"><Layers className="h-3 w-3" />Grupo *</Label>
-              <Select value={selectedLineId} onValueChange={(value) => { setSelectedLineId(value); setSelectedGroupId(''); }} disabled={loading || !selectedCompanyId || availableLines.length === 0}>
-                <SelectTrigger><SelectValue placeholder={!selectedCompanyId ? "Primero selecciona compañía" : "Seleccionar grupo"} /></SelectTrigger>
+            <div>
+              <Label>Grupo *</Label>
+              <Select value={selectedLineId} onValueChange={(value) => {
+                setSelectedLineId(value);
+                setSelectedGroupId('');
+              }} disabled={loading || !selectedCompanyId || availableLines.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={!selectedCompanyId ? 'Primero selecciona compañía' : 'Seleccionar grupo'} />
+                </SelectTrigger>
                 <SelectContent>
-                  {availableLines.map((line) => (<SelectItem key={line.id} value={line.id}>{line.name}</SelectItem>))}
+                  {availableLines.map((line) => (
+                    <SelectItem key={line.id} value={line.id}>{line.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1"><FileText className="h-3 w-3" />Ramo *</Label>
+            <div>
+              <Label>Ramo *</Label>
               <Select value={selectedGroupId} onValueChange={setSelectedGroupId} disabled={loading || !selectedLineId || availableGroups.length === 0}>
-                <SelectTrigger><SelectValue placeholder={!selectedLineId ? "Primero selecciona grupo" : "Seleccionar ramo"} /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder={!selectedLineId ? 'Primero selecciona grupo' : 'Seleccionar ramo'} />
+                </SelectTrigger>
                 <SelectContent>
-                  {availableGroups.map((group) => (<SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>))}
+                  {availableGroups.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
         )}
-        <input type="hidden" {...register('insurer')} />
-        <input type="hidden" {...register('line')} />
       </div>
 
-      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+      {/* Fechas */}
+      <div className="border rounded-lg p-4 space-y-4">
+        <h3 className="font-semibold flex items-center gap-2">
           <Calendar className="h-4 w-4" />
           Fechas
-        </div>
+        </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
-            <Input id="fecha_expedicion" type="date" {...register('fecha_expedicion')} disabled={loading} />
+          <div>
+            <Label>Fecha de Expedición</Label>
+            <Input
+              type="date"
+              {...register('fecha_expedicion')}
+              disabled={loading}
+            />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="start_date">Fecha de Inicio</Label>
-            <Input id="start_date" type="date" value={startDate || ''} onChange={handleStartDateChange} disabled={loading} />
+          <div>
+            <Label>Fecha de Inicio</Label>
+            <Input
+              type="date"
+              value={startDate || ''}
+              onChange={handleStartDateChange}
+              disabled={loading}
+            />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="end_date">Fecha de Vencimiento</Label>
-            <Input id="end_date" type="date" {...register('end_date')} disabled={loading} />
+          <div>
+            <Label>Fecha de Vencimiento</Label>
+            <Input
+              type="date"
+              {...register('end_date')}
+              disabled={loading}
+            />
           </div>
         </div>
       </div>
 
-      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-          <FileText className="h-4 w-4" />
+      {/* Valores */}
+      <div className="border rounded-lg p-4 space-y-4">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Layers className="h-4 w-4" />
           Valores de la Póliza
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="currency">Moneda</Label>
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div>
+            <Label>Moneda</Label>
             <Select value={watch('currency') || 'COP'} onValueChange={(value) => setValue('currency', value)} disabled={loading}>
-              <SelectTrigger id="currency"><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="COP">COP</SelectItem>
                 <SelectItem value="USD">USD</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="premium">Prima *</Label>
-            <Input id="premium" type="text" placeholder="$0" value={premiumDisplay} onChange={handlePremiumChange} disabled={loading} />
+          <div>
+            <Label>Prima *</Label>
+            <Input
+              value={premiumDisplay}
+              onChange={handlePremiumChange}
+              disabled={loading}
+              placeholder="$ 0"
+            />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="gastos_expedicion">Gastos Exp.</Label>
-            <Input id="gastos_expedicion" type="text" placeholder="$0" value={gastosDisplay} onChange={handleGastosChange} disabled={loading} />
+          <div>
+            <Label>Gastos Exp.</Label>
+            <Input
+              value={gastosDisplay}
+              onChange={handleGastosChange}
+              disabled={loading}
+              placeholder="$ 0"
+            />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="iva">IVA</Label>
-            <Input id="iva" type="text" placeholder="$0" value={ivaDisplay} onChange={handleIvaChange} disabled={loading} />
+          <div>
+            <Label>IVA</Label>
+            <Input
+              value={ivaDisplay}
+              onChange={handleIvaChange}
+              disabled={loading}
+              placeholder="$ 0"
+            />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="total">Total</Label>
-            <Input id="total" type="text" value={formatCurrency(watch('total_a_pagar') || 0)} disabled={true} className="bg-green-50 font-semibold" />
+          <div>
+            <Label>Total</Label>
+            <Input
+              value={formatCurrency(Number(premium) + Number(gastosExpedicion) + Number(iva))}
+              disabled
+              className="bg-slate-50 font-semibold"
+            />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="commission_pct">Comisión %</Label>
-            <div className="relative">
-              <Input id="commission_pct" type="number" step="0.01" min="0" max="100" {...register('commission_pct', { valueAsNumber: true })} disabled={loading} />
-              {loadingCommission && <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin" />}
+          <div>
+            <Label>Comisión %</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                step="0.1"
+                {...register('commission_pct', { valueAsNumber: true })}
+                disabled={loading}
+              />
+              {loadingCommission && <Loader2 className="h-4 w-4 animate-spin" />}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+      {/* Notas */}
+      <div className="border rounded-lg p-4 space-y-4">
+        <h3 className="font-semibold flex items-center gap-2">
           <MessageSquare className="h-4 w-4" />
           Notas y Comentarios
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="notas">Comentarios adicionales</Label>
-          <Textarea
-            id="notas"
-            placeholder="Ingresa cualquier nota o comentario importante sobre esta póliza..."
-            value={notasValue}
-            onChange={(e) => setNotasValue(e.target.value)}
-            disabled={loading}
-            rows={4}
-            className="resize-none"
-          />
-          <p className="text-xs text-muted-foreground">
-            Puedes agregar observaciones, condiciones especiales, o cualquier información relevante.
-          </p>
-        </div>
+        </h3>
+        <Textarea
+          placeholder="Comentarios adicionales sobre la póliza..."
+          value={notasValue}
+          onChange={(e) => setNotasValue(e.target.value)}
+          disabled={loading}
+          rows={3}
+        />
       </div>
 
-      <div className="flex justify-end gap-3 pt-4 border-t">
+      {/* Actions */}
+      <div className="flex justify-end gap-3 pt-4">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
-            <X className="w-4 h-4 mr-2" />Cancelar
+            <X className="mr-2 h-4 w-4" />
+            Cancelar
           </Button>
         )}
         <Button type="submit" disabled={loading}>
-          {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+          {loading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Save className="mr-2 h-4 w-4" />
+          )}
           {isEditing ? 'Guardar Cambios' : 'Crear Póliza'}
         </Button>
       </div>
