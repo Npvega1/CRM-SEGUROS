@@ -24,7 +24,6 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileEdit } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Schema de validación - todos los campos requeridos tienen tipos estrictos
 const policyFormSchema = z.object({
@@ -238,9 +237,9 @@ export function PolicyForm({
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
         {/* Indicador visual de modificación */}
         {isModification && parentPolicyInfo && (
-          <Alert className="border-amber-500 bg-amber-50">
-            <FileEdit className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-800">
+          <div className="border border-amber-500 bg-amber-50 rounded-lg p-4 flex gap-3">
+            <FileEdit className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-amber-800">
               <strong>Creando Modificación (Anexo {form.getValues('anexo')})</strong>
               <br />
               Póliza Original: <strong>{parentPolicyInfo.policy_number}</strong> - Anexo {parentPolicyInfo.anexo}
@@ -251,8 +250,8 @@ export function PolicyForm({
               <span className="text-sm">
                 Los valores negativos en prima representan reducciones/créditos a favor del cliente.
               </span>
-            </AlertDescription>
-          </Alert>
+            </div>
+          </div>
         )}
 
         {/* Información básica */}
