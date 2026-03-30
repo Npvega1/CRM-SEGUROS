@@ -19,7 +19,7 @@ import { Loader2, Save, X, AlertTriangle, FileEdit } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
 
-// Schema especial para modificaciones (permite valores negativos)
+// Schema especial para modificaciones (permite valores negativos, fechas obligatorias)
 const ModificationSchema = z.object({
   client_id: z.string().uuid('Cliente inválido'),
   policy_number: z.string().min(1, 'El número de póliza es requerido'),
@@ -35,9 +35,9 @@ const ModificationSchema = z.object({
   iva: z.coerce.number().default(0),
   total_a_pagar: z.coerce.number().default(0),
   currency: z.string().default('COP'),
-  start_date: z.string().optional().nullable(),
-  end_date: z.string().optional().nullable(),
-  fecha_expedicion: z.string().optional().nullable(),
+  start_date: z.string().min(1, 'La fecha de inicio es obligatoria'),
+  end_date: z.string().min(1, 'La fecha de vencimiento es obligatoria'),
+  fecha_expedicion: z.string().min(1, 'La fecha de expedición es obligatoria'),
   commission_pct: z.coerce.number().min(0).max(100).default(0),
   policy_type: z.string().default('anexo'),
   parent_policy_id: z.string().uuid(),
@@ -167,8 +167,9 @@ export function PolicyModificationForm({
       iva: 0,
       total_a_pagar: 0,
       commission_pct: parentPolicy.commission_pct || 0,
-      start_date: parentPolicy.start_date,
-      end_date: parentPolicy.end_date,
+      start_date: parentPolicy.start_date || '',
+      end_date: parentPolicy.end_date || '',
+      fecha_expedicion: '',
       policy_type: 'anexo',
       parent_policy_id: parentPolicy.id
     }
@@ -529,35 +530,47 @@ export function PolicyModificationForm({
       {/* Fechas */}
       <div className="bg-white p-6 rounded-lg border space-y-4">
         <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-800">
-          Fechas
+          Fechas <span className="text-red-500 text-sm">(Obligatorias)</span>
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
-            <Label>Fecha de Expedición</Label>
+            <Label>Fecha de Expedición *</Label>
             <Input
               type="date"
               {...register('fecha_expedicion')}
               disabled={loading}
+              className={errors.fecha_expedicion ? 'border-red-500' : ''}
             />
+            {errors.fecha_expedicion && (
+              <p className="text-sm text-red-500">{errors.fecha_expedicion.message}</p>
+            )}
           </div>
 
           <div className="space-y-2">
-            <Label>Fecha de Inicio</Label>
+            <Label>Fecha de Inicio *</Label>
             <Input
               type="date"
               {...register('start_date')}
               disabled={loading}
+              className={errors.start_date ? 'border-red-500' : ''}
             />
+            {errors.start_date && (
+              <p className="text-sm text-red-500">{errors.start_date.message}</p>
+            )}
           </div>
 
           <div className="space-y-2">
-            <Label>Fecha de Vencimiento</Label>
+            <Label>Fecha de Vencimiento *</Label>
             <Input
               type="date"
               {...register('end_date')}
               disabled={loading}
+              className={errors.end_date ? 'border-red-500' : ''}
             />
+            {errors.end_date && (
+              <p className="text-sm text-red-500">{errors.end_date.message}</p>
+            )}
           </div>
         </div>
       </div>
