@@ -3,8 +3,7 @@
 // =====================================================
 // PÁGINA: Lista de Pólizas
 // /polizas
-// Usa Supabase Client directo (evita API Routes con problemas de proxy)
-// NOTA: Solo muestra pólizas base (anexo 00), los anexos se ven en el detalle
+// NOTA: Solo muestra pólizas base (anexo 00), con prima consolidada
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -51,7 +50,8 @@ import {
   ArrowLeft,
   Shield,
   AlertTriangle,
-  Clock
+  Clock,
+  Layers
 } from 'lucide-react';
 
 interface PolicyWithRelations extends Policy {
@@ -61,6 +61,7 @@ interface PolicyWithRelations extends Policy {
     name: string;
     slug: string;
   };
+  consolidated_premium?: number;
   anexo_count?: number;
 }
 
@@ -108,7 +109,7 @@ export default function PoliciesPage() {
     try {
       const supabase = getBrowserClient();
 
-      // Build query - SOLO pólizas base (anexo 00 o null)
+      // Paso 1: Cargar pólizas base (anexo 00 o null)
       let query = supabase
         .from('policies')
         .select(`
@@ -135,16 +136,58 @@ export default function PoliciesPage() {
 
       if (error) {
         console.error('Error loading policies:', error);
-      } else {
-        // Map client name and insurance line
-        const mappedPolicies = (data || []).map((p: Record<string, unknown>) => ({
+        setIsLoading(false);
+        return;
+      }
+
+      // Paso 2: Obtener todos los policy_numbers de las pólizas base cargadas
+      const policyNumbers = (data || []).map((p: Record<string, unknown>) => p.policy_number as string);
+      
+      // Paso 3: Cargar TODOS los anexos para calcular primas consolidadas
+      let consolidatedPremiums: Record<string, { premium: number; count: number }> = {};
+      
+      if (policyNumbers.length > 0) {
+        const { data: allRelatedPolicies } = await supabase
+          .from('policies')
+          .select('policy_number, premium, anexo')
+          .eq('tenant_id', tenantId)
+          .in('policy_number', policyNumbers);
+
+        if (allRelatedPolicies) {
+          // Agrupar por policy_number y sumar primas
+          allRelatedPolicies.forEach((p: Record<string, unknown>) => {
+            const pn = p.policy_number as string;
+            const premium = (p.premium as number) || 0;
+            const anexo = p.anexo as string;
+            
+            if (!consolidatedPremiums[pn]) {
+              consolidatedPremiums[pn] = { premium: 0, count: 0 };
+            }
+            consolidatedPremiums[pn].premium += premium;
+            // Contar anexos (excluir el 00)
+            if (anexo && anexo !== '00') {
+              consolidatedPremiums[pn].count += 1;
+            }
+          });
+        }
+      }
+
+      // Paso 4: Mapear pólizas con prima consolidada
+      const mappedPolicies = (data || []).map((p: Record<string, unknown>) => {
+        const policyNumber = p.policy_number as string;
+        const consolidated = consolidatedPremiums[policyNumber];
+        
+        return {
           ...p,
           client_name: (p.clients as { full_name: string })?.full_name,
-          insurance_line: p.insurance_line as PolicyWithRelations['insurance_line']
-        })) as PolicyWithRelations[];
-        setPolicies(mappedPolicies);
-        setTotal(count || 0);
-      }
+          insurance_line: p.insurance_line as PolicyWithRelations['insurance_line'],
+          consolidated_premium: consolidated?.premium || (p.premium as number) || 0,
+          anexo_count: consolidated?.count || 0
+        };
+      }) as PolicyWithRelations[];
+
+      setPolicies(mappedPolicies);
+      setTotal(count || 0);
     } catch (error) {
       console.error('Error loading policies:', error);
     }
@@ -157,16 +200,50 @@ export default function PoliciesPage() {
     try {
       const supabase = getBrowserClient();
 
-      // Stats solo de pólizas base (anexo 00 o null)
+      // Cargar todas las pólizas para calcular stats con primas consolidadas
       const { data: allPolicies } = await supabase
         .from('policies')
-        .select('status, line, premium, end_date, anexo')
-        .eq('tenant_id', tenantId)
-        .or('anexo.eq.00,anexo.is.null');
+        .select('policy_number, status, line, premium, end_date, anexo')
+        .eq('tenant_id', tenantId);
 
       if (allPolicies) {
-        type PolicyStats = { status: string; line: string; premium: number; end_date: string | null; anexo: string | null };
-        const policiesTyped = allPolicies as PolicyStats[];
+        // Agrupar por policy_number para calcular prima consolidada
+        const policyGroups: Record<string, { 
+          status: string; 
+          line: string; 
+          totalPremium: number; 
+          end_date: string | null;
+          isBase: boolean;
+        }> = {};
+
+        allPolicies.forEach((p: Record<string, unknown>) => {
+          const pn = p.policy_number as string;
+          const anexo = p.anexo as string;
+          const isBase = !anexo || anexo === '00';
+          
+          if (!policyGroups[pn]) {
+            policyGroups[pn] = {
+              status: p.status as string,
+              line: p.line as string,
+              totalPremium: 0,
+              end_date: p.end_date as string | null,
+              isBase: false
+            };
+          }
+          
+          policyGroups[pn].totalPremium += (p.premium as number) || 0;
+          
+          // Usar datos de la póliza base
+          if (isBase) {
+            policyGroups[pn].status = p.status as string;
+            policyGroups[pn].line = p.line as string;
+            policyGroups[pn].end_date = p.end_date as string | null;
+            policyGroups[pn].isBase = true;
+          }
+        });
+
+        // Filtrar solo pólizas que tienen base
+        const basePolicies = Object.values(policyGroups).filter(p => p.isBase);
 
         const byStatus: Record<string, number> = {};
         const byLine: Record<string, number> = {};
@@ -178,16 +255,16 @@ export default function PoliciesPage() {
         endOfMonth.setMonth(endOfMonth.getMonth() + 1);
         endOfMonth.setDate(0);
 
-        policiesTyped.forEach(p => {
+        basePolicies.forEach(p => {
           byStatus[p.status] = (byStatus[p.status] || 0) + 1;
           byLine[p.line] = (byLine[p.line] || 0) + 1;
-          totalPremium += p.premium || 0;
+          totalPremium += p.totalPremium;
           if (p.status === 'activa') active++;
           if (p.end_date && new Date(p.end_date) <= endOfMonth) expiringThisMonth++;
         });
 
         setStats({
-          total: policiesTyped.length,
+          total: basePolicies.length,
           active,
           byStatus,
           byLine,
@@ -263,14 +340,22 @@ export default function PoliciesPage() {
 
   const totalPages = Math.ceil(total / pageSize);
 
-  // Función para formatear moneda con color dinámico
-  const formatPremiumWithColor = (value: number) => {
-    const formatted = formatPremium(value);
+  // Función para formatear prima con color dinámico
+  const formatPremiumDisplay = (value: number, anexoCount?: number) => {
     const isNegative = value < 0;
+    const formatted = formatPremium(value);
     return (
-      <span className={isNegative ? 'text-red-600' : ''}>
-        {formatted}
-      </span>
+      <div className="flex items-center gap-1">
+        <span className={isNegative ? 'text-red-600' : ''}>
+          {formatted}
+        </span>
+        {anexoCount && anexoCount > 0 && (
+          <Badge variant="outline" className="text-xs px-1 py-0">
+            <Layers className="h-3 w-3 mr-1" />
+            {anexoCount}
+          </Badge>
+        )}
+      </div>
     );
   };
 
@@ -314,8 +399,10 @@ export default function PoliciesPage() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">Prima Total</p>
-              <p className="text-3xl font-bold">{formatPremium(stats.totalPremium)}</p>
+              <p className="text-sm text-muted-foreground">Prima Total Consolidada</p>
+              <p className={`text-3xl font-bold ${stats.totalPremium < 0 ? 'text-red-600' : ''}`}>
+                {formatPremium(stats.totalPremium)}
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -418,7 +505,7 @@ export default function PoliciesPage() {
                   <TableHead>Cliente</TableHead>
                   <TableHead>Aseguradora</TableHead>
                   <TableHead>Ramo</TableHead>
-                  <TableHead>Prima</TableHead>
+                  <TableHead>Prima Consolidada</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Vencimiento</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -435,7 +522,9 @@ export default function PoliciesPage() {
                         {policy.insurance_line?.name || POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line || '-'}
                       </Badge>
                     </TableCell>
-                    <TableCell>{formatPremiumWithColor(policy.premium)}</TableCell>
+                    <TableCell>
+                      {formatPremiumDisplay(policy.consolidated_premium || policy.premium, policy.anexo_count)}
+                    </TableCell>
                     <TableCell>
                       <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus]}>
                         {POLICY_STATUS_LABELS[policy.status as PolicyStatus]}
