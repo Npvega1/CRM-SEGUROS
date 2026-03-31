@@ -49,7 +49,8 @@ import {
   Eye,
   Shield,
   AlertTriangle,
-  Layers
+  Layers,
+  RefreshCw
 } from 'lucide-react';
 
 interface PolicyWithRelations extends Policy {
@@ -61,6 +62,7 @@ interface PolicyWithRelations extends Policy {
   };
   consolidated_premium?: number;
   anexo_count?: number;
+  is_renewal?: boolean;
 }
 
 interface PolicyStats {
@@ -158,13 +160,16 @@ export default function PoliciesPage() {
       const mappedPolicies = (data || []).map((p: Record<string, unknown>) => {
         const policyNumber = p.policy_number as string;
         const consolidated = consolidatedPremiums[policyNumber];
+        const policyType = p.policy_type as string | null;
+        const renewedFrom = p.renewed_from_policy_id as string | null;
 
         return {
           ...p,
           client_name: (p.clients as { full_name: string })?.full_name,
           insurance_line: p.insurance_line as PolicyWithRelations['insurance_line'],
           consolidated_premium: consolidated?.premium || (p.premium as number) || 0,
-          anexo_count: consolidated?.count || 0
+          anexo_count: consolidated?.count || 0,
+          is_renewal: policyType === 'renovacion' || !!renewedFrom
         };
       }) as PolicyWithRelations[];
 
@@ -407,7 +412,17 @@ export default function PoliciesPage() {
               <TableBody>
                 {policies.map((policy) => (
                   <TableRow key={policy.id}>
-                    <TableCell className="font-medium">{policy.policy_number}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {policy.policy_number}
+                        {policy.is_renewal && (
+                          <Badge variant="outline" className="text-xs px-1.5 py-0 text-blue-700 border-blue-300 bg-blue-50">
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Renovación
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{policy.client_name || 'N/A'}</TableCell>
                     <TableCell>{policy.insurer}</TableCell>
                     <TableCell>
