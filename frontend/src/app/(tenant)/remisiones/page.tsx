@@ -237,7 +237,7 @@ export default function RemisionesPage() {
         return;
       }
 
-      const { data, error } = await supabase.rpc('remisionar_poliza', {
+      const { data, error } = await (supabase.rpc as any)('remisionar_poliza', {
         p_remision_id: selectedRemision.id,
         p_responsable_id: user.id,
         p_notas: notasRemision || null,
