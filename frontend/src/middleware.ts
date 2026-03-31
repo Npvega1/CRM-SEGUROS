@@ -18,6 +18,7 @@ const PUBLIC_ROUTES = [
   '/forgot-password',
   '/recuperar-password',
   '/reset-password',
+  '/auth/callback',
   '/sin-organizacion',
   '/invitacion'
 ];
