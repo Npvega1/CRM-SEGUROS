@@ -76,7 +76,6 @@ interface RemisionWithPolicy {
 
 export default function RemisionesPage() {
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
-
   const [activeTab, setActiveTab] = useState<'pendiente' | 'remisionada'>('pendiente');
   const [remisiones, setRemisiones] = useState<RemisionWithPolicy[]>([]);
   const [total, setTotal] = useState(0);
@@ -94,11 +93,9 @@ export default function RemisionesPage() {
 
   const loadRemisiones = useCallback(async () => {
     if (!tenantId) return;
-
     setIsLoading(true);
     try {
       const supabase = getBrowserClient();
-
       let query = supabase
         .from('remisiones')
         .select(`
@@ -132,7 +129,6 @@ export default function RemisionesPage() {
 
       if (error) {
         console.error('Error loading remisiones:', error);
-
         if (searchQuery) {
           const fallbackQuery = supabase
             .from('remisiones')
@@ -158,7 +154,6 @@ export default function RemisionesPage() {
             .range((page - 1) * pageSize, page * pageSize - 1);
 
           const { data: fbData } = await fallbackQuery;
-
           if (fbData) {
             const filtered = fbData.filter((r: RemisionWithPolicy) =>
               r.policy?.policy_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -169,7 +164,6 @@ export default function RemisionesPage() {
             setTotal(filtered.length);
           }
         }
-
         setIsLoading(false);
         return;
       }
@@ -184,10 +178,8 @@ export default function RemisionesPage() {
 
   const loadCounts = useCallback(async () => {
     if (!tenantId) return;
-
     try {
       const supabase = getBrowserClient();
-
       const [pendientes, remisionadas] = await Promise.all([
         supabase
           .from('remisiones')
@@ -200,7 +192,6 @@ export default function RemisionesPage() {
           .eq('tenant_id', tenantId)
           .eq('estado', 'remisionada'),
       ]);
-
       setPendientesCount(pendientes.count || 0);
       setRemisionadasCount(remisionadas.count || 0);
     } catch (error) {
@@ -223,11 +214,9 @@ export default function RemisionesPage() {
 
   const handleRemisionar = async () => {
     if (!selectedRemision) return;
-
     setIsSubmitting(true);
     try {
       const supabase = getBrowserClient();
-
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         toast.error('Error: No se pudo obtener el usuario actual');
@@ -247,7 +236,6 @@ export default function RemisionesPage() {
       }
 
       const result = data as { success: boolean; numero_remision?: string; error?: string };
-
       if (result && result.success) {
         toast.success(`Remisionada exitosamente: ${result.numero_remision}`);
         setShowDialog(false);
@@ -280,35 +268,42 @@ export default function RemisionesPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card className={`cursor-pointer transition-all ${activeTab === 'pendiente' ? 'ring-2 ring-amber-500' : ''}`}
+      {/* Tabs compactos (reemplaza tarjetas grandes) */}
+      <div className="flex items-center gap-2">
+        <button
           onClick={() => { setActiveTab('pendiente'); setPage(1); }}
-          data-testid="tab-pendientes">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Pendientes de Remisionar</p>
-                <p className="text-3xl font-bold text-amber-600">{pendientesCount}</p>
-              </div>
-              <Clock className="w-10 h-10 text-amber-500 opacity-50" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className={`cursor-pointer transition-all ${activeTab === 'remisionada' ? 'ring-2 ring-green-500' : ''}`}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            activeTab === 'pendiente'
+              ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-300'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+          data-testid="tab-pendientes"
+        >
+          <Clock className="w-3.5 h-3.5" />
+          Pendientes
+          <span className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+            activeTab === 'pendiente' ? 'bg-amber-200 text-amber-900' : 'bg-slate-200 text-slate-700'
+          }`}>
+            {pendientesCount}
+          </span>
+        </button>
+        <button
           onClick={() => { setActiveTab('remisionada'); setPage(1); }}
-          data-testid="tab-remisionadas">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Remisionadas</p>
-                <p className="text-3xl font-bold text-green-600">{remisionadasCount}</p>
-              </div>
-              <CheckCircle className="w-10 h-10 text-green-500 opacity-50" />
-            </div>
-          </CardContent>
-        </Card>
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            activeTab === 'remisionada'
+              ? 'bg-green-100 text-green-800 ring-1 ring-green-300'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+          data-testid="tab-remisionadas"
+        >
+          <CheckCircle className="w-3.5 h-3.5" />
+          Remisionadas
+          <span className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+            activeTab === 'remisionada' ? 'bg-green-200 text-green-900' : 'bg-slate-200 text-slate-700'
+          }`}>
+            {remisionadasCount}
+          </span>
+        </button>
       </div>
 
       {/* Search */}
@@ -376,8 +371,8 @@ export default function RemisionesPage() {
                     <TableCell className="py-2 text-xs">{remision.policy?.insurer}</TableCell>
                     <TableCell className="py-2 text-xs">
                       {remision.policy?.insurance_line?.name ||
-                       POLICY_LINE_LABELS[remision.policy?.line as PolicyLine] ||
-                       remision.policy?.line || '-'}
+                        POLICY_LINE_LABELS[remision.policy?.line as PolicyLine] ||
+                        remision.policy?.line || '-'}
                     </TableCell>
                     <TableCell className="py-2 text-xs text-right font-medium">
                       {formatPremium(remision.policy?.premium || 0)}
