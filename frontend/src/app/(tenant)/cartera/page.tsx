@@ -355,17 +355,22 @@ export default function CarteraPage() {
     setShowPagoDialog(true);
   };
 
-  const calcularDesglose = (totalStr: string) => {
-    const total = parseFloat(totalStr) || 0;
-    const prima = Math.round(total / 1.19);
-    const iva = total - prima;
-    return { prima, iva, total };
+  const getRawPago = (): number => {
+    return parseInt(pagoTotal.replace(/\D/g, '') || '0');
+  };
+
+  const calcularDesglose = (rawValue: number) => {
+    const prima = Math.round(rawValue / 1.19);
+    const iva = rawValue - prima;
+    return { prima, iva, total: rawValue };
   };
 
   const handleSubmitPago = async () => {
     if (!selectedCartera) return;
 
-    const { prima, iva, total: montoTotal } = calcularDesglose(pagoTotal);
+    const montoTotal = getRawPago();
+    const { prima, iva } = calcularDesglose(montoTotal);
+
     if (montoTotal <= 0) {
       toast.error('El monto total debe ser mayor a 0');
       return;
@@ -395,7 +400,6 @@ export default function CarteraPage() {
       const result = data as { success: boolean; pago_id?: string; estado?: string; saldo_pendiente?: number; error?: string };
 
       if (result && result.success) {
-        // Subir comprobante si existe
         if (comprobanteFile && result.pago_id) {
           const timestamp = Date.now();
           const safeName = comprobanteFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
@@ -667,7 +671,7 @@ export default function CarteraPage() {
 
       {/* Dialog: Metodo de Pago */}
       <Dialog open={showMetodoDialog} onOpenChange={setShowMetodoDialog}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Metodo de Pago</DialogTitle>
             <DialogDescription>
@@ -675,7 +679,7 @@ export default function CarteraPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto flex-1">
             <div className="space-y-2">
               <Label>Metodo de pago</Label>
               <Select value={metodoForm.metodo_pago} onValueChange={(v) => setMetodoForm(prev => ({ ...prev, metodo_pago: v }))}>
@@ -768,7 +772,7 @@ export default function CarteraPage() {
 
       {/* Dialog: Registrar Pago */}
       <Dialog open={showPagoDialog} onOpenChange={setShowPagoDialog}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Registrar Pago</DialogTitle>
             <DialogDescription>
@@ -776,7 +780,7 @@ export default function CarteraPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto flex-1">
             <div className="bg-slate-50 rounded-lg p-4 space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Valor total poliza:</span>
@@ -804,25 +808,28 @@ export default function CarteraPage() {
             <div className="space-y-2">
               <Label>Total a pagar</Label>
               <Input
-                type="number"
-                placeholder="Ingrese el valor total del recibo"
-                value={pagoTotal}
-                onChange={(e) => setPagoTotal(e.target.value)}
+                type="text"
+                inputMode="numeric"
+                placeholder="$0"
+                value={pagoTotal ? '$' + parseInt(pagoTotal.replace(/\D/g, '') || '0').toLocaleString('es-CO') : ''}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\D/g, '');
+                  setPagoTotal(raw);
+                }}
                 className="font-semibold text-lg"
               />
             </div>
 
-            {/* Desglose automatico */}
-            {parseFloat(pagoTotal) > 0 && (
+            {getRawPago() > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1 text-sm">
                 <p className="font-medium text-blue-800 mb-1">Desglose automatico:</p>
                 <div className="flex justify-between text-blue-700">
                   <span>Prima:</span>
-                  <span>{formatPremium(calcularDesglose(pagoTotal).prima)}</span>
+                  <span>{formatPremium(calcularDesglose(getRawPago()).prima)}</span>
                 </div>
                 <div className="flex justify-between text-blue-700">
                   <span>IVA (19%):</span>
-                  <span>{formatPremium(calcularDesglose(pagoTotal).iva)}</span>
+                  <span>{formatPremium(calcularDesglose(getRawPago()).iva)}</span>
                 </div>
               </div>
             )}
@@ -837,7 +844,6 @@ export default function CarteraPage() {
               />
             </div>
 
-            {/* Comprobante de pago */}
             <div className="space-y-2">
               <Label>Comprobante de pago (opcional)</Label>
               <input
@@ -872,12 +878,12 @@ export default function CarteraPage() {
               )}
             </div>
 
-            {selectedCartera && parseFloat(pagoTotal) > 0 && parseFloat(pagoTotal) < selectedCartera.saldo_pendiente && (
+            {selectedCartera && getRawPago() > 0 && getRawPago() < selectedCartera.saldo_pendiente && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
-                Este pago se registrara como <strong>abono parcial</strong>. Saldo restante: {formatPremium(selectedCartera.saldo_pendiente - (parseFloat(pagoTotal) || 0))}
+                Este pago se registrara como <strong>abono parcial</strong>. Saldo restante: {formatPremium(selectedCartera.saldo_pendiente - getRawPago())}
               </div>
             )}
-            {selectedCartera && parseFloat(pagoTotal) >= selectedCartera.saldo_pendiente && parseFloat(pagoTotal) > 0 && (
+            {selectedCartera && getRawPago() >= selectedCartera.saldo_pendiente && getRawPago() > 0 && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
                 Este pago cubrira el <strong>saldo total</strong>. La poliza quedara como pagada.
               </div>
@@ -895,7 +901,7 @@ export default function CarteraPage() {
 
       {/* Dialog: Historial */}
       <Dialog open={showHistorialDialog} onOpenChange={setShowHistorialDialog}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Historial de Pagos</DialogTitle>
             <DialogDescription>
@@ -908,8 +914,7 @@ export default function CarteraPage() {
               <Loader2 className="w-6 h-6 animate-spin" />
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* Resumen */}
+            <div className="space-y-4 overflow-y-auto flex-1">
               <div className="bg-slate-50 rounded-lg p-4 space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Valor total:</span>
@@ -927,7 +932,6 @@ export default function CarteraPage() {
                 </div>
               </div>
 
-              {/* Cuotas (si aplica) */}
               {historialCuotas.length > 0 && (
                 <div>
                   <h4 className="font-medium text-sm mb-2">Cuotas del Acuerdo</h4>
@@ -946,7 +950,6 @@ export default function CarteraPage() {
                 </div>
               )}
 
-              {/* Pagos */}
               <div>
                 <h4 className="font-medium text-sm mb-2">Pagos Registrados ({historialPagos.length})</h4>
                 {historialPagos.length === 0 ? (
