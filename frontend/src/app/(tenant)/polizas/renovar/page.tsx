@@ -153,21 +153,7 @@ function RenewPolicyContent() {
     try {
       const supabase = getBrowserClient();
 
-      // 1. PRIMERO: Obtener los IDs de TODAS las pólizas de la vigencia anterior
-      //    (póliza base + sus anexos) ANTES de crear la nueva
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: oldPolicies } = await (supabase as any)
-        .from('policies')
-        .select('id')
-        .eq('policy_number', originalPolicy.policy_number)
-        .eq('tenant_id', tenantId)
-        .neq('status', 'inactiva')
-        .neq('status', 'cancelada');
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const oldIds = (oldPolicies || []).map((p: any) => p.id as string);
-
-      // 2. Crear la nueva póliza (renovación)
+      // 1. Crear la nueva póliza (renovación)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: newPolicy, error: insertError } = await (supabase as any)
         .from('policies')
@@ -209,23 +195,21 @@ function RenewPolicyContent() {
         return;
       }
 
-      // 3. Marcar las pólizas de la vigencia anterior como "inactiva" usando sus IDs explícitos
-      if (oldIds.length > 0) {
-        // Actualizar una por una para evitar problemas con Supabase
-        for (const oldId of oldIds) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any)
-            .from('policies')
-            .update({
-              status: 'inactiva',
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', oldId)
-            .eq('tenant_id', tenantId);
-        }
+      // 2. Llamar función RPC para desactivar pólizas de la vigencia anterior
+      //    SECURITY DEFINER bypasses RLS
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: rpcError } = await (supabase.rpc as any)('deactivate_old_policies', {
+        p_policy_number: originalPolicy.policy_number,
+        p_tenant_id: tenantId,
+        p_exclude_id: newPolicy.id
+      });
+
+      if (rpcError) {
+        console.error('Error deactivating old policies:', rpcError);
+        // No bloquear — la renovación ya se creó
       }
 
-      // 4. Redirigir a la nueva póliza
+      // 3. Redirigir a la nueva póliza
       router.push(`/polizas/${newPolicy.id}`);
 
     } catch {
