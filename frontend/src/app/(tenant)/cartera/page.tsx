@@ -23,7 +23,8 @@ import { formatPremium, formatDate } from '@/lib/validations/policies';
 import { getBrowserClient } from '@/lib/supabase/client';
 import {
   Search, Eye, DollarSign, Clock, CheckCircle, Loader2, ChevronLeft, ChevronRight,
-  Wallet, FileText, Settings2, Upload, Paperclip, File, ChevronDown, Landmark, CalendarClock
+  Wallet, FileText, Settings2, Upload, Paperclip, File, ChevronDown, Landmark, CalendarClock,
+  Ban, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -32,7 +33,7 @@ interface CarteraWithPolicy {
   policy_id: string;
   remision_id: string;
   metodo_pago: 'contado' | 'financiado' | 'acuerdo_pago';
-  estado: 'pendiente' | 'abono' | 'pagada';
+  estado: 'pendiente' | 'abono' | 'pagada' | 'castigada';
   valor_prima: number;
   valor_iva: number;
   valor_gastos: number;
@@ -81,11 +82,12 @@ interface CuotaAcuerdo {
 }
 
 const METODO_LABELS: Record<string, string> = { contado: 'Contado', financiado: 'Financiado', acuerdo_pago: 'Acuerdo' };
-const ESTADO_LABELS: Record<string, string> = { pendiente: 'Pendiente', abono: 'Abono', pagada: 'Pagada' };
+const ESTADO_LABELS: Record<string, string> = { pendiente: 'Pendiente', abono: 'Abono', pagada: 'Pagada', castigada: 'Castigada' };
 const ESTADO_COLORS: Record<string, string> = {
   pendiente: 'bg-amber-50 text-amber-700 border-amber-300',
   abono: 'bg-blue-50 text-blue-700 border-blue-300',
   pagada: 'bg-green-50 text-green-700 border-green-300',
+  castigada: 'bg-red-50 text-red-700 border-red-300',
 };
 
 const getCuotaStatusStyle = (cuota: CuotaAcuerdo) => {
@@ -108,14 +110,14 @@ const isPolicyCancelled = (item: CarteraWithPolicy) => item.policy?.status === '
 
 export default function CarteraPage() {
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
-  const [activeTab, setActiveTab] = useState<'pendiente' | 'abono' | 'pagada' | 'all'>('all');
+  const [activeTab, setActiveTab] = useState<'pendiente' | 'abono' | 'pagada' | 'castigada' | 'all'>('all');
   const [cartera, setCartera] = useState<CarteraWithPolicy[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [resumen, setResumen] = useState({ totalCartera: 0, totalRecaudado: 0, totalPendiente: 0, countPendiente: 0, countAbono: 0, countPagada: 0, countFinanciado: 0, countAcuerdos: 0 });
+  const [resumen, setResumen] = useState({ totalCartera: 0, totalRecaudado: 0, totalPendiente: 0, countPendiente: 0, countAbono: 0, countPagada: 0, countCastigada: 0, countFinanciado: 0, countAcuerdos: 0 });
 
   const [showPagoDialog, setShowPagoDialog] = useState(false);
   const [selectedCartera, setSelectedCartera] = useState<CarteraWithPolicy | null>(null);
@@ -137,6 +139,10 @@ export default function CarteraPage() {
   const [historialPagos, setHistorialPagos] = useState<PagoRegistro[]>([]);
   const [historialCuotas, setHistorialCuotas] = useState<CuotaAcuerdo[]>([]);
   const [isLoadingHistorial, setIsLoadingHistorial] = useState(false);
+
+  const [showCastigarDialog, setShowCastigarDialog] = useState(false);
+  const [castigarItem, setCastigarItem] = useState<CarteraWithPolicy | null>(null);
+  const [isSubmittingCastigar, setIsSubmittingCastigar] = useState(false);
 
   // Report state
   const [reportTab, setReportTab] = useState<'none' | 'financiado' | 'acuerdos'>('none');
@@ -187,15 +193,18 @@ export default function CarteraPage() {
       const supabase = getBrowserClient();
       const { data } = await supabase.from('cartera').select('estado, metodo_pago, valor_total, total_pagado, saldo_pendiente, policy:policies!inner(status)').eq('tenant_id', tenantId);
       if (data) {
-        let totalCartera = 0, totalRecaudado = 0, totalPendiente = 0, countPendiente = 0, countAbono = 0, countPagada = 0, countFinanciado = 0, countAcuerdos = 0;
+        let totalCartera = 0, totalRecaudado = 0, totalPendiente = 0, countPendiente = 0, countAbono = 0, countPagada = 0, countCastigada = 0, countFinanciado = 0, countAcuerdos = 0;
         data.forEach((c: any) => {
           totalCartera += c.valor_total || 0; totalRecaudado += c.total_pagado || 0; totalPendiente += c.saldo_pendiente || 0;
-          if (c.estado === 'pendiente') countPendiente++; else if (c.estado === 'abono') countAbono++; else if (c.estado === 'pagada') countPagada++;
+          if (c.estado === 'pendiente') countPendiente++;
+          else if (c.estado === 'abono') countAbono++;
+          else if (c.estado === 'pagada') countPagada++;
+          else if (c.estado === 'castigada') countCastigada++;
           const policyStatus = c.policy?.status;
           if (c.metodo_pago === 'financiado' && policyStatus !== 'cancelada') countFinanciado++;
-          if (c.metodo_pago === 'acuerdo_pago' && c.estado !== 'pagada' && policyStatus !== 'cancelada') countAcuerdos++;
+          if (c.metodo_pago === 'acuerdo_pago' && c.estado !== 'pagada' && c.estado !== 'castigada' && policyStatus !== 'cancelada') countAcuerdos++;
         });
-        setResumen({ totalCartera, totalRecaudado, totalPendiente, countPendiente, countAbono, countPagada, countFinanciado, countAcuerdos });
+        setResumen({ totalCartera, totalRecaudado, totalPendiente, countPendiente, countAbono, countPagada, countCastigada, countFinanciado, countAcuerdos });
       }
     } catch (e) { console.error(e); }
   }, [tenantId]);
@@ -228,6 +237,7 @@ export default function CarteraPage() {
       const today = new Date().toISOString().split('T')[0];
       let filtered = ((data || []) as CarteraWithPolicy[]).filter(item => {
         if (isPolicyCancelled(item)) return false;
+        if (item.estado === 'castigada') return false;
         if (item.policy?.end_date && item.policy.end_date < today) return false;
         if (dateFrom && item.fecha_desembolso && item.fecha_desembolso < dateFrom) return false;
         if (dateTo && item.fecha_desembolso && item.fecha_desembolso > dateTo) return false;
@@ -249,6 +259,7 @@ export default function CarteraPage() {
         .eq('tenant_id', tenantId)
         .eq('metodo_pago', 'acuerdo_pago')
         .neq('estado', 'pagada')
+        .neq('estado', 'castigada')
         .order('fecha_ingreso', { ascending: false });
 
       if (error) { console.error(error); setIsLoadingReport(false); return; }
@@ -413,6 +424,24 @@ export default function CarteraPage() {
     setIsSubmittingPago(false);
   };
 
+  const handleCastigar = async () => {
+    if (!castigarItem) return;
+    setIsSubmittingCastigar(true);
+    try {
+      const supabase = getBrowserClient();
+      const { error } = await (supabase as any).from('cartera')
+        .update({ estado: 'castigada', updated_at: new Date().toISOString() })
+        .eq('id', castigarItem.id);
+      if (error) { toast.error('Error: ' + error.message); setIsSubmittingCastigar(false); return; }
+      toast.success('Cartera marcada como castigada');
+      setShowCastigarDialog(false); setCastigarItem(null);
+      loadCartera(); loadResumen();
+      if (reportTab === 'financiado') loadFinanciado();
+      if (reportTab === 'acuerdos') loadAcuerdos();
+    } catch { toast.error('Error inesperado'); }
+    setIsSubmittingCastigar(false);
+  };
+
   const handleViewComprobante = async (url: string) => {
     try {
       const supabase = getBrowserClient();
@@ -452,21 +481,18 @@ export default function CarteraPage() {
         <p className="text-sm text-muted-foreground">{tenantName}</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Cartera Total</p><p className="text-2xl font-bold text-slate-900">{formatPremium(resumen.totalCartera)}</p></div><Wallet className="w-9 h-9 text-slate-400 opacity-50" /></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Recaudado</p><p className="text-2xl font-bold text-green-600">{formatPremium(resumen.totalRecaudado)}</p></div><CheckCircle className="w-9 h-9 text-green-400 opacity-50" /></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Pendiente por Cobrar</p><p className="text-2xl font-bold text-amber-600">{formatPremium(resumen.totalPendiente)}</p></div><Clock className="w-9 h-9 text-amber-400 opacity-50" /></div></CardContent></Card>
-      </div>
-
       {/* Status tabs */}
       <div className="flex flex-wrap gap-2">
         {[
-          { key: 'all', label: 'Todas', count: resumen.countPendiente + resumen.countAbono + resumen.countPagada },
+          { key: 'all', label: 'Todas', count: resumen.countPendiente + resumen.countAbono + resumen.countPagada + resumen.countCastigada },
           { key: 'pendiente', label: 'Pendientes', count: resumen.countPendiente },
           { key: 'abono', label: 'Con abono', count: resumen.countAbono },
           { key: 'pagada', label: 'Pagadas', count: resumen.countPagada },
+          { key: 'castigada', label: 'Castigadas', count: resumen.countCastigada },
         ].map(tab => (
-          <Button key={tab.key} variant={reportTab === 'none' && activeTab === tab.key ? 'default' : 'outline'} size="sm"
+          <Button key={tab.key} size="sm"
+            variant={reportTab === 'none' && activeTab === tab.key ? 'default' : 'outline'}
+            className={tab.key === 'castigada' && reportTab === 'none' && activeTab === tab.key ? 'bg-red-600 hover:bg-red-700' : tab.key === 'castigada' ? 'border-red-300 text-red-600 hover:bg-red-50' : ''}
             onClick={() => { setActiveTab(tab.key as typeof activeTab); setReportTab('none'); setPage(1); }}>{tab.label} ({tab.count})</Button>
         ))}
       </div>
@@ -513,14 +539,12 @@ export default function CarteraPage() {
       {/* Content area */}
       {reportTab === 'none' ? (
         <>
-          {/* Search */}
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Buscar por poliza, cliente o remision..." value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} className="pl-10" />
           </div>
 
-          {/* Main cartera table */}
           <Card>
             <CardContent className="p-0">
               {isLoading ? (
@@ -545,7 +569,7 @@ export default function CarteraPage() {
                   </TableHeader>
                   <TableBody>
                     {cartera.map((item) => (
-                      <TableRow key={item.id} className="text-xs">
+                      <TableRow key={item.id} className={`text-xs ${item.estado === 'castigada' ? 'opacity-60' : ''}`}>
                         <TableCell className="py-2"><span className="font-mono text-[11px] text-slate-500">{item.remision?.numero_remision || '-'}</span></TableCell>
                         <TableCell className="py-2 font-medium text-xs">{item.policy?.policy_number}</TableCell>
                         <TableCell className="py-2 text-xs">{item.policy?.anexo || '00'}</TableCell>
@@ -562,10 +586,18 @@ export default function CarteraPage() {
                             <Link href={`/polizas/${item.policy_id}`}><Button variant="ghost" size="icon" className="h-7 w-7"><Eye className="w-3.5 h-3.5" /></Button></Link>
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenMetodo(item)}><Settings2 className="w-3.5 h-3.5" /></Button>
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenHistorial(item)}><FileText className="w-3.5 h-3.5" /></Button>
-                            {item.estado !== 'pagada' && (
-                              <Button size="sm" onClick={() => handleOpenPago(item)} className="bg-green-600 hover:bg-green-700 h-7 text-xs px-2">
-                                <DollarSign className="w-3 h-3 mr-1" />Pagar
-                              </Button>
+                            {item.estado !== 'pagada' && item.estado !== 'castigada' && (
+                              <>
+                                <Button size="sm" onClick={() => handleOpenPago(item)} className="bg-green-600 hover:bg-green-700 h-7 text-xs px-2">
+                                  <DollarSign className="w-3 h-3 mr-1" />Pagar
+                                </Button>
+                                {item.saldo_pendiente > 0 && (
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => { setCastigarItem(item); setShowCastigarDialog(true); }}>
+                                    <Ban className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                              </>
                             )}
                           </div>
                         </TableCell>
@@ -589,7 +621,6 @@ export default function CarteraPage() {
           )}
         </>
       ) : reportTab === 'financiado' ? (
-        /* ===== REPORTE FINANCIADO ===== */
         <>
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -639,7 +670,6 @@ export default function CarteraPage() {
           </Card>
         </>
       ) : (
-        /* ===== REPORTE ACUERDOS DE PAGO ===== */
         <>
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -746,6 +776,32 @@ export default function CarteraPage() {
           </Card>
         </>
       )}
+
+      {/* Dialog: Castigar */}
+      <Dialog open={showCastigarDialog} onOpenChange={setShowCastigarDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-5 h-5" />Castigar Cartera</DialogTitle>
+            <DialogDescription>
+              Esta accion marcara la cartera de la poliza <span className="font-semibold">{castigarItem?.policy?.policy_number}</span> como castigada. El saldo pendiente de <span className="font-semibold text-red-600">{formatPremium(castigarItem?.saldo_pendiente || 0)}</span> se considerara como perdida.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 space-y-1">
+            <p className="font-medium">Esta accion:</p>
+            <ul className="list-disc pl-4 text-xs space-y-0.5">
+              <li>Marca el registro como castigada (no cobrable)</li>
+              <li>Lo remueve de los reportes de control</li>
+              <li>El historial de pagos previos se conserva</li>
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCastigarDialog(false)} disabled={isSubmittingCastigar}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleCastigar} disabled={isSubmittingCastigar}>
+              {isSubmittingCastigar ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Procesando...</> : <><Ban className="w-4 h-4 mr-2" />Castigar</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog: Metodo de Pago */}
       <Dialog open={showMetodoDialog} onOpenChange={setShowMetodoDialog}>
