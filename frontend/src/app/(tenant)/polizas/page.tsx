@@ -112,7 +112,6 @@ export default function PoliciesPage() {
 
       const statusesForTab = TAB_STATUS_MAP[activeTab];
 
-      // Paso 1: Cargar pólizas base (anexo 00 o null) filtradas por tab
       let query = supabase
         .from('policies')
         .select(`
@@ -141,17 +140,18 @@ export default function PoliciesPage() {
         return;
       }
 
-      // Paso 2: Obtener policy_numbers para calcular primas consolidadas
       const policyNumbers = (data || []).map((p: Record<string, unknown>) => p.policy_number as string);
 
       let consolidatedPremiums: Record<string, { premium: number; count: number }> = {};
 
-      if (policyNumbers.length > 0) {
+      if (policyNumbers.length > 0 && activeTab === 'activas') {
+        // Solo calcular prima consolidada para pólizas activas
         const { data: allRelatedPolicies } = await supabase
           .from('policies')
-          .select('policy_number, premium, anexo')
+          .select('policy_number, premium, anexo, status')
           .eq('tenant_id', tenantId)
-          .in('policy_number', policyNumbers);
+          .in('policy_number', policyNumbers)
+          .in('status', ['activa', 'cotizacion', 'renovacion']);
 
         if (allRelatedPolicies) {
           allRelatedPolicies.forEach((p: Record<string, unknown>) => {
@@ -171,7 +171,6 @@ export default function PoliciesPage() {
         }
       }
 
-      // Paso 3: Mapear pólizas
       const mappedPolicies = (data || []).map((p: Record<string, unknown>) => {
         const policyNumber = p.policy_number as string;
         const consolidated = consolidatedPremiums[policyNumber];
@@ -203,89 +202,77 @@ export default function PoliciesPage() {
     try {
       const supabase = getBrowserClient();
 
-      const { data: allPolicies } = await supabase
+      // Contar directamente por status para cada tab (sin agrupar por policy_number)
+      const { count: activeCount } = await supabase
         .from('policies')
-        .select('policy_number, status, line, premium, end_date, anexo')
-        .eq('tenant_id', tenantId);
+        .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .in('status', ['activa', 'cotizacion', 'renovacion'])
+        .or('anexo.eq.00,anexo.is.null');
 
-      if (allPolicies) {
-        const policyGroups: Record<string, {
-          status: string;
-          line: string;
-          totalPremium: number;
-          end_date: string | null;
-          isBase: boolean;
-        }> = {};
+      const { count: cancelledCount } = await supabase
+        .from('policies')
+        .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .eq('status', 'cancelada')
+        .or('anexo.eq.00,anexo.is.null');
 
-        allPolicies.forEach((p: Record<string, unknown>) => {
-          const pn = p.policy_number as string;
-          const anexo = p.anexo as string;
-          const isBase = !anexo || anexo === '00';
+      const { count: notRenewedCount } = await supabase
+        .from('policies')
+        .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .in('status', ['no_renovada', 'vencida'])
+        .or('anexo.eq.00,anexo.is.null');
 
-          if (!policyGroups[pn]) {
-            policyGroups[pn] = {
-              status: p.status as string,
-              line: p.line as string,
-              totalPremium: 0,
-              end_date: p.end_date as string | null,
-              isBase: false
-            };
-          }
+      const { count: inactiveCount } = await supabase
+        .from('policies')
+        .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .eq('status', 'inactiva')
+        .or('anexo.eq.00,anexo.is.null');
 
-          policyGroups[pn].totalPremium += (p.premium as number) || 0;
+      // Calcular prima total de pólizas activas
+      const { data: activePolicies } = await supabase
+        .from('policies')
+        .select('premium')
+        .eq('tenant_id', tenantId)
+        .in('status', ['activa', 'cotizacion', 'renovacion']);
 
-          if (isBase) {
-            policyGroups[pn].status = p.status as string;
-            policyGroups[pn].line = p.line as string;
-            policyGroups[pn].end_date = p.end_date as string | null;
-            policyGroups[pn].isBase = true;
-          }
-        });
-
-        const basePolicies = Object.values(policyGroups).filter(p => p.isBase);
-
-        const byStatus: Record<string, number> = {};
-        const byLine: Record<string, number> = {};
-        let totalPremium = 0;
-        let active = 0;
-        let cancelled = 0;
-        let notRenewed = 0;
-        let inactive = 0;
-        let expiringThisMonth = 0;
-
-        const endOfMonth = new Date();
-        endOfMonth.setMonth(endOfMonth.getMonth() + 1);
-        endOfMonth.setDate(0);
-
-        basePolicies.forEach(p => {
-          byStatus[p.status] = (byStatus[p.status] || 0) + 1;
-          byLine[p.line] = (byLine[p.line] || 0) + 1;
-
-          if (p.status === 'activa' || p.status === 'cotizacion' || p.status === 'renovacion') {
-            totalPremium += p.totalPremium;
-            active++;
-          }
-          if (p.status === 'cancelada') cancelled++;
-          if (p.status === 'no_renovada' || p.status === 'vencida') notRenewed++;
-          if (p.status === 'inactiva') inactive++;
-
-          if (p.status === 'activa' && p.end_date && new Date(p.end_date) <= endOfMonth) {
-            expiringThisMonth++;
-          }
-        });
-
-        setStats({
-          total: basePolicies.length,
-          active,
-          cancelled,
-          not_renewed: notRenewed,
-          inactive,
-          byStatus,
-          byLine,
-          totalPremium,
-          expiringThisMonth
+      let totalPremium = 0;
+      if (activePolicies) {
+        activePolicies.forEach((p: Record<string, unknown>) => {
+          totalPremium += (p.premium as number) || 0;
         });
       }
+
+      // Contar pólizas que vencen este mes
+      const endOfMonth = new Date();
+      endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+      endOfMonth.setDate(0);
+      const today = new Date().toISOString().split('T')[0];
+      const endOfMonthStr = endOfMonth.toISOString().split('T')[0];
+
+      const { count: expiringCount } = await supabase
+        .from('policies')
+        .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .eq('status', 'activa')
+        .or('anexo.eq.00,anexo.is.null')
+        .gte('end_date', today)
+        .lte('end_date', endOfMonthStr);
+
+      setStats({
+        total: (activeCount || 0) + (cancelledCount || 0) + (notRenewedCount || 0) + (inactiveCount || 0),
+        active: activeCount || 0,
+        cancelled: cancelledCount || 0,
+        not_renewed: notRenewedCount || 0,
+        inactive: inactiveCount || 0,
+        byStatus: {},
+        byLine: {},
+        totalPremium,
+        expiringThisMonth: expiringCount || 0
+      });
+
     } catch (error) {
       console.error('Error loading stats:', error);
     }
@@ -298,7 +285,6 @@ export default function PoliciesPage() {
     }
   }, [isLoadingTenant, tenantId, loadPolicies, loadStats]);
 
-  // Reset page cuando cambia tab
   useEffect(() => {
     setPage(1);
   }, [activeTab]);
@@ -323,7 +309,6 @@ export default function PoliciesPage() {
     );
   };
 
-  // Columnas de la tabla según el tab
   const getTableHeaders = () => {
     if (activeTab === 'no_renovadas') {
       return (
@@ -513,7 +498,7 @@ export default function PoliciesPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Filters - shared across all tabs */}
+        {/* Filters */}
         <div className="flex flex-col md:flex-row gap-4 mt-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -538,7 +523,7 @@ export default function PoliciesPage() {
           </Select>
         </div>
 
-        {/* Table content - same for all tabs */}
+        {/* Table content */}
         {['activas', 'canceladas', 'no_renovadas', 'inactivas'].map((tab) => (
           <TabsContent key={tab} value={tab}>
             <Card>
