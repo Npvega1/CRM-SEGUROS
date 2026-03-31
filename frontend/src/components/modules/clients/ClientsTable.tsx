@@ -28,10 +28,10 @@ import {
   type ClientSegment,
   type DocType
 } from '@/lib/validations/clients';
-import { 
-  Search, 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  Search,
+  ChevronLeft,
+  ChevronRight,
   Eye,
   Edit,
   FileText,
@@ -67,9 +67,7 @@ export function ClientsTable({
   const [isSearching, setIsSearching] = useState(false);
   const totalPages = Math.ceil(total / pageSize);
 
-  // Busqueda en tiempo real con debounce
   useEffect(() => {
-    // Si el valor local es igual al query actual, no hacer nada
     if (localSearch === searchQuery) {
       setIsSearching(false);
       return;
@@ -77,17 +75,14 @@ export function ClientsTable({
 
     setIsSearching(true);
 
-    // Debounce: esperar 300ms antes de buscar
     const timer = setTimeout(() => {
       onSearch(localSearch);
       setIsSearching(false);
     }, 300);
 
-    // Limpiar timer si el usuario sigue escribiendo
     return () => clearTimeout(timer);
   }, [localSearch, searchQuery, onSearch]);
 
-  // Sincronizar cuando searchQuery cambia externamente
   useEffect(() => {
     setLocalSearch(searchQuery);
   }, [searchQuery]);
@@ -109,13 +104,10 @@ export function ClientsTable({
             <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
           )}
         </div>
-        
-        <Select
-          value={segmentFilter || 'all'}
-          onValueChange={(value) => onSegmentFilter(value === 'all' ? undefined : value)}
-        >
-          <SelectTrigger className="w-full sm:w-[180px]" data-testid="clients-segment-filter">
-            <SelectValue placeholder="Todos los segmentos" />
+
+        <Select value={segmentFilter || 'all'} onValueChange={(value) => onSegmentFilter(value === 'all' ? undefined : value)}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los segmentos</SelectItem>
@@ -132,13 +124,13 @@ export function ClientsTable({
       <div className="border rounded-lg">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Documento</TableHead>
-              <TableHead className="hidden md:table-cell">Email</TableHead>
-              <TableHead className="hidden sm:table-cell">Segmento</TableHead>
-              <TableHead className="hidden lg:table-cell">Polizas</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
+            <TableRow className="text-xs">
+              <TableHead className="text-xs">Cliente</TableHead>
+              <TableHead className="text-xs">Documento</TableHead>
+              <TableHead className="text-xs hidden md:table-cell">Email</TableHead>
+              <TableHead className="text-xs hidden sm:table-cell">Segmento</TableHead>
+              <TableHead className="text-xs hidden lg:table-cell">Polizas</TableHead>
+              <TableHead className="text-xs text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -159,47 +151,47 @@ export function ClientsTable({
               </TableRow>
             ) : (
               clients.map((client) => (
-                <TableRow key={client.id} data-testid={`client-row-${client.id}`}>
-                  <TableCell>
+                <TableRow key={client.id} className="text-xs" data-testid={`client-row-${client.id}`}>
+                  <TableCell className="py-2">
                     <div>
-                      <p className="font-medium">{client.full_name}</p>
-                      <p className="text-sm text-muted-foreground md:hidden">
+                      <p className="font-medium text-xs">{client.full_name}</p>
+                      <p className="text-[11px] text-muted-foreground md:hidden">
                         {client.email || 'Sin email'}
                       </p>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
+                  <TableCell className="py-2">
+                    <div className="text-xs">
                       <span className="text-muted-foreground">
                         {DOC_TYPE_LABELS[client.doc_type as DocType] || client.doc_type}:
                       </span>{' '}
                       {client.doc_number}
                     </div>
                   </TableCell>
-                  <TableCell className="hidden md:table-cell">
+                  <TableCell className="py-2 text-xs hidden md:table-cell">
                     {client.email || '-'}
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    <Badge className={SEGMENT_COLORS[client.segment as ClientSegment] || 'bg-gray-100 text-gray-800'}>
+                  <TableCell className="py-2 hidden sm:table-cell">
+                    <Badge className={`text-[10px] ${SEGMENT_COLORS[client.segment as ClientSegment] || 'bg-gray-100 text-gray-800'}`}>
                       {SEGMENT_LABELS[client.segment as ClientSegment] || client.segment}
                     </Badge>
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <Badge variant="outline" className="gap-1">
+                  <TableCell className="py-2 hidden lg:table-cell">
+                    <Badge variant="outline" className="gap-1 text-[10px]">
                       <FileText className="w-3 h-3" />
                       {client.policies_count ?? 0}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
+                  <TableCell className="py-2 text-right">
+                    <div className="flex items-center justify-end gap-0.5">
                       <Link href={`/clientes/${client.id}`}>
-                        <Button variant="ghost" size="icon" data-testid={`view-client-${client.id}`}>
-                          <Eye className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`view-client-${client.id}`}>
+                          <Eye className="w-3.5 h-3.5" />
                         </Button>
                       </Link>
                       <Link href={`/clientes/${client.id}/editar`}>
-                        <Button variant="ghost" size="icon" data-testid={`edit-client-${client.id}`}>
-                          <Edit className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`edit-client-${client.id}`}>
+                          <Edit className="w-3.5 h-3.5" />
                         </Button>
                       </Link>
                     </div>
@@ -218,23 +210,15 @@ export function ClientsTable({
             Mostrando {(page - 1) * pageSize + 1} a {Math.min(page * pageSize, total)} de {total} clientes
           </p>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(page - 1)}
-              disabled={page === 1}
-            >
+            <Button variant="outline" size="sm" onClick={() => onPageChange(page - 1)}
+              disabled={page === 1}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
             <span className="text-sm">
               Pagina {page} de {totalPages}
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(page + 1)}
-              disabled={page === totalPages}
-            >
+            <Button variant="outline" size="sm" onClick={() => onPageChange(page + 1)}
+              disabled={page === totalPages}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
