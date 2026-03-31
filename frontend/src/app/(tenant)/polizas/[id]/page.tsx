@@ -205,6 +205,16 @@ export default function PolicyDetailPage() {
 
       if (docsData) {
         setDocuments(docsData as PolicyDocument[]);
+      // Cargar estado de remision
+      const { data: remData } = await (supabase as any)
+        .from('remisiones')
+        .select('estado, numero_remision')
+        .eq('policy_id', policyId)
+        .single();
+
+      if (remData) {
+        setRemisionData(remData as {estado: string; numero_remision: string | null});
+      }
       }
 
     } catch {
