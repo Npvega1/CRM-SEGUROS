@@ -481,7 +481,17 @@ export default function PolicyDetailPage() {
               )}
             </h1>
             <Badge className={getStatusColor(policy.status)}>
-              {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
+{POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
+            {policy.status === 'activa' && (
+              <>
+                <Badge variant="outline" className={remisionData?.estado === 'remisionada' ? 'bg-green-50 text-green-700 border-green-300' : 'bg-gray-50 text-gray-400 border-gray-200'}>
+                  {remisionData?.estado === 'remisionada' ? 'Remisionada' : 'Sin remisionar'}
+                </Badge>
+                <Badge variant="outline" className="bg-gray-50 text-gray-400 border-gray-200">
+                  Sin recaudo
+                </Badge>
+              </>
+            )} 
             </Badge>
           </div>
         </div>
