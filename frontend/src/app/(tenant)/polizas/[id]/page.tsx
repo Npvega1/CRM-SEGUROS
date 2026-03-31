@@ -29,7 +29,6 @@ import {
 import {
   ArrowLeft,
   Shield,
-  AlertCircle,
   Calendar,
   FileText,
   User,
@@ -176,13 +175,15 @@ export default function PolicyDetailPage() {
           insurance_group: data.insurance_group
         } as PolicyWithClient);
 
-        // Cargar anexos relacionados
+        // Cargar anexos relacionados — SOLO de la misma vigencia (mismo status)
+        // Excluir pólizas inactivas para no mezclar vigencias
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: anexosData } = await (supabase as any)
           .from('policies')
           .select('id, anexo, premium, total_a_pagar, gastos_expedicion, iva, status, fecha_expedicion, created_at')
           .eq('policy_number', data.policy_number)
           .eq('tenant_id', tenantId)
+          .eq('status', data.status)
           .neq('id', policyId)
           .order('anexo', { ascending: true });
 
@@ -352,7 +353,9 @@ export default function PolicyDetailPage() {
       vencida: 'bg-red-100 text-red-800',
       cancelada: 'bg-slate-100 text-slate-800',
       renovacion: 'bg-yellow-100 text-yellow-800',
-      renovada: 'bg-blue-100 text-blue-800'
+      renovada: 'bg-blue-100 text-blue-800',
+      no_renovada: 'bg-orange-100 text-orange-800',
+      inactiva: 'bg-purple-100 text-purple-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -395,6 +398,9 @@ export default function PolicyDetailPage() {
   const ivaConsolidado = baseIva + anexosIva;
   const totalConsolidado = baseTotal + anexosTotal;
 
+  // Determinar si la póliza está activa para mostrar acciones
+  const isActive = policy.status === 'activa';
+
   return (
     <div className="container mx-auto py-6 px-4 space-y-6">
       {/* Header */}
@@ -427,16 +433,26 @@ export default function PolicyDetailPage() {
               <Edit className="mr-2 h-4 w-4" />
               Editar Póliza
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push(`/polizas/modificar?poliza=${policyId}`)} className="cursor-pointer">
-              <FilePlus className="mr-2 h-4 w-4" />
-              Incluir Modificación
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push(`/polizas/renovar?poliza=${policyId}`)} className="cursor-pointer">
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Renovar Póliza
-            </DropdownMenuItem>
+            {isActive && (
+              <>
+                <DropdownMenuItem onClick={() => router.push(`/polizas/modificar?poliza=${policyId}`)} className="cursor-pointer">
+                  <FilePlus className="mr-2 h-4 w-4" />
+                  Incluir Modificación
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push(`/polizas/renovar?poliza=${policyId}`)} className="cursor-pointer">
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Renovar Póliza
+                </DropdownMenuItem>
+              </>
+            )}
+            {(policy.status === 'no_renovada' || policy.status === 'vencida') && (
+              <DropdownMenuItem onClick={() => router.push(`/polizas/renovar?poliza=${policyId}`)} className="cursor-pointer">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Renovar Póliza
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setShowCancelDialog(true)} className="cursor-pointer text-red-600" disabled={policy.status === 'cancelada'}>
+            <DropdownMenuItem onClick={() => setShowCancelDialog(true)} className="cursor-pointer text-red-600" disabled={policy.status === 'cancelada' || policy.status === 'inactiva'}>
               <XCircle className="mr-2 h-4 w-4" />
               Cancelar Póliza
             </DropdownMenuItem>
@@ -728,7 +744,7 @@ export default function PolicyDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Anexos Relacionados */}
+          {/* Anexos Relacionados — solo si hay anexos de la misma vigencia */}
           {relatedAnexos.length > 0 && (
             <Card>
               <CardHeader>
@@ -736,7 +752,7 @@ export default function PolicyDetailPage() {
                   <Layers className="h-5 w-5" />
                   Anexos Relacionados
                 </CardTitle>
-                <CardDescription>Modificaciones de esta póliza</CardDescription>
+                <CardDescription>Modificaciones de esta vigencia</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {/* Póliza Base */}
