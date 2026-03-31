@@ -88,14 +88,12 @@ function RenewPolicyContent() {
     }
   }, [isLoadingTenant, tenantId, originalPolicyId, loadOriginalPolicy]);
 
-  // Construir póliza pre-rellenada según la opción seleccionada
   const buildPrefilledPolicy = (): Policy | undefined => {
     if (!originalPolicy || !selectedOption) return undefined;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const op = originalPolicy as any;
 
-    // Calcular nuevas fechas: inicio = fin de la original + 1 día, fin = inicio + 1 año
     const originalEndDate = op.end_date ? new Date(op.end_date) : new Date();
     const newStartDate = new Date(originalEndDate);
     newStartDate.setDate(newStartDate.getDate() + 1);
@@ -155,18 +153,7 @@ function RenewPolicyContent() {
     try {
       const supabase = getBrowserClient();
 
-      // 1. Primero: Marcar la póliza original y TODOS sus anexos como "inactiva"
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from('policies')
-        .update({
-          status: 'inactiva',
-          updated_at: new Date().toISOString()
-        })
-        .eq('policy_number', originalPolicy.policy_number)
-        .eq('tenant_id', tenantId);
-
-      // 2. Crear la nueva póliza (renovación)
+      // 1. Primero: Crear la nueva póliza (renovación)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: newPolicy, error: insertError } = await (supabase as any)
         .from('policies')
@@ -199,17 +186,6 @@ function RenewPolicyContent() {
         .single();
 
       if (insertError) {
-        // Si falla el insert, revertir el estado de la original
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from('policies')
-          .update({
-            status: 'activa',
-            updated_at: new Date().toISOString()
-          })
-          .eq('policy_number', originalPolicy.policy_number)
-          .eq('tenant_id', tenantId);
-
         if (insertError.code === '23505') {
           setError('Ya existe una póliza con este número, anexo y fecha de inicio.');
         } else {
@@ -218,6 +194,19 @@ function RenewPolicyContent() {
         setIsSaving(false);
         return;
       }
+
+      // 2. Segundo: Marcar la póliza original y sus anexos como "inactiva"
+      //    Usamos neq para NO afectar la nueva póliza recién creada
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('policies')
+        .update({
+          status: 'inactiva',
+          updated_at: new Date().toISOString()
+        })
+        .eq('policy_number', originalPolicy.policy_number)
+        .eq('tenant_id', tenantId)
+        .neq('id', newPolicy.id);
 
       // 3. Redirigir a la nueva póliza
       router.push(`/polizas/${newPolicy.id}`);
@@ -352,7 +341,6 @@ function RenewPolicyContent() {
       {/* Paso 2: Formulario de renovación */}
       {selectedOption && (
         <>
-          {/* Badge con opción seleccionada */}
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-blue-700 border-blue-300 bg-blue-50">
               {RENEWAL_OPTIONS.find(o => o.value === selectedOption)?.label}
