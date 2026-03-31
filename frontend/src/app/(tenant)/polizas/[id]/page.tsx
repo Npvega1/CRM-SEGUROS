@@ -29,6 +29,7 @@ import {
 import {
   ArrowLeft,
   Shield,
+  AlertCircle,
   Calendar,
   FileText,
   User,
@@ -44,8 +45,7 @@ import {
   Trash2,
   File,
   MessageSquare,
-  Layers,
-  RotateCcw
+  Layers
 } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -86,7 +86,6 @@ interface RelatedAnexo {
   status: string;
   fecha_expedicion: string | null;
   created_at: string;
-  metadata: Record<string, unknown> | null;
 }
 
 interface PolicyWithClient extends Policy {
@@ -127,14 +126,14 @@ export default function PolicyDetailPage() {
   const [relatedAnexos, setRelatedAnexos] = useState<RelatedAnexo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showRehabDialog, setShowRehabDialog] = useState(false);
-  const [isRehabilitating, setIsRehabilitating] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [isCanceling, setIsCanceling] = useState(false);
   const [isUploadingPoliza, setIsUploadingPoliza] = useState(false);
   const [isUploadingSoporte, setIsUploadingSoporte] = useState(false);
   const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
   const [isDeletingDoc, setIsDeletingDoc] = useState(false);
   const [remisionData, setRemisionData] = useState<{estado: string; numero_remision: string | null} | null>(null);
-
+  const [carteraData, setCarteraData] = useState<{estado: string} | null>(null);
 
   const isValidUUID = (id: string) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -145,7 +144,7 @@ export default function PolicyDetailPage() {
     if (!tenantId || !policyId) return;
 
     if (!isValidUUID(policyId)) {
-      setError('ID de póliza inválido');
+      setError('ID de poliza invalido');
       setIsLoading(false);
       return;
     }
@@ -169,7 +168,7 @@ export default function PolicyDetailPage() {
         .single();
 
       if (fetchError) {
-        setError(fetchError.message || 'Error al cargar la póliza');
+        setError(fetchError.message || 'Error al cargar la poliza');
       } else if (data) {
         setPolicy({
           ...data,
@@ -179,14 +178,12 @@ export default function PolicyDetailPage() {
           insurance_group: data.insurance_group
         } as PolicyWithClient);
 
-        // Cargar anexos relacionados — SOLO de la misma vigencia (mismo status)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: anexosData } = await (supabase as any)
           .from('policies')
-          .select('id, anexo, premium, total_a_pagar, gastos_expedicion, iva, status, fecha_expedicion, created_at, metadata')
+          .select('id, anexo, premium, total_a_pagar, gastos_expedicion, iva, status, fecha_expedicion, created_at')
           .eq('policy_number', data.policy_number)
           .eq('tenant_id', tenantId)
-          .eq('status', data.status)
           .neq('id', policyId)
           .order('anexo', { ascending: true });
 
@@ -205,6 +202,8 @@ export default function PolicyDetailPage() {
 
       if (docsData) {
         setDocuments(docsData as PolicyDocument[]);
+      }
+
       // Cargar estado de remision
       const { data: remData } = await (supabase as any)
         .from('remisiones')
@@ -215,10 +214,20 @@ export default function PolicyDetailPage() {
       if (remData) {
         setRemisionData(remData as {estado: string; numero_remision: string | null});
       }
+
+      // Cargar estado de cartera
+      const { data: cartData } = await (supabase as any)
+        .from('cartera')
+        .select('estado')
+        .eq('policy_id', policyId)
+        .single();
+
+      if (cartData) {
+        setCarteraData(cartData as {estado: string});
       }
 
     } catch {
-      setError('Error de conexión');
+      setError('Error de conexion');
     }
     setIsLoading(false);
   }, [policyId, tenantId]);
@@ -229,83 +238,33 @@ export default function PolicyDetailPage() {
     }
   }, [policyId, tenantId, loadPolicy]);
 
-  const handleRehabilitatePolicy = async () => {
+  const handleCancelPolicy = async () => {
     if (!tenantId || !policy) return;
 
-    setIsRehabilitating(true);
+    setIsCanceling(true);
     try {
       const supabase = getBrowserClient();
 
-      // 1. Buscar el anexo de cancelación (tiene metadata.cancellation_anexo = true)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: cancelAnexos } = await (supabase as any)
+      const { error: updateError } = await (supabase as any)
         .from('policies')
-        .select('id')
-        .eq('policy_number', policy.policy_number)
-        .eq('tenant_id', tenantId)
-        .eq('status', 'cancelada')
-        .not('metadata->cancellation_anexo', 'is', null);
+        .update({
+          status: 'cancelada',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', policyId)
+        .eq('tenant_id', tenantId);
 
-      // 2. Eliminar los anexos de cancelación
-      if (cancelAnexos && cancelAnexos.length > 0) {
-        for (const ca of cancelAnexos) {
-          const caId = (ca as { id: string }).id;
-          // Eliminar documentos del anexo de cancelación
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any)
-            .from('policy_documents')
-            .delete()
-            .eq('policy_id', caId)
-            .eq('tenant_id', tenantId);
-
-          // Eliminar el anexo de cancelación
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any)
-            .from('policies')
-            .delete()
-            .eq('id', caId)
-            .eq('tenant_id', tenantId);
-        }
+      if (updateError) {
+        setError(updateError.message || 'Error al cancelar la poliza');
+      } else {
+        setPolicy(prev => prev ? { ...prev, status: 'cancelada' } : null);
+        setShowCancelDialog(false);
       }
-
-      // 3. Cambiar todas las pólizas de este número a "activa" y agregar nota de rehabilitación
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: allCancelled } = await (supabase as any)
-        .from('policies')
-        .select('id, notas')
-        .eq('policy_number', policy.policy_number)
-        .eq('tenant_id', tenantId)
-        .eq('status', 'cancelada');
-
-      if (allCancelled) {
-        const rehabDate = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
-        for (const p of allCancelled) {
-          const pTyped = p as { id: string; notas: string | null };
-          const existingNotas = pTyped.notas || '';
-          const rehabNote = `[REHABILITADA ${rehabDate}]`;
-          const newNotas = existingNotas ? `${rehabNote}\n${existingNotas}` : rehabNote;
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any)
-            .from('policies')
-            .update({
-              status: 'activa',
-              notas: newNotas,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', pTyped.id)
-            .eq('tenant_id', tenantId);
-        }
-      }
-
-      setShowRehabDialog(false);
-      // Recargar la página
-      loadPolicy();
-
     } catch {
-      setError('Error al rehabilitar la póliza');
+      setError('Error de conexion');
     }
-    setIsRehabilitating(false);
+    setIsCanceling(false);
   };
 
   const handleUploadDocument = async (file: globalThis.File, documentType: 'poliza' | 'soporte') => {
@@ -338,7 +297,7 @@ export default function PolicyDetailPage() {
           tenant_id: tenantId,
           policy_id: policyId,
           document_type: documentType,
-          document_name: documentType === 'poliza' ? 'Documento de Póliza' : file.name.split('.')[0],
+          document_name: documentType === 'poliza' ? 'Documento de Poliza' : file.name.split('.')[0],
           file_url: path,
           file_name: file.name
         })
@@ -409,16 +368,13 @@ export default function PolicyDetailPage() {
     setDeleteDocId(null);
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: PolicyStatus) => {
     const colors: Record<string, string> = {
       cotizacion: 'bg-gray-100 text-gray-800',
       activa: 'bg-green-100 text-green-800',
       vencida: 'bg-red-100 text-red-800',
       cancelada: 'bg-slate-100 text-slate-800',
-      renovacion: 'bg-yellow-100 text-yellow-800',
-      renovada: 'bg-blue-100 text-blue-800',
-      no_renovada: 'bg-orange-100 text-orange-800',
-      inactiva: 'bg-purple-100 text-purple-800'
+      renovacion: 'bg-yellow-100 text-yellow-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -429,10 +385,12 @@ export default function PolicyDetailPage() {
 
   if (error || !policy) {
     return (
-      <div className="container mx-auto py-6 px-4 text-center">
-        <p className="text-red-600">{error || 'Póliza no encontrada'}</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.push('/polizas')}>
-          Volver a Pólizas
+      <div className="p-6 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <p className="text-lg text-red-600">{error || 'Poliza no encontrada'}</p>
+        <Button className="mt-4" onClick={() => router.push('/polizas')}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Volver a Polizas
         </Button>
       </div>
     );
@@ -445,7 +403,6 @@ export default function PolicyDetailPage() {
   const calculatedTotal = (policy.premium || 0) + (policyAny.gastos_expedicion || 0) + (policyAny.iva || 0);
   const displayTotal = policyAny.total_a_pagar || calculatedTotal;
 
-  // Calcular totales consolidados
   const basePrima = policy.premium || 0;
   const baseGastos = policyAny.gastos_expedicion || 0;
   const baseIva = policyAny.iva || 0;
@@ -461,206 +418,127 @@ export default function PolicyDetailPage() {
   const ivaConsolidado = baseIva + anexosIva;
   const totalConsolidado = baseTotal + anexosTotal;
 
-  const isActive = policy.status === 'activa';
-  const isCancelled = policy.status === 'cancelada';
-
   return (
-    <div className="container mx-auto py-6 px-4 space-y-6">
+    <div className="space-y-6 p-4 md:p-6" data-testid="policy-detail-page">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-3">
           <button onClick={() => router.back()} className="p-2 hover:bg-muted rounded-lg">
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
-          <Shield className="h-6 w-6 text-primary" />
           <div>
-            <h1 className="text-xl font-bold">
-              Póliza {policy.policy_number}
+            <div className="flex items-center gap-2">
+              <Shield className="w-6 h-6 text-primary" />
+              <h1 className="text-2xl font-bold">Poliza {policy.policy_number}</h1>
               {policyAny.anexo && policyAny.anexo !== '00' && (
-                <Badge variant="outline" className="ml-2">Anexo {policyAny.anexo}</Badge>
+                <Badge variant="outline">Anexo {policyAny.anexo}</Badge>
               )}
-            </h1>
-            <Badge className={getStatusColor(policy.status)}>
-{POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
-            {policy.status === 'activa' && (
-              <div className="flex items-center gap-3 ml-4">
-                <span className="text-gray-300">|</span>
-                <Badge variant="outline" className={remisionData?.estado === 'remisionada' ? 'bg-green-50 text-green-700 border-green-400 px-3 py-1' : 'bg-gray-50 text-gray-400 border-gray-300 px-3 py-1'}>
-                  {remisionData?.estado === 'remisionada' ? 'Remisionada' : 'Sin remisionar'}
-                </Badge>
-                <Badge variant="outline" className="bg-gray-50 text-gray-400 border-gray-300 px-3 py-1">
-                  Sin recaudo
-                </Badge>
-              </div>
-            )}
-            </Badge>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <Badge className={getStatusColor(policy.status as PolicyStatus)}>
+                {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
+              </Badge>
+              {policy.status === 'activa' && (
+                <div className="flex items-center gap-3 ml-4">
+                  <span className="text-gray-300">|</span>
+                  <Badge variant="outline" className={remisionData?.estado === 'remisionada' ? 'bg-green-50 text-green-700 border-green-400 px-3 py-1' : 'bg-gray-50 text-gray-400 border-gray-300 px-3 py-1'}>
+                    {remisionData?.estado === 'remisionada' ? 'Remisionada' : 'Sin remisionar'}
+                  </Badge>
+                  <Badge variant="outline" className={
+                    carteraData?.estado === 'pagada' ? 'bg-green-50 text-green-700 border-green-400 px-3 py-1'
+                    : carteraData?.estado === 'abono' ? 'bg-blue-50 text-blue-700 border-blue-400 px-3 py-1'
+                    : 'bg-gray-50 text-gray-400 border-gray-300 px-3 py-1'
+                  }>
+                    {carteraData?.estado === 'pagada' ? 'Pagada' : carteraData?.estado === 'abono' ? 'Abono parcial' : 'Sin recaudo'}
+                  </Badge>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
+            <Button variant="ghost" size="icon"><MoreVertical className="w-5 h-5" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {!isCancelled && policy.status !== 'inactiva' && (
-              <DropdownMenuItem onClick={() => router.push(`/polizas/${policyId}/editar`)} className="cursor-pointer">
-                <Edit className="mr-2 h-4 w-4" />
-                Editar Póliza
-              </DropdownMenuItem>
-            )}
-            {isActive && (
-              <>
-                <DropdownMenuItem onClick={() => router.push(`/polizas/modificar?poliza=${policyId}`)} className="cursor-pointer">
-                  <FilePlus className="mr-2 h-4 w-4" />
-                  Incluir Modificación
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push(`/polizas/renovar?poliza=${policyId}`)} className="cursor-pointer">
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Renovar Póliza
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push(`/polizas/cancelar?poliza=${policyId}`)} className="cursor-pointer text-red-600">
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Cancelar Póliza
-                </DropdownMenuItem>
-              </>
-            )}
-            {(policy.status === 'no_renovada' || policy.status === 'vencida') && (
-              <DropdownMenuItem onClick={() => router.push(`/polizas/renovar?poliza=${policyId}`)} className="cursor-pointer">
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Renovar Póliza
-              </DropdownMenuItem>
-            )}
-            {isCancelled && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setShowRehabDialog(true)} className="cursor-pointer text-green-600">
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Rehabilitar Póliza
-                </DropdownMenuItem>
-              </>
-            )}
+            <DropdownMenuItem onClick={() => router.push(`/polizas/${policyId}/editar`)} className="cursor-pointer">
+              <Edit className="w-4 h-4 mr-2" />
+              Editar Poliza
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push(`/polizas/modificar?poliza=${policyId}`)} className="cursor-pointer">
+              <FilePlus className="w-4 h-4 mr-2" />
+              Incluir Modificacion
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push(`/polizas/nueva?renovacion=${policyId}`)} className="cursor-pointer">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Renovar Poliza
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setShowCancelDialog(true)} className="cursor-pointer text-red-600" disabled={policy.status === 'cancelada'}>
+              <XCircle className="w-4 h-4 mr-2" />
+              Cancelar Poliza
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      {/* Nota de rehabilitación */}
-      {policyAny.notas && policyAny.notas.includes('[REHABILITADA') && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm flex items-center gap-2">
-          <RotateCcw className="h-4 w-4" />
-          Esta póliza fue rehabilitada después de una cancelación.
-        </div>
-      )}
-
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Detalles de la Póliza */}
+          {/* Detalles */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Detalles de la Póliza
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Número</p>
-                <p className="font-medium">{policy.policy_number}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Anexo</p>
-                <p className="font-medium">{policyAny.anexo || '00'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Aseguradora</p>
-                <p className="font-medium">{policy.insurance_company?.name || policy.insurer}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Grupo</p>
-                <p className="font-medium">{policy.insurance_line?.name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Ramo</p>
-                <p className="font-medium">{policy.insurance_group?.name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Comisión</p>
-                <p className="font-medium">{policyAny.commission_pct || 0}%</p>
+            <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" />Detalles de la Poliza</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div><p className="text-sm text-muted-foreground">Numero</p><p className="font-medium">{policy.policy_number}</p></div>
+                <div><p className="text-sm text-muted-foreground">Anexo</p><p className="font-medium">{policyAny.anexo || '00'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Aseguradora</p><p className="font-medium">{policy.insurance_company?.name || policy.insurer}</p></div>
+                <div><p className="text-sm text-muted-foreground">Grupo</p><p className="font-medium">{policy.insurance_line?.name || '-'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Ramo</p><p className="font-medium">{policy.insurance_group?.name || '-'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Comision</p><p className="font-medium">{policyAny.commission_pct || 0}%</p></div>
               </div>
             </CardContent>
           </Card>
 
           {/* Vigencia */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Vigencia
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Expedición</p>
-                <p className="font-medium">{formatDate(policyAny.fecha_expedicion)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Inicio</p>
-                <p className="font-medium">{formatDate(policy.start_date)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Vencimiento</p>
-                <p className="font-medium">{formatDate(policy.end_date)}</p>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5" />Vigencia</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4">
+                <div><p className="text-sm text-muted-foreground">Expedicion</p><p className="font-medium">{formatDate(policyAny.fecha_expedicion)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Inicio</p><p className="font-medium">{formatDate(policy.start_date)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Vencimiento</p><p className="font-medium">{formatDate(policy.end_date)}</p></div>
               </div>
             </CardContent>
           </Card>
 
           {/* Valores */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Valores de la Póliza {policyAny.anexo && policyAny.anexo !== '00' && `(Anexo ${policyAny.anexo})`}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Prima</p>
-                <p className={`text-lg font-semibold ${policy.premium < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policy.premium)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Gastos Exp.</p>
-                <p className={`text-lg font-semibold ${policyAny.gastos_expedicion < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policyAny.gastos_expedicion)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">IVA</p>
-                <p className={`text-lg font-semibold ${policyAny.iva < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policyAny.iva)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total</p>
-                <p className={`text-lg font-semibold ${displayTotal < 0 ? 'text-red-600' : ''}`}>{formatCurrency(displayTotal)}</p>
+            <CardHeader><CardTitle className="flex items-center gap-2"><DollarSign className="w-5 h-5" />Valores de la Poliza {policyAny.anexo && policyAny.anexo !== '00' && `(Anexo ${policyAny.anexo})`}</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div><p className="text-sm text-muted-foreground">Prima</p><p className="font-medium text-lg">{formatCurrency(policy.premium)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Gastos Exp.</p><p className="font-medium text-lg">{formatCurrency(policyAny.gastos_expedicion)}</p></div>
+                <div><p className="text-sm text-muted-foreground">IVA</p><p className="font-medium text-lg">{formatCurrency(policyAny.iva)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Total</p><p className="font-medium text-lg">{formatCurrency(displayTotal)}</p></div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Notas y Comentarios */}
+          {/* Notas */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                Notas y Comentarios
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><MessageSquare className="w-5 h-5" />Notas y Comentarios</CardTitle></CardHeader>
             <CardContent>
               {policyAny.notas ? (
-                <div className="p-3 bg-slate-50 rounded-lg">
+                <div className="bg-muted/50 rounded-lg p-4">
                   <p className="text-sm whitespace-pre-wrap">{policyAny.notas}</p>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground italic">
-                  No hay comentarios registrados para esta póliza.
-                </p>
+                <div className="text-center py-6">
+                  <MessageSquare className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-30" />
+                  <p className="text-sm text-muted-foreground">No hay comentarios registrados para esta poliza.</p>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -668,22 +546,22 @@ export default function PolicyDetailPage() {
           {/* Documentos */}
           <Card>
             <CardHeader>
-              <CardTitle>Documentos</CardTitle>
-              <CardDescription>Documentos adjuntos de la póliza</CardDescription>
+              <CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" />Documentos</CardTitle>
+              <CardDescription>Documentos adjuntos de la poliza</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Documentos de Póliza */}
+              {/* Documentos de Poliza */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium">Documentos de Póliza</h4>
+                  <h4 className="font-medium text-sm">Documentos de Poliza</h4>
                   <Badge variant="outline">{polizaDocs.length} / 5</Badge>
                 </div>
                 {polizaDocs.length < 5 && (
                   <div className="mb-3">
-                    <label className="cursor-pointer">
+                    <label>
                       <input
                         type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
+                        accept=".pdf,.jpg,.jpeg,.png,.webp"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) handleUploadDocument(file, 'poliza');
@@ -694,7 +572,7 @@ export default function PolicyDetailPage() {
                       />
                       <Button variant="outline" size="sm" asChild>
                         <span>
-                          {isUploadingPoliza ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                          {isUploadingPoliza ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
                           {isUploadingPoliza ? 'Subiendo...' : 'Subir documento'}
                         </span>
                       </Button>
@@ -704,39 +582,35 @@ export default function PolicyDetailPage() {
                 {polizaDocs.length > 0 ? (
                   <div className="space-y-2">
                     {polizaDocs.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between p-2 border rounded-lg">
+                      <div key={doc.id} className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
                         <div className="flex items-center gap-2">
-                          <File className="h-4 w-4 text-muted-foreground" />
+                          <File className="w-4 h-4 text-muted-foreground" />
                           <span className="text-sm">{doc.file_name}</span>
                         </div>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleViewDocument(doc)} className="h-8 w-8 p-0">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setDeleteDocId(doc.id)} className="h-8 w-8 p-0 hover:bg-red-100">
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => handleViewDocument(doc)} className="h-8 w-8 p-0"><Eye className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => setDeleteDocId(doc.id)} className="h-8 w-8 p-0 hover:bg-red-100"><Trash2 className="w-4 h-4 text-red-500" /></Button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground italic">No hay documentos de póliza</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">No hay documentos de poliza</p>
                 )}
               </div>
 
               {/* Documentos de Soporte */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium">Documentos de Soporte</h4>
+                  <h4 className="font-medium text-sm">Documentos de Soporte</h4>
                   <Badge variant="outline">{soporteDocs.length} / 8</Badge>
                 </div>
                 {soporteDocs.length < 8 && (
                   <div className="mb-3">
-                    <label className="cursor-pointer">
+                    <label>
                       <input
                         type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                        accept=".pdf,.jpg,.jpeg,.png,.webp"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) handleUploadDocument(file, 'soporte');
@@ -747,7 +621,7 @@ export default function PolicyDetailPage() {
                       />
                       <Button variant="outline" size="sm" asChild>
                         <span>
-                          {isUploadingSoporte ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                          {isUploadingSoporte ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
                           {isUploadingSoporte ? 'Subiendo...' : 'Subir documento'}
                         </span>
                       </Button>
@@ -757,24 +631,20 @@ export default function PolicyDetailPage() {
                 {soporteDocs.length > 0 ? (
                   <div className="space-y-2">
                     {soporteDocs.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between p-2 border rounded-lg">
+                      <div key={doc.id} className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
                         <div className="flex items-center gap-2">
-                          <File className="h-4 w-4 text-muted-foreground" />
+                          <File className="w-4 h-4 text-muted-foreground" />
                           <span className="text-sm">{doc.file_name}</span>
                         </div>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleViewDocument(doc)} className="h-8 w-8 p-0">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setDeleteDocId(doc.id)} className="h-8 w-8 p-0 hover:bg-red-100">
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => handleViewDocument(doc)} className="h-8 w-8 p-0"><Eye className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => setDeleteDocId(doc.id)} className="h-8 w-8 p-0 hover:bg-red-100"><Trash2 className="w-4 h-4 text-red-500" /></Button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground italic">No hay documentos de soporte</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">No hay documentos de soporte</p>
                 )}
               </div>
             </CardContent>
@@ -785,54 +655,28 @@ export default function PolicyDetailPage() {
         <div className="space-y-6">
           {policy.client && (
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Cliente
-                </CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><User className="w-5 h-5" />Cliente</CardTitle></CardHeader>
               <CardContent>
-                <p className="font-medium text-lg">{policy.client.full_name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {policy.client.doc_type.toUpperCase()}: {policy.client.doc_number}
-                </p>
-                <div className="mt-3 space-y-1">
-                  {policy.client.email && (
-                    <p className="text-sm">{policy.client.email}</p>
-                  )}
-                  {policy.client.phone && (
-                    <p className="text-sm">{policy.client.phone}</p>
-                  )}
+                <div className="space-y-3">
+                  <p className="font-semibold text-lg">{policy.client.full_name}</p>
+                  <p className="text-sm text-muted-foreground">{policy.client.doc_type.toUpperCase()}: {policy.client.doc_number}</p>
+                  {policy.client.email && (<p className="text-sm">{policy.client.email}</p>)}
+                  {policy.client.phone && (<p className="text-sm">{policy.client.phone}</p>)}
+                  <Button variant="outline" className="w-full" onClick={() => router.push(`/clientes/${policy.client?.id}`)}>Ver Cliente</Button>
                 </div>
-                <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => router.push(`/clientes/${policy.client?.id}`)}>
-                  Ver Cliente
-                </Button>
               </CardContent>
             </Card>
           )}
 
           <Card>
-            <CardHeader>
-              <CardTitle>
-                Resumen {policyAny.anexo && policyAny.anexo !== '00' && `(Anexo ${policyAny.anexo})`}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Prima</span>
-                <span className={`font-medium ${policy.premium < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policy.premium)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Gastos</span>
-                <span className={`font-medium ${policyAny.gastos_expedicion < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policyAny.gastos_expedicion)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">IVA</span>
-                <span className={`font-medium ${policyAny.iva < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policyAny.iva)}</span>
-              </div>
-              <div className="flex justify-between border-t pt-2">
-                <span className="font-semibold">Total</span>
-                <span className={`font-semibold ${displayTotal < 0 ? 'text-red-600' : ''}`}>{formatCurrency(displayTotal)}</span>
+            <CardHeader><CardTitle>Resumen {policyAny.anexo && policyAny.anexo !== '00' && `(Anexo ${policyAny.anexo})`}</CardTitle></CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex justify-between"><span className="text-sm text-muted-foreground">Prima</span><span className="font-medium">{formatCurrency(policy.premium)}</span></div>
+                <div className="flex justify-between"><span className="text-sm text-muted-foreground">Gastos</span><span className="font-medium">{formatCurrency(policyAny.gastos_expedicion)}</span></div>
+                <div className="flex justify-between"><span className="text-sm text-muted-foreground">IVA</span><span className="font-medium">{formatCurrency(policyAny.iva)}</span></div>
+                <hr />
+                <div className="flex justify-between"><span className="font-semibold">Total</span><span className="font-bold">{formatCurrency(displayTotal)}</span></div>
               </div>
             </CardContent>
           </Card>
@@ -841,72 +685,50 @@ export default function PolicyDetailPage() {
           {relatedAnexos.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Layers className="h-5 w-5" />
-                  Anexos Relacionados
-                </CardTitle>
-                <CardDescription>Modificaciones de esta vigencia</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Layers className="w-5 h-5" />Anexos Relacionados</CardTitle>
+                <CardDescription>Modificaciones de esta poliza</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="p-2 border rounded-lg bg-slate-50">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Póliza Base (Anexo {policyAny.anexo || '00'})</span>
-                    <span className="text-xs text-muted-foreground">Este documento</span>
+                {/* Poliza Base */}
+                <div className="border rounded-lg p-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-medium">Poliza Base (Anexo {policyAny.anexo || '00'})</p>
+                      <p className="text-xs text-muted-foreground">Este documento</p>
+                    </div>
+                    <p className="font-medium">{formatCurrency(basePrima)}</p>
                   </div>
-                  <p className={`text-sm font-semibold mt-1 ${basePrima < 0 ? 'text-red-600' : ''}`}>
-                    {formatCurrency(basePrima)}
-                  </p>
-                  <span className="text-xs text-muted-foreground">Prima</span>
+                  <p className="text-xs text-muted-foreground mt-1">Prima</p>
                 </div>
 
+                {/* Otros Anexos */}
                 {relatedAnexos.map((anexo) => (
                   <div
                     key={anexo.id}
-                    className={`p-2 border rounded-lg cursor-pointer hover:bg-slate-50 transition-colors ${
-                      anexo.premium < 0 ? 'border-red-200' : 'border-green-200'
-                    }`}
+                    className="border rounded-lg p-3 cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => router.push(`/polizas/${anexo.id}`)}
                   >
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium">
-                        Anexo {anexo.anexo}
-                        {!!(anexo.metadata && (anexo.metadata as Record<string, unknown>).cancellation_anexo) && (
-                          <Badge variant="outline" className="ml-1 text-xs text-red-600 border-red-300">Cancelación</Badge>
-                        )}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDate(anexo.fecha_expedicion || anexo.created_at)}
-                      </span>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-sm font-medium">Anexo {anexo.anexo}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(anexo.fecha_expedicion || anexo.created_at)}</p>
+                      </div>
+                      <p className="font-medium">{formatCurrency(anexo.premium)}</p>
                     </div>
-                    <p className={`text-sm font-semibold mt-1 ${anexo.premium < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatCurrency(anexo.premium)}
-                    </p>
-                    <Badge variant="outline" className="text-xs mt-1">
+                    <Badge className={`mt-1 text-xs ${getStatusColor(anexo.status as PolicyStatus)}`}>
                       {POLICY_STATUS_LABELS[anexo.status as PolicyStatus] || anexo.status}
                     </Badge>
                   </div>
                 ))}
 
-                <div className="border-t pt-3 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Prima Consolidada</span>
-                    <span className={`font-semibold ${primaConsolidada < 0 ? 'text-red-600' : ''}`}>{formatCurrency(primaConsolidada)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Gastos Consolidados</span>
-                    <span className={`font-semibold ${gastosConsolidados < 0 ? 'text-red-600' : ''}`}>{formatCurrency(gastosConsolidados)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">IVA Consolidado</span>
-                    <span className={`font-semibold ${ivaConsolidado < 0 ? 'text-red-600' : ''}`}>{formatCurrency(ivaConsolidado)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm border-t pt-2">
-                    <span className="font-semibold">Total Consolidado</span>
-                    <span className={`font-bold ${totalConsolidado < 0 ? 'text-red-600' : ''}`}>{formatCurrency(totalConsolidado)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground text-center mt-1">
-                    Este documento + {relatedAnexos.length} anexo(s)
-                  </p>
+                {/* Totales Consolidados */}
+                <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">Prima Consolidada</span><span className="font-medium">{formatCurrency(primaConsolidada)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">Gastos Consolidados</span><span className="font-medium">{formatCurrency(gastosConsolidados)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">IVA Consolidado</span><span className="font-medium">{formatCurrency(ivaConsolidado)}</span></div>
+                  <hr />
+                  <div className="flex justify-between font-semibold"><span>Total Consolidado</span><span>{formatCurrency(totalConsolidado)}</span></div>
+                  <p className="text-xs text-muted-foreground text-center mt-1">Este documento + {relatedAnexos.length} anexo(s)</p>
                 </div>
               </CardContent>
             </Card>
@@ -914,23 +736,19 @@ export default function PolicyDetailPage() {
         </div>
       </div>
 
-      {/* Dialog Rehabilitar */}
-      <Dialog open={showRehabDialog} onOpenChange={setShowRehabDialog}>
+      {/* Dialog Cancelar */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5 text-green-600" />
-              Rehabilitar Póliza
-            </DialogTitle>
+            <DialogTitle>Cancelar Poliza</DialogTitle>
             <DialogDescription>
-              ¿Estás seguro de que deseas rehabilitar la póliza <strong>{policy.policy_number}</strong>?
-              El anexo de cancelación será eliminado y la póliza volverá a estado <strong>Activa</strong>.
+              Estas seguro de que deseas cancelar la poliza <strong>{policy.policy_number}</strong>? Esta accion no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRehabDialog(false)}>Cancelar</Button>
-            <Button onClick={handleRehabilitatePolicy} disabled={isRehabilitating} className="bg-green-600 hover:bg-green-700">
-              {isRehabilitating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rehabilitando...</> : 'Sí, rehabilitar'}
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>No, mantener</Button>
+            <Button variant="destructive" onClick={handleCancelPolicy} disabled={isCanceling}>
+              {isCanceling ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Cancelando...</> : 'Si, cancelar'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -941,14 +759,12 @@ export default function PolicyDetailPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Eliminar Documento</DialogTitle>
-            <DialogDescription>
-              ¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer.
-            </DialogDescription>
+            <DialogDescription>Estas seguro de que deseas eliminar este documento? Esta accion no se puede deshacer.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDocId(null)}>Cancelar</Button>
             <Button variant="destructive" onClick={handleDeleteDocument} disabled={isDeletingDoc}>
-              {isDeletingDoc ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Eliminando...</> : 'Eliminar'}
+              {isDeletingDoc ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Eliminando...</> : 'Eliminar'}
             </Button>
           </DialogFooter>
         </DialogContent>
