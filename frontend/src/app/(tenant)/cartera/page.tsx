@@ -51,6 +51,7 @@ interface CarteraWithPolicy {
     anexo: string | null;
     insurer: string;
     line: string;
+    status: string;
     start_date: string;
     end_date: string;
     clients: { full_name: string } | null;
@@ -103,6 +104,8 @@ const getCuotaStatusStyle = (cuota: CuotaAcuerdo) => {
   return { bg: 'bg-slate-50 border-slate-200', text: 'text-slate-600', badge: 'bg-slate-50 text-slate-600 border-slate-300', label: 'Pendiente' };
 };
 
+const isPolicyCancelled = (item: CarteraWithPolicy) => item.policy?.status === 'cancelada';
+
 export default function CarteraPage() {
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
   const [activeTab, setActiveTab] = useState<'pendiente' | 'abono' | 'pagada' | 'all'>('all');
@@ -144,6 +147,7 @@ export default function CarteraPage() {
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [reportSearchQuery, setReportSearchQuery] = useState('');
 
   const loadCartera = useCallback(async () => {
     if (!tenantId) return;
@@ -152,7 +156,7 @@ export default function CarteraPage() {
       const supabase = getBrowserClient();
       let query = supabase
         .from('cartera')
-        .select(`*, remision:remisiones(numero_remision), policy:policies!inner(id, policy_number, anexo, insurer, line, start_date, end_date, clients(full_name), insurance_line:insurance_lines(name))`, { count: 'exact' })
+        .select(`*, remision:remisiones(numero_remision), policy:policies!inner(id, policy_number, anexo, insurer, line, status, start_date, end_date, clients(full_name), insurance_line:insurance_lines(name))`, { count: 'exact' })
         .eq('tenant_id', tenantId)
         .order('fecha_ingreso', { ascending: false })
         .range((page - 1) * pageSize, page * pageSize - 1);
@@ -181,19 +185,31 @@ export default function CarteraPage() {
     if (!tenantId) return;
     try {
       const supabase = getBrowserClient();
-      const { data } = await supabase.from('cartera').select('estado, metodo_pago, valor_total, total_pagado, saldo_pendiente').eq('tenant_id', tenantId);
+      const { data } = await supabase.from('cartera').select('estado, metodo_pago, valor_total, total_pagado, saldo_pendiente, policy:policies!inner(status)').eq('tenant_id', tenantId);
       if (data) {
         let totalCartera = 0, totalRecaudado = 0, totalPendiente = 0, countPendiente = 0, countAbono = 0, countPagada = 0, countFinanciado = 0, countAcuerdos = 0;
         data.forEach((c: any) => {
           totalCartera += c.valor_total || 0; totalRecaudado += c.total_pagado || 0; totalPendiente += c.saldo_pendiente || 0;
           if (c.estado === 'pendiente') countPendiente++; else if (c.estado === 'abono') countAbono++; else if (c.estado === 'pagada') countPagada++;
-          if (c.metodo_pago === 'financiado') countFinanciado++;
-          if (c.metodo_pago === 'acuerdo_pago' && c.estado !== 'pagada') countAcuerdos++;
+          const policyStatus = c.policy?.status;
+          if (c.metodo_pago === 'financiado' && policyStatus !== 'cancelada') countFinanciado++;
+          if (c.metodo_pago === 'acuerdo_pago' && c.estado !== 'pagada' && policyStatus !== 'cancelada') countAcuerdos++;
         });
         setResumen({ totalCartera, totalRecaudado, totalPendiente, countPendiente, countAbono, countPagada, countFinanciado, countAcuerdos });
       }
     } catch (e) { console.error(e); }
   }, [tenantId]);
+
+  const applyReportSearch = (items: CarteraWithPolicy[]) => {
+    if (!reportSearchQuery) return items;
+    const q = reportSearchQuery.toLowerCase();
+    return items.filter(c =>
+      c.policy?.policy_number?.toLowerCase().includes(q) ||
+      c.policy?.clients?.full_name?.toLowerCase().includes(q) ||
+      c.remision?.numero_remision?.toLowerCase().includes(q) ||
+      c.financiera?.toLowerCase().includes(q)
+    );
+  };
 
   const loadFinanciado = useCallback(async () => {
     if (!tenantId) return;
@@ -202,7 +218,7 @@ export default function CarteraPage() {
       const supabase = getBrowserClient();
       const { data, error } = await supabase
         .from('cartera')
-        .select(`*, remision:remisiones(numero_remision), policy:policies!inner(id, policy_number, anexo, insurer, line, start_date, end_date, clients(full_name), insurance_line:insurance_lines(name))`)
+        .select(`*, remision:remisiones(numero_remision), policy:policies!inner(id, policy_number, anexo, insurer, line, status, start_date, end_date, clients(full_name), insurance_line:insurance_lines(name))`)
         .eq('tenant_id', tenantId)
         .eq('metodo_pago', 'financiado')
         .order('fecha_ingreso', { ascending: false });
@@ -211,6 +227,7 @@ export default function CarteraPage() {
 
       const today = new Date().toISOString().split('T')[0];
       let filtered = ((data || []) as CarteraWithPolicy[]).filter(item => {
+        if (isPolicyCancelled(item)) return false;
         if (item.policy?.end_date && item.policy.end_date < today) return false;
         if (dateFrom && item.fecha_desembolso && item.fecha_desembolso < dateFrom) return false;
         if (dateTo && item.fecha_desembolso && item.fecha_desembolso > dateTo) return false;
@@ -228,7 +245,7 @@ export default function CarteraPage() {
       const supabase = getBrowserClient();
       const { data, error } = await supabase
         .from('cartera')
-        .select(`*, remision:remisiones(numero_remision), policy:policies!inner(id, policy_number, anexo, insurer, line, start_date, end_date, clients(full_name), insurance_line:insurance_lines(name))`)
+        .select(`*, remision:remisiones(numero_remision), policy:policies!inner(id, policy_number, anexo, insurer, line, status, start_date, end_date, clients(full_name), insurance_line:insurance_lines(name))`)
         .eq('tenant_id', tenantId)
         .eq('metodo_pago', 'acuerdo_pago')
         .neq('estado', 'pagada')
@@ -236,14 +253,12 @@ export default function CarteraPage() {
 
       if (error) { console.error(error); setIsLoadingReport(false); return; }
 
-      let filtered = (data || []) as CarteraWithPolicy[];
-      if (dateFrom || dateTo) {
-        filtered = filtered.filter(item => {
-          if (dateFrom && item.fecha_ingreso < dateFrom) return false;
-          if (dateTo && item.fecha_ingreso > dateTo) return false;
-          return true;
-        });
-      }
+      let filtered = ((data || []) as CarteraWithPolicy[]).filter(item => {
+        if (isPolicyCancelled(item)) return false;
+        if (dateFrom && item.fecha_ingreso < dateFrom) return false;
+        if (dateTo && item.fecha_ingreso > dateTo) return false;
+        return true;
+      });
       setAcuerdosData(filtered);
       setExpandedAcuerdo(null);
 
@@ -388,11 +403,6 @@ export default function CarteraPage() {
             .update({ estado: 'pagada', fecha_pago: pagoFecha })
             .eq('id', payingCuotaId);
           setPayingCuotaId(null);
-          setAcuerdosCuotasMap(prev => {
-            const next = { ...prev };
-            delete next[selectedCartera.id];
-            return next;
-          });
         }
         toast.success(result.estado === 'pagada' ? 'Pago total registrado' : `Abono registrado - Saldo: ${formatPremium(result.saldo_pendiente || 0)}`);
         setShowPagoDialog(false); loadCartera(); loadResumen();
@@ -432,6 +442,9 @@ export default function CarteraPage() {
   const totalPages = Math.ceil(total / pageSize);
   if (isLoadingTenant) return <LoadingScreen />;
 
+  const filteredFinanciado = applyReportSearch(financiadoData);
+  const filteredAcuerdos = applyReportSearch(acuerdosData);
+
   return (
     <div className="space-y-5 p-4 md:p-6" data-testid="cartera-page">
       <div>
@@ -466,7 +479,7 @@ export default function CarteraPage() {
             variant={reportTab === 'financiado' ? 'default' : 'outline'}
             size="sm"
             className={reportTab === 'financiado' ? 'bg-indigo-600 hover:bg-indigo-700' : 'border-indigo-300 text-indigo-600 hover:bg-indigo-50'}
-            onClick={() => { setReportTab(reportTab === 'financiado' ? 'none' : 'financiado'); }}
+            onClick={() => { setReportTab(reportTab === 'financiado' ? 'none' : 'financiado'); setReportSearchQuery(''); }}
           >
             <Landmark className="w-3.5 h-3.5 mr-1" />Financiado ({resumen.countFinanciado})
           </Button>
@@ -474,7 +487,7 @@ export default function CarteraPage() {
             variant={reportTab === 'acuerdos' ? 'default' : 'outline'}
             size="sm"
             className={reportTab === 'acuerdos' ? 'bg-violet-600 hover:bg-violet-700' : 'border-violet-300 text-violet-600 hover:bg-violet-50'}
-            onClick={() => { setReportTab(reportTab === 'acuerdos' ? 'none' : 'acuerdos'); }}
+            onClick={() => { setReportTab(reportTab === 'acuerdos' ? 'none' : 'acuerdos'); setReportSearchQuery(''); }}
           >
             <CalendarClock className="w-3.5 h-3.5 mr-1" />Acuerdos de Pago ({resumen.countAcuerdos})
           </Button>
@@ -577,147 +590,161 @@ export default function CarteraPage() {
         </>
       ) : reportTab === 'financiado' ? (
         /* ===== REPORTE FINANCIADO ===== */
-        <Card>
-          <CardContent className="p-0">
-            {isLoadingReport ? (
-              <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-400" /></div>
-            ) : financiadoData.length === 0 ? (
-              <div className="text-center text-muted-foreground p-12">
-                <Landmark className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p>No hay polizas financiadas activas</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="text-xs bg-indigo-50/50">
-                    <TableHead className="text-xs">Poliza</TableHead>
-                    <TableHead className="text-xs">Cliente</TableHead>
-                    <TableHead className="text-xs text-right">Valor Financiado</TableHead>
-                    <TableHead className="text-xs">Financiera</TableHead>
-                    <TableHead className="text-xs">Fecha Desembolso</TableHead>
-                    <TableHead className="text-xs">Vence Poliza</TableHead>
-                    <TableHead className="text-xs">Estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {financiadoData.map(item => (
-                    <TableRow key={item.id} className="text-xs">
-                      <TableCell className="py-2 font-medium">{item.policy?.policy_number}</TableCell>
-                      <TableCell className="py-2 whitespace-nowrap">{item.policy?.clients?.full_name || 'N/A'}</TableCell>
-                      <TableCell className="py-2 text-right font-medium">{formatPremium(item.valor_total)}</TableCell>
-                      <TableCell className="py-2">{item.financiera || <span className="text-slate-300">Sin asignar</span>}</TableCell>
-                      <TableCell className="py-2">{item.fecha_desembolso ? formatDate(item.fecha_desembolso) : <span className="text-slate-300">Sin fecha</span>}</TableCell>
-                      <TableCell className="py-2">{item.policy?.end_date ? formatDate(item.policy.end_date) : '-'}</TableCell>
-                      <TableCell className="py-2">
-                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0.5 ${ESTADO_COLORS[item.estado]}`}>{ESTADO_LABELS[item.estado]}</Badge>
-                      </TableCell>
+        <>
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Buscar por poliza, cliente o financiera..." value={reportSearchQuery}
+              onChange={(e) => setReportSearchQuery(e.target.value)} className="pl-10" />
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              {isLoadingReport ? (
+                <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-400" /></div>
+              ) : filteredFinanciado.length === 0 ? (
+                <div className="text-center text-muted-foreground p-12">
+                  <Landmark className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p>No hay polizas financiadas activas</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="text-xs bg-indigo-50/50">
+                      <TableHead className="text-xs">Poliza</TableHead>
+                      <TableHead className="text-xs">Cliente</TableHead>
+                      <TableHead className="text-xs text-right">Valor Financiado</TableHead>
+                      <TableHead className="text-xs">Financiera</TableHead>
+                      <TableHead className="text-xs">Fecha Desembolso</TableHead>
+                      <TableHead className="text-xs">Vence Poliza</TableHead>
+                      <TableHead className="text-xs">Estado</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredFinanciado.map(item => (
+                      <TableRow key={item.id} className="text-xs">
+                        <TableCell className="py-2 font-medium">{item.policy?.policy_number}</TableCell>
+                        <TableCell className="py-2 whitespace-nowrap">{item.policy?.clients?.full_name || 'N/A'}</TableCell>
+                        <TableCell className="py-2 text-right font-medium">{formatPremium(item.valor_total)}</TableCell>
+                        <TableCell className="py-2">{item.financiera || <span className="text-slate-300">Sin asignar</span>}</TableCell>
+                        <TableCell className="py-2">{item.fecha_desembolso ? formatDate(item.fecha_desembolso) : <span className="text-slate-300">Sin fecha</span>}</TableCell>
+                        <TableCell className="py-2">{item.policy?.end_date ? formatDate(item.policy.end_date) : '-'}</TableCell>
+                        <TableCell className="py-2">
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0.5 ${ESTADO_COLORS[item.estado]}`}>{ESTADO_LABELS[item.estado]}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </>
       ) : (
         /* ===== REPORTE ACUERDOS DE PAGO ===== */
-        <Card>
-          <CardContent className="p-0">
-            {isLoadingReport ? (
-              <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-violet-400" /></div>
-            ) : acuerdosData.length === 0 ? (
-              <div className="text-center text-muted-foreground p-12">
-                <CalendarClock className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p>No hay acuerdos de pago activos</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="text-xs bg-violet-50/50">
-                    <TableHead className="text-xs w-8"></TableHead>
-                    <TableHead className="text-xs">Poliza</TableHead>
-                    <TableHead className="text-xs">Cliente</TableHead>
-                    <TableHead className="text-xs text-right">Total</TableHead>
-                    <TableHead className="text-xs text-right">Pagado</TableHead>
-                    <TableHead className="text-xs text-right">Saldo</TableHead>
-                    <TableHead className="text-xs text-center">Cuotas</TableHead>
-                    <TableHead className="text-xs">Estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {acuerdosData.map(item => {
-                    const cuotas = acuerdosCuotasMap[item.id] || [];
-                    const cuotasPagadas = cuotas.filter(c => c.estado === 'pagada').length;
-                    const cuotasVencidas = cuotas.filter(c => {
-                      if (c.estado === 'pagada') return false;
-                      return new Date(c.fecha_vencimiento + 'T00:00:00') < new Date(new Date().toISOString().split('T')[0] + 'T00:00:00');
-                    }).length;
-                    return (
-                      <Fragment key={item.id}>
-                        <TableRow className="text-xs cursor-pointer hover:bg-violet-50/50" onClick={() => toggleAcuerdo(item.id)}>
-                          <TableCell className="py-2 pl-3">
-                            {expandedAcuerdo === item.id ? <ChevronDown className="w-3.5 h-3.5 text-violet-500" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
-                          </TableCell>
-                          <TableCell className="py-2 font-medium">{item.policy?.policy_number}</TableCell>
-                          <TableCell className="py-2 whitespace-nowrap">{item.policy?.clients?.full_name || 'N/A'}</TableCell>
-                          <TableCell className="py-2 text-right font-medium">{formatPremium(item.valor_total)}</TableCell>
-                          <TableCell className="py-2 text-right font-medium text-green-600">{formatPremium(item.total_pagado)}</TableCell>
-                          <TableCell className="py-2 text-right font-medium text-amber-600">{formatPremium(item.saldo_pendiente)}</TableCell>
-                          <TableCell className="py-2 text-center">
-                            <span className="text-xs">{cuotasPagadas}/{cuotas.length}</span>
-                            {cuotasVencidas > 0 && <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-red-50 text-red-600 border-red-300">{cuotasVencidas} venc.</Badge>}
-                          </TableCell>
-                          <TableCell className="py-2">
-                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0.5 ${ESTADO_COLORS[item.estado]}`}>{ESTADO_LABELS[item.estado]}</Badge>
-                          </TableCell>
-                        </TableRow>
-                        {expandedAcuerdo === item.id && (
-                          <TableRow>
-                            <TableCell colSpan={8} className="p-0">
-                              <div className="bg-violet-50/30 px-4 py-3 border-y border-violet-100">
-                                {cuotas.length === 0 ? (
-                                  <p className="text-xs text-muted-foreground text-center py-2">No hay cuotas registradas. Configura el acuerdo desde el boton de metodo de pago.</p>
-                                ) : (
-                                  <div className="space-y-1.5">
-                                    <div className="flex items-center gap-3 text-[10px] text-slate-500 font-medium px-2 mb-1">
-                                      <span className="w-16">CUOTA</span>
-                                      <span className="flex-1">VALOR</span>
-                                      <span className="w-28">VENCIMIENTO</span>
-                                      <span className="w-24">ESTADO</span>
-                                      <span className="w-16"></span>
-                                    </div>
-                                    {cuotas.map(cuota => {
-                                      const status = getCuotaStatusStyle(cuota);
-                                      return (
-                                        <div key={cuota.id} className={`flex items-center gap-3 p-2 rounded-lg border text-xs ${status.bg}`}>
-                                          <span className="font-semibold w-16">Cuota {cuota.numero_cuota}</span>
-                                          <span className="font-medium flex-1">{formatPremium(cuota.valor_cuota)}</span>
-                                          <span className="text-muted-foreground w-28">{formatDate(cuota.fecha_vencimiento)}</span>
-                                          <Badge variant="outline" className={`text-[10px] w-24 justify-center ${status.badge}`}>{status.label}</Badge>
-                                          <div className="w-16 text-right">
-                                            {cuota.estado !== 'pagada' && (
-                                              <Button size="sm" onClick={(e) => { e.stopPropagation(); handlePayCuota(item, cuota); }}
-                                                className="bg-green-600 hover:bg-green-700 h-6 text-[10px] px-2">
-                                                <DollarSign className="w-2.5 h-2.5 mr-0.5" />Pagar
-                                              </Button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
+        <>
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Buscar por poliza, cliente o remision..." value={reportSearchQuery}
+              onChange={(e) => setReportSearchQuery(e.target.value)} className="pl-10" />
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              {isLoadingReport ? (
+                <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-violet-400" /></div>
+              ) : filteredAcuerdos.length === 0 ? (
+                <div className="text-center text-muted-foreground p-12">
+                  <CalendarClock className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p>No hay acuerdos de pago activos</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="text-xs bg-violet-50/50">
+                      <TableHead className="text-xs w-8"></TableHead>
+                      <TableHead className="text-xs">Poliza</TableHead>
+                      <TableHead className="text-xs">Cliente</TableHead>
+                      <TableHead className="text-xs text-right">Total</TableHead>
+                      <TableHead className="text-xs text-right">Pagado</TableHead>
+                      <TableHead className="text-xs text-right">Saldo</TableHead>
+                      <TableHead className="text-xs text-center">Cuotas</TableHead>
+                      <TableHead className="text-xs">Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAcuerdos.map(item => {
+                      const cuotas = acuerdosCuotasMap[item.id] || [];
+                      const cuotasPagadas = cuotas.filter(c => c.estado === 'pagada').length;
+                      const cuotasVencidas = cuotas.filter(c => {
+                        if (c.estado === 'pagada') return false;
+                        return new Date(c.fecha_vencimiento + 'T00:00:00') < new Date(new Date().toISOString().split('T')[0] + 'T00:00:00');
+                      }).length;
+                      return (
+                        <Fragment key={item.id}>
+                          <TableRow className="text-xs cursor-pointer hover:bg-violet-50/50" onClick={() => toggleAcuerdo(item.id)}>
+                            <TableCell className="py-2 pl-3">
+                              {expandedAcuerdo === item.id ? <ChevronDown className="w-3.5 h-3.5 text-violet-500" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
+                            </TableCell>
+                            <TableCell className="py-2 font-medium">{item.policy?.policy_number}</TableCell>
+                            <TableCell className="py-2 whitespace-nowrap">{item.policy?.clients?.full_name || 'N/A'}</TableCell>
+                            <TableCell className="py-2 text-right font-medium">{formatPremium(item.valor_total)}</TableCell>
+                            <TableCell className="py-2 text-right font-medium text-green-600">{formatPremium(item.total_pagado)}</TableCell>
+                            <TableCell className="py-2 text-right font-medium text-amber-600">{formatPremium(item.saldo_pendiente)}</TableCell>
+                            <TableCell className="py-2 text-center">
+                              <span className="text-xs">{cuotasPagadas}/{cuotas.length}</span>
+                              {cuotasVencidas > 0 && <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-red-50 text-red-600 border-red-300">{cuotasVencidas} venc.</Badge>}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0.5 ${ESTADO_COLORS[item.estado]}`}>{ESTADO_LABELS[item.estado]}</Badge>
                             </TableCell>
                           </TableRow>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                          {expandedAcuerdo === item.id && (
+                            <TableRow>
+                              <TableCell colSpan={8} className="p-0">
+                                <div className="bg-violet-50/30 px-4 py-3 border-y border-violet-100">
+                                  {cuotas.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground text-center py-2">No hay cuotas registradas. Configura el acuerdo desde el boton de metodo de pago.</p>
+                                  ) : (
+                                    <div className="space-y-1.5">
+                                      <div className="flex items-center gap-3 text-[10px] text-slate-500 font-medium px-2 mb-1">
+                                        <span className="w-16">CUOTA</span>
+                                        <span className="flex-1">VALOR</span>
+                                        <span className="w-28">VENCIMIENTO</span>
+                                        <span className="w-24">ESTADO</span>
+                                        <span className="w-16"></span>
+                                      </div>
+                                      {cuotas.map(cuota => {
+                                        const status = getCuotaStatusStyle(cuota);
+                                        return (
+                                          <div key={cuota.id} className={`flex items-center gap-3 p-2 rounded-lg border text-xs ${status.bg}`}>
+                                            <span className="font-semibold w-16">Cuota {cuota.numero_cuota}</span>
+                                            <span className="font-medium flex-1">{formatPremium(cuota.valor_cuota)}</span>
+                                            <span className="text-muted-foreground w-28">{formatDate(cuota.fecha_vencimiento)}</span>
+                                            <Badge variant="outline" className={`text-[10px] w-24 justify-center ${status.badge}`}>{status.label}</Badge>
+                                            <div className="w-16 text-right">
+                                              {cuota.estado !== 'pagada' && (
+                                                <Button size="sm" onClick={(e) => { e.stopPropagation(); handlePayCuota(item, cuota); }}
+                                                  className="bg-green-600 hover:bg-green-700 h-6 text-[10px] px-2">
+                                                  <DollarSign className="w-2.5 h-2.5 mr-0.5" />Pagar
+                                                </Button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {/* Dialog: Metodo de Pago */}
