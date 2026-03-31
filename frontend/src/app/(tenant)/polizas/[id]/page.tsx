@@ -133,6 +133,8 @@ export default function PolicyDetailPage() {
   const [isUploadingSoporte, setIsUploadingSoporte] = useState(false);
   const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
   const [isDeletingDoc, setIsDeletingDoc] = useState(false);
+  const [remisionData, setRemisionData] = useState<{estado: string; numero_remision: string | null} | null>(null);
+
 
   const isValidUUID = (id: string) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
