@@ -264,7 +264,7 @@ export default function CarteraPage() {
   const generateCuotas = (numCuotas: number) => {
     if (!selectedForMetodo) return;
     const valorCuota = Math.ceil(selectedForMetodo.saldo_pendiente / numCuotas);
-    const cuotas = [];
+    const cuotas: { valor: string; fecha: string }[] = [];
     for (let i = 0; i < numCuotas; i++) {
       const fecha = new Date();
       fecha.setMonth(fecha.getMonth() + i + 1);
