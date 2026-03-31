@@ -845,7 +845,7 @@ export default function PolicyDetailPage() {
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium">
                         Anexo {anexo.anexo}
-                        {anexo.metadata && (anexo.metadata as Record<string, unknown>).cancellation_anexo && (
+                        {!!(anexo.metadata && (anexo.metadata as Record<string, unknown>).cancellation_anexo) && (
                           <Badge variant="outline" className="ml-1 text-xs text-red-600 border-red-300">Cancelación</Badge>
                         )}
                       </span>
