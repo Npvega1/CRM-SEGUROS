@@ -1,11 +1,5 @@
 'use client';
 
-// =====================================================
-// PÁGINA: Lista de Pólizas
-// /polizas
-// NOTA: Solo muestra pólizas base (anexo 00), con prima consolidada
-// =====================================================
-
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTenant } from '@/lib/context/TenantContext';
@@ -48,7 +42,6 @@ import {
   ChevronRight,
   Eye,
   Shield,
-  AlertTriangle,
   Layers
 } from 'lucide-react';
 
@@ -63,13 +56,12 @@ interface PolicyWithRelations extends Policy {
   anexo_count?: number;
 }
 
-interface PolicyStats {
-  total: number;
-  active: number;
-  byStatus: Record<string, number>;
-  byLine: Record<string, number>;
-  totalPremium: number;
-  expiringThisMonth: number;
+interface StatusCount {
+  all: number;
+  activa: number;
+  no_renovada: number;
+  vencida: number;
+  cancelada: number;
 }
 
 export default function PoliciesPage() {
@@ -81,9 +73,8 @@ export default function PoliciesPage() {
   const [pageSize] = useState(50);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
-  const [lineFilter, setLineFilter] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState<PolicyStats | null>(null);
+  const [statusCounts, setStatusCounts] = useState<StatusCount>({ all: 0, activa: 0, no_renovada: 0, vencida: 0, cancelada: 0 });
 
   const loadPolicies = useCallback(async () => {
     if (!tenantId) return;
@@ -109,9 +100,6 @@ export default function PoliciesPage() {
       }
       if (statusFilter && statusFilter !== 'all') {
         query = query.eq('status', statusFilter);
-      }
-      if (lineFilter && lineFilter !== 'all') {
-        query = query.eq('line', lineFilter);
       }
 
       const { data, count, error } = await query;
@@ -171,87 +159,41 @@ export default function PoliciesPage() {
       console.error('Error loading policies:', error);
     }
     setIsLoading(false);
-  }, [tenantId, page, pageSize, searchQuery, statusFilter, lineFilter]);
+  }, [tenantId, page, pageSize, searchQuery, statusFilter]);
 
-  const loadStats = useCallback(async () => {
+  const loadStatusCounts = useCallback(async () => {
     if (!tenantId) return;
 
     try {
       const supabase = getBrowserClient();
 
-      const { data: allPolicies } = await supabase
+      const { data } = await supabase
         .from('policies')
-        .select('policy_number, status, line, premium, end_date, anexo')
-        .eq('tenant_id', tenantId);
+        .select('status')
+        .eq('tenant_id', tenantId)
+        .or('anexo.eq.00,anexo.is.null');
 
-      if (allPolicies) {
-        const policyGroups: Record<string, { status: string; line: string; totalPremium: number; end_date: string | null; isBase: boolean; }> = {};
-
-        allPolicies.forEach((p: Record<string, unknown>) => {
-          const pn = p.policy_number as string;
-          const anexo = p.anexo as string;
-          const isBase = !anexo || anexo === '00';
-
-          if (!policyGroups[pn]) {
-            policyGroups[pn] = {
-              status: p.status as string,
-              line: p.line as string,
-              totalPremium: 0,
-              end_date: p.end_date as string | null,
-              isBase: false
-            };
-          }
-
-          policyGroups[pn].totalPremium += (p.premium as number) || 0;
-
-          if (isBase) {
-            policyGroups[pn].status = p.status as string;
-            policyGroups[pn].line = p.line as string;
-            policyGroups[pn].end_date = p.end_date as string | null;
-            policyGroups[pn].isBase = true;
-          }
+      if (data) {
+        let activa = 0, no_renovada = 0, vencida = 0, cancelada = 0;
+        data.forEach((p: any) => {
+          if (p.status === 'activa') activa++;
+          else if (p.status === 'no_renovada') no_renovada++;
+          else if (p.status === 'vencida') vencida++;
+          else if (p.status === 'cancelada') cancelada++;
         });
-
-        const basePolicies = Object.values(policyGroups).filter(p => p.isBase);
-
-        const byStatus: Record<string, number> = {};
-        const byLine: Record<string, number> = {};
-        let totalPremium = 0;
-        let active = 0;
-        let expiringThisMonth = 0;
-
-        const endOfMonth = new Date();
-        endOfMonth.setMonth(endOfMonth.getMonth() + 1);
-        endOfMonth.setDate(0);
-
-        basePolicies.forEach(p => {
-          byStatus[p.status] = (byStatus[p.status] || 0) + 1;
-          byLine[p.line] = (byLine[p.line] || 0) + 1;
-          totalPremium += p.totalPremium;
-          if (p.status === 'activa') active++;
-          if (p.end_date && new Date(p.end_date) <= endOfMonth) expiringThisMonth++;
-        });
-
-        setStats({
-          total: basePolicies.length,
-          active,
-          byStatus,
-          byLine,
-          totalPremium,
-          expiringThisMonth
-        });
+        setStatusCounts({ all: data.length, activa, no_renovada, vencida, cancelada });
       }
     } catch (error) {
-      console.error('Error loading stats:', error);
+      console.error('Error loading counts:', error);
     }
   }, [tenantId]);
 
   useEffect(() => {
     if (!isLoadingTenant && tenantId) {
       loadPolicies();
-      loadStats();
+      loadStatusCounts();
     }
-  }, [isLoadingTenant, tenantId, loadPolicies, loadStats]);
+  }, [isLoadingTenant, tenantId, loadPolicies, loadStatusCounts]);
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -278,15 +220,12 @@ export default function PoliciesPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 px-4 space-y-6">
+    <div className="space-y-5 p-4 md:p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Shield className="h-8 w-8 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Polizas</h1>
-            <p className="text-sm text-muted-foreground">{tenantName}</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Polizas</h1>
+          <p className="text-sm text-muted-foreground">{tenantName}</p>
         </div>
         <Link href="/polizas/nueva">
           <Button>
@@ -296,75 +235,33 @@ export default function PoliciesPage() {
         </Link>
       </div>
 
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">Total Polizas</p>
-              <p className="text-3xl font-bold">{stats.total}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">Activas</p>
-              <p className="text-3xl font-bold text-green-600">{stats.active}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">Prima Total Consolidada</p>
-              <p className={`text-3xl font-bold ${stats.totalPremium < 0 ? 'text-red-600' : ''}`}>
-                {formatPremium(stats.totalPremium)}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground flex items-center gap-1">
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Vencen este mes
-              </p>
-              <p className="text-3xl font-bold text-amber-600">{stats.expiringThisMonth}</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* Status Tabs */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { key: 'all', label: 'Todas', count: statusCounts.all },
+          { key: 'activa', label: 'Activas', count: statusCounts.activa },
+          { key: 'no_renovada', label: 'No renovadas', count: statusCounts.no_renovada },
+          { key: 'vencida', label: 'Inactivas', count: statusCounts.vencida },
+          { key: 'cancelada', label: 'Canceladas', count: statusCounts.cancelada },
+        ].map(tab => (
+          <Button key={tab.key} size="sm"
+            variant={(statusFilter || 'all') === tab.key ? 'default' : 'outline'}
+            onClick={() => { setStatusFilter(tab.key === 'all' ? undefined : tab.key); setPage(1); }}>
+            {tab.label} ({tab.count})
+          </Button>
+        ))}
+      </div>
 
-      {/* Filters */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por numero o aseguradora..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-            data-testid="search-policies-input"
-          />
-        </div>
-        <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? undefined : v)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los estados</SelectItem>
-            {Object.entries(POLICY_STATUS_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={lineFilter || 'all'} onValueChange={(v) => setLineFilter(v === 'all' ? undefined : v)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los ramos</SelectItem>
-            {Object.entries(POLICY_LINE_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Search */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por numero o aseguradora..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+          data-testid="search-policies-input"
+        />
       </div>
 
       {/* Table */}
