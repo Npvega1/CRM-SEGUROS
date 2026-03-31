@@ -87,7 +87,6 @@ export default function RemisionesPage() {
   const [pendientesCount, setPendientesCount] = useState(0);
   const [remisionadasCount, setRemisionadasCount] = useState(0);
 
-  // Dialog state
   const [showDialog, setShowDialog] = useState(false);
   const [selectedRemision, setSelectedRemision] = useState<RemisionWithPolicy | null>(null);
   const [notasRemision, setNotasRemision] = useState('');
@@ -134,7 +133,6 @@ export default function RemisionesPage() {
       if (error) {
         console.error('Error loading remisiones:', error);
 
-        // Fallback: buscar sin filtro de texto en join
         if (searchQuery) {
           const fallbackQuery = supabase
             .from('remisiones')
@@ -159,7 +157,7 @@ export default function RemisionesPage() {
             .order('created_at', { ascending: activeTab === 'pendiente' })
             .range((page - 1) * pageSize, page * pageSize - 1);
 
-          const { data: fbData, count: fbCount } = await fallbackQuery;
+          const { data: fbData } = await fallbackQuery;
 
           if (fbData) {
             const filtered = fbData.filter((r: RemisionWithPolicy) =>
@@ -230,7 +228,6 @@ export default function RemisionesPage() {
     try {
       const supabase = getBrowserClient();
 
-      // Obtener usuario actual
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         toast.error('Error: No se pudo obtener el usuario actual');
@@ -285,11 +282,9 @@ export default function RemisionesPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card
-          className={`cursor-pointer transition-all ${activeTab === 'pendiente' ? 'ring-2 ring-amber-500' : ''}`}
+        <Card className={`cursor-pointer transition-all ${activeTab === 'pendiente' ? 'ring-2 ring-amber-500' : ''}`}
           onClick={() => { setActiveTab('pendiente'); setPage(1); }}
-          data-testid="tab-pendientes"
-        >
+          data-testid="tab-pendientes">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -301,11 +296,9 @@ export default function RemisionesPage() {
           </CardContent>
         </Card>
 
-        <Card
-          className={`cursor-pointer transition-all ${activeTab === 'remisionada' ? 'ring-2 ring-green-500' : ''}`}
+        <Card className={`cursor-pointer transition-all ${activeTab === 'remisionada' ? 'ring-2 ring-green-500' : ''}`}
           onClick={() => { setActiveTab('remisionada'); setPage(1); }}
-          data-testid="tab-remisionadas"
-        >
+          data-testid="tab-remisionadas">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -345,70 +338,65 @@ export default function RemisionesPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  {activeTab === 'remisionada' && <TableHead>Remision</TableHead>}
-                  {activeTab === 'remisionada' && <TableHead>F. Remision</TableHead>}
-                  <TableHead>Poliza</TableHead>
-                  <TableHead>Anexo</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Aseguradora</TableHead>
-                  <TableHead>Ramo</TableHead>
-                  <TableHead className="text-right">Prima</TableHead>
-                  <TableHead>Vigencia</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                <TableRow className="text-xs">
+                  {activeTab === 'remisionada' && <TableHead className="text-xs">Remision</TableHead>}
+                  {activeTab === 'remisionada' && <TableHead className="text-xs">F. Remision</TableHead>}
+                  <TableHead className="text-xs">Poliza</TableHead>
+                  <TableHead className="text-xs">Anexo</TableHead>
+                  <TableHead className="text-xs">Cliente</TableHead>
+                  <TableHead className="text-xs">Aseguradora</TableHead>
+                  <TableHead className="text-xs">Ramo</TableHead>
+                  <TableHead className="text-xs text-right">Prima</TableHead>
+                  <TableHead className="text-xs">Vigencia</TableHead>
+                  <TableHead className="text-xs text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {remisiones.map((remision) => (
-                  <TableRow key={remision.id}>
+                  <TableRow key={remision.id} className="text-xs">
                     {activeTab === 'remisionada' && (
-                      <TableCell>
-                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 font-mono text-xs">
+                      <TableCell className="py-2">
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 font-mono text-[10px]">
                           {remision.numero_remision}
                         </Badge>
                       </TableCell>
                     )}
                     {activeTab === 'remisionada' && (
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="py-2 text-xs text-muted-foreground">
                         {remision.fecha_remision ? formatDate(remision.fecha_remision) : '-'}
                       </TableCell>
                     )}
-                    <TableCell className="font-medium">{remision.policy?.policy_number}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
+                    <TableCell className="py-2 font-medium text-xs">{remision.policy?.policy_number}</TableCell>
+                    <TableCell className="py-2">
+                      <Badge variant="outline" className="text-[10px]">
                         {remision.policy?.anexo || '00'}
                       </Badge>
                     </TableCell>
-                    <TableCell>{remision.policy?.clients?.full_name || 'N/A'}</TableCell>
-                    <TableCell>{remision.policy?.insurer}</TableCell>
-                    <TableCell>
-                      <span className="text-sm">
-                        {remision.policy?.insurance_line?.name ||
-                         POLICY_LINE_LABELS[remision.policy?.line as PolicyLine] ||
-                         remision.policy?.line || '-'}
-                      </span>
+                    <TableCell className="py-2 text-xs whitespace-nowrap">{remision.policy?.clients?.full_name || 'N/A'}</TableCell>
+                    <TableCell className="py-2 text-xs">{remision.policy?.insurer}</TableCell>
+                    <TableCell className="py-2 text-xs">
+                      {remision.policy?.insurance_line?.name ||
+                       POLICY_LINE_LABELS[remision.policy?.line as PolicyLine] ||
+                       remision.policy?.line || '-'}
                     </TableCell>
-                    <TableCell className="text-right font-medium">
+                    <TableCell className="py-2 text-xs text-right font-medium">
                       {formatPremium(remision.policy?.premium || 0)}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                    <TableCell className="py-2 text-xs text-muted-foreground whitespace-nowrap">
                       {formatDate(remision.policy?.start_date)} - {formatDate(remision.policy?.end_date)}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                    <TableCell className="py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
                         <Link href={`/polizas/${remision.policy_id}`}>
-                          <Button variant="ghost" size="sm" data-testid={`ver-poliza-${remision.id}`}>
-                            <Eye className="w-4 h-4" />
+                          <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`ver-poliza-${remision.id}`}>
+                            <Eye className="w-3.5 h-3.5" />
                           </Button>
                         </Link>
                         {activeTab === 'pendiente' && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleOpenRemisionar(remision)}
-                            className="bg-green-600 hover:bg-green-700"
-                            data-testid={`remisionar-${remision.id}`}
-                          >
-                            <ClipboardCheck className="w-4 h-4 mr-1" />
+                          <Button size="sm" onClick={() => handleOpenRemisionar(remision)}
+                            className="bg-green-600 hover:bg-green-700 h-7 text-xs px-2"
+                            data-testid={`remisionar-${remision.id}`}>
+                            <ClipboardCheck className="w-3 h-3 mr-1" />
                             Remisionar
                           </Button>
                         )}
@@ -452,7 +440,6 @@ export default function RemisionesPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {/* Policy summary */}
             <div className="bg-slate-50 rounded-lg p-4 space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Cliente:</span>
