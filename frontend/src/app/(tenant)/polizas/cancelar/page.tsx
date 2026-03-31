@@ -11,12 +11,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { Policy } from '@/lib/validations/policies';
-import { ArrowLeft, XCircle, FileText, Loader2, Save, Upload, File, Trash2 } from 'lucide-react';
+import { ArrowLeft, XCircle, FileText, Loader2, Upload, File, Trash2 } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { getBrowserClient } from '@/lib/supabase/client';
@@ -43,6 +42,10 @@ function CancelPolicyContent() {
   const [fechaExpedicion, setFechaExpedicion] = useState(new Date().toISOString().split('T')[0]);
   const [premium, setPremium] = useState('');
   const [premiumValue, setPremiumValue] = useState(0);
+  const [gastos, setGastos] = useState('');
+  const [gastosValue, setGastosValue] = useState(0);
+  const [iva, setIva] = useState('');
+  const [ivaValue, setIvaValue] = useState(0);
   const [notas, setNotas] = useState('');
 
   // Documents
@@ -64,6 +67,9 @@ function CancelPolicyContent() {
     const numericValue = parseInt(cleaned, 10) || 0;
     return isNegative ? -numericValue : numericValue;
   };
+
+  // Calcular total
+  const totalValue = premiumValue - Math.abs(gastosValue) - Math.abs(ivaValue);
 
   const loadOriginalPolicy = useCallback(async () => {
     if (!tenantId || !originalPolicyId) return;
@@ -120,10 +126,21 @@ function CancelPolicyContent() {
 
   const handlePremiumChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseCurrencyValue(e.target.value);
-    // Cancelación siempre negativa o 0
     const negativeValue = value > 0 ? -value : value;
     setPremiumValue(negativeValue);
     setPremium(formatCurrency(negativeValue));
+  };
+
+  const handleGastosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseCurrencyValue(e.target.value);
+    setGastosValue(Math.abs(value));
+    setGastos(formatCurrency(Math.abs(value)));
+  };
+
+  const handleIvaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseCurrencyValue(e.target.value);
+    setIvaValue(Math.abs(value));
+    setIva(formatCurrency(Math.abs(value)));
   };
 
   const handleUploadDocument = async (file: globalThis.File) => {
@@ -182,6 +199,12 @@ function CancelPolicyContent() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const opAny = originalPolicy as any;
 
+      // Calcular valores negativos
+      const finalPremium = premiumValue;
+      const finalGastos = premiumValue < 0 ? -Math.abs(gastosValue) : gastosValue;
+      const finalIva = premiumValue < 0 ? -Math.abs(ivaValue) : ivaValue;
+      const finalTotal = finalPremium + finalGastos + finalIva;
+
       // 1. Crear el anexo de cancelación
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: cancelAnexo, error: insertError } = await (supabase as any)
@@ -198,10 +221,10 @@ function CancelPolicyContent() {
           group_id: opAny.group_id || null,
           status: 'cancelada',
           currency: originalPolicy.currency || 'COP',
-          premium: premiumValue,
-          gastos_expedicion: 0,
-          iva: 0,
-          total_a_pagar: premiumValue,
+          premium: finalPremium,
+          gastos_expedicion: finalGastos,
+          iva: finalIva,
+          total_a_pagar: finalTotal,
           commission_pct: opAny.commission_pct || 0,
           fecha_expedicion: fechaExpedicion,
           start_date: originalPolicy.start_date || null,
@@ -220,7 +243,7 @@ function CancelPolicyContent() {
         return;
       }
 
-      // 2. Guardar documentos asociados al anexo de cancelación
+      // 2. Guardar documentos asociados al ANEXO DE CANCELACIÓN
       for (const doc of uploadedDocs) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any)
@@ -381,20 +404,56 @@ function CancelPolicyContent() {
             </div>
           </div>
 
-          {/* Valor de devolución */}
+          {/* Valores */}
           <div>
-            <Label>Prima de Cancelación (valor negativo o $0)</Label>
-            <Input
-              value={premium}
-              onChange={handlePremiumChange}
-              onFocus={(e) => e.target.select()}
-              disabled={isSaving}
-              placeholder="$ 0"
-              className={premiumValue < 0 ? 'text-red-600 font-bold' : ''}
-            />
-            {premiumValue < 0 && (
-              <p className="text-xs text-red-600 mt-1">
-                Devolución de {formatCurrency(Math.abs(premiumValue))} a favor del cliente
+            <h4 className="font-medium mb-3">Valores de la Cancelación</h4>
+            <p className="text-xs text-muted-foreground mb-3">
+              Los valores de cancelación son negativos (devolución al cliente). Ingrese el monto y se aplicará como negativo automáticamente. Si no hay devolución, deje en $0.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <Label>Prima</Label>
+                <Input
+                  value={premium}
+                  onChange={handlePremiumChange}
+                  onFocus={(e) => e.target.select()}
+                  disabled={isSaving}
+                  placeholder="$ 0"
+                  className={premiumValue < 0 ? 'text-red-600 font-bold' : ''}
+                />
+              </div>
+              <div>
+                <Label>Gastos Exp.</Label>
+                <Input
+                  value={gastos}
+                  onChange={handleGastosChange}
+                  onFocus={(e) => e.target.select()}
+                  disabled={isSaving}
+                  placeholder="$ 0"
+                />
+              </div>
+              <div>
+                <Label>IVA</Label>
+                <Input
+                  value={iva}
+                  onChange={handleIvaChange}
+                  onFocus={(e) => e.target.select()}
+                  disabled={isSaving}
+                  placeholder="$ 0"
+                />
+              </div>
+              <div>
+                <Label>Total</Label>
+                <Input
+                  value={formatCurrency(totalValue)}
+                  disabled
+                  className={`bg-slate-50 font-semibold ${totalValue < 0 ? 'text-red-600' : ''}`}
+                />
+              </div>
+            </div>
+            {totalValue < 0 && (
+              <p className="text-xs text-red-600 mt-2">
+                Devolución total de {formatCurrency(Math.abs(totalValue))} a favor del cliente
               </p>
             )}
           </div>
