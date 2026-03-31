@@ -483,15 +483,16 @@ export default function PolicyDetailPage() {
             <Badge className={getStatusColor(policy.status)}>
 {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
             {policy.status === 'activa' && (
-              <>
-                <Badge variant="outline" className={remisionData?.estado === 'remisionada' ? 'bg-green-50 text-green-700 border-green-300' : 'bg-gray-50 text-gray-400 border-gray-200'}>
+              <div className="flex items-center gap-3 ml-4">
+                <span className="text-gray-300">|</span>
+                <Badge variant="outline" className={remisionData?.estado === 'remisionada' ? 'bg-green-50 text-green-700 border-green-400 px-3 py-1' : 'bg-gray-50 text-gray-400 border-gray-300 px-3 py-1'}>
                   {remisionData?.estado === 'remisionada' ? 'Remisionada' : 'Sin remisionar'}
                 </Badge>
-                <Badge variant="outline" className="bg-gray-50 text-gray-400 border-gray-200">
+                <Badge variant="outline" className="bg-gray-50 text-gray-400 border-gray-300 px-3 py-1">
                   Sin recaudo
                 </Badge>
-              </>
-            )} 
+              </div>
+            )}
             </Badge>
           </div>
         </div>
