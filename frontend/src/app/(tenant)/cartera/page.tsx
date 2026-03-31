@@ -244,20 +244,23 @@ export default function CarteraPage() {
         if (!upErr) { compUrl = path; compName = comprobanteFile.name; }
       }
 
+      // Pasar comprobante directamente al RPC para que se guarde en el INSERT
       const { data, error } = await (supabase.rpc as any)('registrar_pago', {
-        p_cartera_id: selectedCartera.id, p_fecha_pago: pagoFecha,
-        p_monto_prima: prima, p_monto_iva: iva, p_monto_total: montoTotal,
-        p_notas: pagoNotas || null, p_user_id: user?.id || null,
+        p_cartera_id: selectedCartera.id,
+        p_fecha_pago: pagoFecha,
+        p_monto_prima: prima,
+        p_monto_iva: iva,
+        p_monto_total: montoTotal,
+        p_notas: pagoNotas || null,
+        p_user_id: user?.id || null,
+        p_comprobante_url: compUrl,
+        p_comprobante_name: compName,
       });
 
       if (error) { toast.error('Error: ' + error.message); setIsSubmittingPago(false); return; }
       const result = data as { success: boolean; pago_id?: string; estado?: string; saldo_pendiente?: number; error?: string };
 
       if (result?.success) {
-        // Guardar comprobante en el pago
-        if (compUrl && result.pago_id) {
-          await (supabase as any).from('pagos').update({ comprobante_url: compUrl, comprobante_name: compName }).eq('id', result.pago_id);
-        }
         toast.success(result.estado === 'pagada' ? 'Pago total registrado' : `Abono registrado - Saldo: ${formatPremium(result.saldo_pendiente || 0)}`);
         setShowPagoDialog(false); loadCartera(); loadResumen();
       } else { toast.error(result?.error || 'Error al registrar pago'); }
