@@ -480,10 +480,12 @@ export default function PolicyDetailPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => router.push(`/polizas/${policyId}/editar`)} className="cursor-pointer">
-              <Edit className="mr-2 h-4 w-4" />
-              Editar Póliza
-            </DropdownMenuItem>
+            {!isCancelled && policy.status !== 'inactiva' && (
+              <DropdownMenuItem onClick={() => router.push(`/polizas/${policyId}/editar`)} className="cursor-pointer">
+                <Edit className="mr-2 h-4 w-4" />
+                Editar Póliza
+              </DropdownMenuItem>
+            )}
             {isActive && (
               <>
                 <DropdownMenuItem onClick={() => router.push(`/polizas/modificar?poliza=${policyId}`)} className="cursor-pointer">
