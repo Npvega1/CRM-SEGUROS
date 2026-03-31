@@ -44,7 +44,8 @@ import {
   Trash2,
   File,
   MessageSquare,
-  Layers
+  Layers,
+  RotateCcw
 } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -85,6 +86,7 @@ interface RelatedAnexo {
   status: string;
   fecha_expedicion: string | null;
   created_at: string;
+  metadata: Record<string, unknown> | null;
 }
 
 interface PolicyWithClient extends Policy {
@@ -125,8 +127,8 @@ export default function PolicyDetailPage() {
   const [relatedAnexos, setRelatedAnexos] = useState<RelatedAnexo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [isCanceling, setIsCanceling] = useState(false);
+  const [showRehabDialog, setShowRehabDialog] = useState(false);
+  const [isRehabilitating, setIsRehabilitating] = useState(false);
   const [isUploadingPoliza, setIsUploadingPoliza] = useState(false);
   const [isUploadingSoporte, setIsUploadingSoporte] = useState(false);
   const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
@@ -176,11 +178,10 @@ export default function PolicyDetailPage() {
         } as PolicyWithClient);
 
         // Cargar anexos relacionados — SOLO de la misma vigencia (mismo status)
-        // Excluir pólizas inactivas para no mezclar vigencias
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: anexosData } = await (supabase as any)
           .from('policies')
-          .select('id, anexo, premium, total_a_pagar, gastos_expedicion, iva, status, fecha_expedicion, created_at')
+          .select('id, anexo, premium, total_a_pagar, gastos_expedicion, iva, status, fecha_expedicion, created_at, metadata')
           .eq('policy_number', data.policy_number)
           .eq('tenant_id', tenantId)
           .eq('status', data.status)
@@ -216,36 +217,86 @@ export default function PolicyDetailPage() {
     }
   }, [policyId, tenantId, loadPolicy]);
 
-  const handleCancelPolicy = async () => {
+  const handleRehabilitatePolicy = async () => {
     if (!tenantId || !policy) return;
 
-    setIsCanceling(true);
+    setIsRehabilitating(true);
     try {
       const supabase = getBrowserClient();
 
+      // 1. Buscar el anexo de cancelación (tiene metadata.cancellation_anexo = true)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase as any)
+      const { data: cancelAnexos } = await (supabase as any)
         .from('policies')
-        .update({
-          status: 'cancelada',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', policyId)
-        .eq('tenant_id', tenantId);
+        .select('id')
+        .eq('policy_number', policy.policy_number)
+        .eq('tenant_id', tenantId)
+        .eq('status', 'cancelada')
+        .not('metadata->cancellation_anexo', 'is', null);
 
-      if (updateError) {
-        setError(updateError.message || 'Error al cancelar la póliza');
-      } else {
-        setPolicy(prev => prev ? { ...prev, status: 'cancelada' } : null);
-        setShowCancelDialog(false);
+      // 2. Eliminar los anexos de cancelación
+      if (cancelAnexos && cancelAnexos.length > 0) {
+        for (const ca of cancelAnexos) {
+          const caId = (ca as { id: string }).id;
+          // Eliminar documentos del anexo de cancelación
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from('policy_documents')
+            .delete()
+            .eq('policy_id', caId)
+            .eq('tenant_id', tenantId);
+
+          // Eliminar el anexo de cancelación
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from('policies')
+            .delete()
+            .eq('id', caId)
+            .eq('tenant_id', tenantId);
+        }
       }
+
+      // 3. Cambiar todas las pólizas de este número a "activa" y agregar nota de rehabilitación
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: allCancelled } = await (supabase as any)
+        .from('policies')
+        .select('id, notas')
+        .eq('policy_number', policy.policy_number)
+        .eq('tenant_id', tenantId)
+        .eq('status', 'cancelada');
+
+      if (allCancelled) {
+        const rehabDate = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
+        for (const p of allCancelled) {
+          const pTyped = p as { id: string; notas: string | null };
+          const existingNotas = pTyped.notas || '';
+          const rehabNote = `[REHABILITADA ${rehabDate}]`;
+          const newNotas = existingNotas ? `${rehabNote}\n${existingNotas}` : rehabNote;
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from('policies')
+            .update({
+              status: 'activa',
+              notas: newNotas,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', pTyped.id)
+            .eq('tenant_id', tenantId);
+        }
+      }
+
+      setShowRehabDialog(false);
+      // Recargar la página
+      loadPolicy();
+
     } catch {
-      setError('Error de conexión');
+      setError('Error al rehabilitar la póliza');
     }
-    setIsCanceling(false);
+    setIsRehabilitating(false);
   };
 
-  const handleUploadDocument = async (file: File, documentType: 'poliza' | 'soporte') => {
+  const handleUploadDocument = async (file: globalThis.File, documentType: 'poliza' | 'soporte') => {
     if (!tenantId || !policyId) return;
 
     const setUploading = documentType === 'poliza' ? setIsUploadingPoliza : setIsUploadingSoporte;
@@ -398,8 +449,8 @@ export default function PolicyDetailPage() {
   const ivaConsolidado = baseIva + anexosIva;
   const totalConsolidado = baseTotal + anexosTotal;
 
-  // Determinar si la póliza está activa para mostrar acciones
   const isActive = policy.status === 'activa';
+  const isCancelled = policy.status === 'cancelada';
 
   return (
     <div className="container mx-auto py-6 px-4 space-y-6">
@@ -443,6 +494,11 @@ export default function PolicyDetailPage() {
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Renovar Póliza
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push(`/polizas/cancelar?poliza=${policyId}`)} className="cursor-pointer text-red-600">
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Cancelar Póliza
+                </DropdownMenuItem>
               </>
             )}
             {(policy.status === 'no_renovada' || policy.status === 'vencida') && (
@@ -451,14 +507,26 @@ export default function PolicyDetailPage() {
                 Renovar Póliza
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setShowCancelDialog(true)} className="cursor-pointer text-red-600" disabled={policy.status === 'cancelada' || policy.status === 'inactiva'}>
-              <XCircle className="mr-2 h-4 w-4" />
-              Cancelar Póliza
-            </DropdownMenuItem>
+            {isCancelled && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setShowRehabDialog(true)} className="cursor-pointer text-green-600">
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Rehabilitar Póliza
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Nota de rehabilitación */}
+      {policyAny.notas && policyAny.notas.includes('[REHABILITADA') && (
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm flex items-center gap-2">
+          <RotateCcw className="h-4 w-4" />
+          Esta póliza fue rehabilitada después de una cancelación.
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -744,7 +812,7 @@ export default function PolicyDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Anexos Relacionados — solo si hay anexos de la misma vigencia */}
+          {/* Anexos Relacionados */}
           {relatedAnexos.length > 0 && (
             <Card>
               <CardHeader>
@@ -755,7 +823,6 @@ export default function PolicyDetailPage() {
                 <CardDescription>Modificaciones de esta vigencia</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {/* Póliza Base */}
                 <div className="p-2 border rounded-lg bg-slate-50">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Póliza Base (Anexo {policyAny.anexo || '00'})</span>
@@ -767,7 +834,6 @@ export default function PolicyDetailPage() {
                   <span className="text-xs text-muted-foreground">Prima</span>
                 </div>
 
-                {/* Otros Anexos */}
                 {relatedAnexos.map((anexo) => (
                   <div
                     key={anexo.id}
@@ -777,7 +843,12 @@ export default function PolicyDetailPage() {
                     onClick={() => router.push(`/polizas/${anexo.id}`)}
                   >
                     <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium">Anexo {anexo.anexo}</span>
+                      <span className="text-sm font-medium">
+                        Anexo {anexo.anexo}
+                        {anexo.metadata && (anexo.metadata as Record<string, unknown>).cancellation_anexo && (
+                          <Badge variant="outline" className="ml-1 text-xs text-red-600 border-red-300">Cancelación</Badge>
+                        )}
+                      </span>
                       <span className="text-xs text-muted-foreground">
                         {formatDate(anexo.fecha_expedicion || anexo.created_at)}
                       </span>
@@ -791,7 +862,6 @@ export default function PolicyDetailPage() {
                   </div>
                 ))}
 
-                {/* Totales Consolidados */}
                 <div className="border-t pt-3 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Prima Consolidada</span>
@@ -819,19 +889,23 @@ export default function PolicyDetailPage() {
         </div>
       </div>
 
-      {/* Dialog Cancelar */}
-      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+      {/* Dialog Rehabilitar */}
+      <Dialog open={showRehabDialog} onOpenChange={setShowRehabDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Cancelar Póliza</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-green-600" />
+              Rehabilitar Póliza
+            </DialogTitle>
             <DialogDescription>
-              ¿Estás seguro de que deseas cancelar la póliza <strong>{policy.policy_number}</strong>? Esta acción no se puede deshacer.
+              ¿Estás seguro de que deseas rehabilitar la póliza <strong>{policy.policy_number}</strong>?
+              El anexo de cancelación será eliminado y la póliza volverá a estado <strong>Activa</strong>.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>No, mantener</Button>
-            <Button variant="destructive" onClick={handleCancelPolicy} disabled={isCanceling}>
-              {isCanceling ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Cancelando...</> : 'Sí, cancelar'}
+            <Button variant="outline" onClick={() => setShowRehabDialog(false)}>Cancelar</Button>
+            <Button onClick={handleRehabilitatePolicy} disabled={isRehabilitating} className="bg-green-600 hover:bg-green-700">
+              {isRehabilitating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rehabilitando...</> : 'Sí, rehabilitar'}
             </Button>
           </DialogFooter>
         </DialogContent>
