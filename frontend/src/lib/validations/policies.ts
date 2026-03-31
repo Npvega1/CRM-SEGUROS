@@ -19,7 +19,7 @@ export type PolicyLine = z.infer<typeof PolicyLineEnum>;
 /**
  * Estado de póliza
  */
-export const PolicyStatusEnum = z.enum(['cotizacion', 'activa', 'vencida', 'cancelada', 'renovacion', 'renovada']);
+export const PolicyStatusEnum = z.enum(['cotizacion', 'activa', 'vencida', 'cancelada', 'renovacion', 'renovada', 'no_renovada', 'inactiva']);
 export type PolicyStatus = z.infer<typeof PolicyStatusEnum>;
 
 /**
@@ -189,7 +189,9 @@ export const POLICY_STATUS_LABELS: Record<string, string> = {
   vencida: 'Vencida',
   cancelada: 'Cancelada',
   renovacion: 'En Renovación',
-  renovada: 'Renovada'
+  renovada: 'Renovada',
+  no_renovada: 'No Renovada',
+  inactiva: 'Inactiva'
 };
 
 /**
@@ -201,7 +203,9 @@ export const POLICY_STATUS_COLORS: Record<string, string> = {
   vencida: 'bg-red-100 text-red-800',
   cancelada: 'bg-slate-100 text-slate-800',
   renovacion: 'bg-yellow-100 text-yellow-800',
-  renovada: 'bg-blue-100 text-blue-800'
+  renovada: 'bg-blue-100 text-blue-800',
+  no_renovada: 'bg-orange-100 text-orange-800',
+  inactiva: 'bg-purple-100 text-purple-800'
 };
 
 /**
@@ -221,10 +225,12 @@ export const POLICY_LINE_ICONS: Record<string, string> = {
  */
 export const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
   cotizacion: ['activa', 'cancelada'],
-  activa: ['vencida', 'cancelada', 'renovacion', 'renovada'],
-  vencida: ['renovacion', 'cancelada'],
+  activa: ['vencida', 'cancelada', 'renovacion', 'inactiva'],
+  vencida: ['no_renovada', 'cancelada'],
   renovacion: ['activa', 'cancelada'],
   renovada: [],
+  no_renovada: ['activa'],
+  inactiva: [],
   cancelada: []
 };
 
