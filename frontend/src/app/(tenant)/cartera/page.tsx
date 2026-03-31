@@ -6,7 +6,7 @@
 // Control de cobros, pagos y recaudos
 // =====================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -47,15 +47,15 @@ import {
   DollarSign,
   Clock,
   CheckCircle,
-  AlertCircle,
   Loader2,
   ChevronLeft,
   ChevronRight,
   Wallet,
-  CreditCard,
   FileText,
   Settings2,
-  Plus
+  Upload,
+  Paperclip,
+  File
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -98,6 +98,8 @@ interface PagoRegistro {
   monto_iva: number;
   monto_total: number;
   notas: string | null;
+  comprobante_url: string | null;
+  comprobante_name: string | null;
   created_at: string;
 }
 
@@ -138,15 +140,17 @@ export default function CarteraPage() {
   const [pageSize] = useState(50);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-
-  // Resumen
   const [resumen, setResumen] = useState({ totalCartera: 0, totalRecaudado: 0, totalPendiente: 0, countPendiente: 0, countAbono: 0, countPagada: 0 });
 
   // Dialog pago
   const [showPagoDialog, setShowPagoDialog] = useState(false);
   const [selectedCartera, setSelectedCartera] = useState<CarteraWithPolicy | null>(null);
-  const [pagoForm, setPagoForm] = useState({ fecha_pago: new Date().toISOString().split('T')[0], monto_prima: '', monto_iva: '', monto_total: '', notas: '' });
+  const [pagoTotal, setPagoTotal] = useState('');
+  const [pagoFecha, setPagoFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [pagoNotas, setPagoNotas] = useState('');
+  const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
   const [isSubmittingPago, setIsSubmittingPago] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Dialog metodo pago
   const [showMetodoDialog, setShowMetodoDialog] = useState(false);
@@ -308,9 +312,7 @@ export default function CarteraPage() {
         return;
       }
 
-      // Si es acuerdo de pago, crear cuotas
       if (metodoForm.metodo_pago === 'acuerdo_pago' && metodoForm.cuotas.length > 0) {
-        // Eliminar cuotas anteriores
         await (supabase as any)
           .from('cuotas_acuerdo')
           .delete()
@@ -346,32 +348,24 @@ export default function CarteraPage() {
   // --- Registrar pago ---
   const handleOpenPago = (item: CarteraWithPolicy) => {
     setSelectedCartera(item);
-    setPagoForm({
-      fecha_pago: new Date().toISOString().split('T')[0],
-      monto_prima: '',
-      monto_iva: '',
-      monto_total: '',
-      notas: '',
-    });
+    setPagoTotal('');
+    setPagoFecha(new Date().toISOString().split('T')[0]);
+    setPagoNotas('');
+    setComprobanteFile(null);
     setShowPagoDialog(true);
   };
 
-  const handlePagoFormChange = (field: string, value: string) => {
-    setPagoForm(prev => {
-      const updated = { ...prev, [field]: value };
-      if (field === 'monto_prima' || field === 'monto_iva') {
-        const prima = parseFloat(updated.monto_prima) || 0;
-        const iva = parseFloat(updated.monto_iva) || 0;
-        updated.monto_total = (prima + iva).toString();
-      }
-      return updated;
-    });
+  const calcularDesglose = (totalStr: string) => {
+    const total = parseFloat(totalStr) || 0;
+    const prima = Math.round(total / 1.19);
+    const iva = total - prima;
+    return { prima, iva, total };
   };
 
   const handleSubmitPago = async () => {
     if (!selectedCartera) return;
 
-    const montoTotal = parseFloat(pagoForm.monto_total) || 0;
+    const { prima, iva, total: montoTotal } = calcularDesglose(pagoTotal);
     if (montoTotal <= 0) {
       toast.error('El monto total debe ser mayor a 0');
       return;
@@ -384,11 +378,11 @@ export default function CarteraPage() {
 
       const { data, error } = await (supabase.rpc as any)('registrar_pago', {
         p_cartera_id: selectedCartera.id,
-        p_fecha_pago: pagoForm.fecha_pago,
-        p_monto_prima: parseFloat(pagoForm.monto_prima) || 0,
-        p_monto_iva: parseFloat(pagoForm.monto_iva) || 0,
+        p_fecha_pago: pagoFecha,
+        p_monto_prima: prima,
+        p_monto_iva: iva,
         p_monto_total: montoTotal,
-        p_notas: pagoForm.notas || null,
+        p_notas: pagoNotas || null,
         p_user_id: user?.id || null,
       });
 
@@ -398,9 +392,30 @@ export default function CarteraPage() {
         return;
       }
 
-      const result = data as { success: boolean; estado?: string; saldo_pendiente?: number; error?: string };
+      const result = data as { success: boolean; pago_id?: string; estado?: string; saldo_pendiente?: number; error?: string };
 
       if (result && result.success) {
+        // Subir comprobante si existe
+        if (comprobanteFile && result.pago_id) {
+          const timestamp = Date.now();
+          const safeName = comprobanteFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const path = `${tenantId}/remisiones/${selectedCartera.remision_id}/pagos/${timestamp}_${safeName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('policy-documents')
+            .upload(path, comprobanteFile, { cacheControl: '3600', upsert: true });
+
+          if (!uploadError) {
+            await (supabase as any)
+              .from('pagos')
+              .update({
+                comprobante_url: path,
+                comprobante_name: comprobanteFile.name,
+              })
+              .eq('id', result.pago_id);
+          }
+        }
+
         toast.success(
           result.estado === 'pagada'
             ? 'Pago total registrado - Poliza pagada'
@@ -419,6 +434,21 @@ export default function CarteraPage() {
   };
 
   // --- Historial ---
+  const handleViewComprobante = async (comprobanteUrl: string) => {
+    try {
+      const supabase = getBrowserClient();
+      const { data } = await supabase.storage
+        .from('policy-documents')
+        .createSignedUrl(comprobanteUrl, 3600);
+
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch {
+      toast.error('Error al obtener el comprobante');
+    }
+  };
+
   const handleOpenHistorial = async (item: CarteraWithPolicy) => {
     setHistorialCartera(item);
     setShowHistorialDialog(true);
@@ -766,55 +796,88 @@ export default function CarteraPage() {
               <Label>Fecha de pago</Label>
               <Input
                 type="date"
-                value={pagoForm.fecha_pago}
-                onChange={(e) => handlePagoFormChange('fecha_pago', e.target.value)}
+                value={pagoFecha}
+                onChange={(e) => setPagoFecha(e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Prima</Label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={pagoForm.monto_prima}
-                  onChange={(e) => handlePagoFormChange('monto_prima', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>IVA</Label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={pagoForm.monto_iva}
-                  onChange={(e) => handlePagoFormChange('monto_iva', e.target.value)}
-                />
-              </div>
-            </div>
+
             <div className="space-y-2">
               <Label>Total a pagar</Label>
               <Input
                 type="number"
-                value={pagoForm.monto_total}
-                onChange={(e) => handlePagoFormChange('monto_total', e.target.value)}
+                placeholder="Ingrese el valor total del recibo"
+                value={pagoTotal}
+                onChange={(e) => setPagoTotal(e.target.value)}
                 className="font-semibold text-lg"
               />
             </div>
+
+            {/* Desglose automatico */}
+            {parseFloat(pagoTotal) > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1 text-sm">
+                <p className="font-medium text-blue-800 mb-1">Desglose automatico:</p>
+                <div className="flex justify-between text-blue-700">
+                  <span>Prima:</span>
+                  <span>{formatPremium(calcularDesglose(pagoTotal).prima)}</span>
+                </div>
+                <div className="flex justify-between text-blue-700">
+                  <span>IVA (19%):</span>
+                  <span>{formatPremium(calcularDesglose(pagoTotal).iva)}</span>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Notas (opcional)</Label>
               <Textarea
                 placeholder="Referencia de pago, observaciones..."
-                value={pagoForm.notas}
-                onChange={(e) => setPagoForm(prev => ({ ...prev, notas: e.target.value }))}
+                value={pagoNotas}
+                onChange={(e) => setPagoNotas(e.target.value)}
                 rows={2}
               />
             </div>
 
-            {selectedCartera && parseFloat(pagoForm.monto_total) > 0 && parseFloat(pagoForm.monto_total) < selectedCartera.saldo_pendiente && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
-                Este pago se registrara como <strong>abono parcial</strong>. Saldo restante: {formatPremium(selectedCartera.saldo_pendiente - (parseFloat(pagoForm.monto_total) || 0))}
+            {/* Comprobante de pago */}
+            <div className="space-y-2">
+              <Label>Comprobante de pago (opcional)</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) setComprobanteFile(file);
+                  e.target.value = '';
+                }}
+                className="hidden"
+              />
+              {comprobanteFile ? (
+                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg p-3">
+                  <Paperclip className="w-4 h-4 text-green-600" />
+                  <span className="text-sm text-green-700 flex-1 truncate">{comprobanteFile.name}</span>
+                  <Button variant="ghost" size="sm" onClick={() => setComprobanteFile(null)} className="text-red-500 hover:text-red-700 h-7 px-2">
+                    Quitar
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Adjuntar comprobante
+                </Button>
+              )}
+            </div>
+
+            {selectedCartera && parseFloat(pagoTotal) > 0 && parseFloat(pagoTotal) < selectedCartera.saldo_pendiente && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
+                Este pago se registrara como <strong>abono parcial</strong>. Saldo restante: {formatPremium(selectedCartera.saldo_pendiente - (parseFloat(pagoTotal) || 0))}
               </div>
             )}
-            {selectedCartera && parseFloat(pagoForm.monto_total) >= selectedCartera.saldo_pendiente && parseFloat(pagoForm.monto_total) > 0 && (
+            {selectedCartera && parseFloat(pagoTotal) >= selectedCartera.saldo_pendiente && parseFloat(pagoTotal) > 0 && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
                 Este pago cubrira el <strong>saldo total</strong>. La poliza quedara como pagada.
               </div>
@@ -896,13 +959,20 @@ export default function CarteraPage() {
                           <span className="font-medium">{formatDate(pago.fecha_pago)}</span>
                           <span className="font-bold text-green-700">{formatPremium(pago.monto_total)}</span>
                         </div>
-                        {(pago.monto_prima > 0 || pago.monto_iva > 0) && (
-                          <div className="flex gap-4 text-xs text-muted-foreground">
-                            <span>Prima: {formatPremium(pago.monto_prima)}</span>
-                            <span>IVA: {formatPremium(pago.monto_iva)}</span>
-                          </div>
-                        )}
+                        <div className="flex gap-4 text-xs text-muted-foreground">
+                          <span>Prima: {formatPremium(pago.monto_prima)}</span>
+                          <span>IVA: {formatPremium(pago.monto_iva)}</span>
+                        </div>
                         {pago.notas && <p className="text-xs text-muted-foreground">{pago.notas}</p>}
+                        {pago.comprobante_url && (
+                          <button
+                            onClick={() => handleViewComprobante(pago.comprobante_url!)}
+                            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 mt-1"
+                          >
+                            <File className="w-3 h-3" />
+                            {pago.comprobante_name || 'Ver comprobante'}
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
