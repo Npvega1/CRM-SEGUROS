@@ -11,11 +11,9 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { PolicyForm, type PolicyFormData } from '@/components/modules/policies/PolicyForm';
 import type { Policy, PolicyStatus } from '@/lib/validations/policies';
-import { ArrowLeft, Shield, RefreshCw, Building, FileText, ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowLeft, RefreshCw, FileText, ArrowRight } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { getBrowserClient } from '@/lib/supabase/client';
@@ -51,9 +49,6 @@ function RenewPolicyContent() {
   const [selectedOption, setSelectedOption] = useState<RenewalOption | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Para la opción "new_number": campo de nuevo número
-  const [newPolicyNumber, setNewPolicyNumber] = useState('');
 
   const loadOriginalPolicy = useCallback(async () => {
     if (!tenantId || !originalPolicyId) return;
@@ -100,7 +95,7 @@ function RenewPolicyContent() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const op = originalPolicy as any;
 
-    // Calcular nuevas fechas: inicio = fin de la original, fin = inicio + 1 año
+    // Calcular nuevas fechas: inicio = fin de la original + 1 día, fin = inicio + 1 año
     const originalEndDate = op.end_date ? new Date(op.end_date) : new Date();
     const newStartDate = new Date(originalEndDate);
     newStartDate.setDate(newStartDate.getDate() + 1);
@@ -109,7 +104,7 @@ function RenewPolicyContent() {
 
     const base = {
       ...originalPolicy,
-      id: '', // Será nuevo
+      id: '',
       status: 'activa' as PolicyStatus,
       anexo: '00',
       policy_type: 'renovacion',
@@ -122,18 +117,15 @@ function RenewPolicyContent() {
 
     switch (selectedOption) {
       case 'same_number':
-        // Mantiene todo: número, compañía, grupo, ramo
         return base as Policy;
 
       case 'new_number':
-        // Mantiene compañía, grupo, ramo. Número nuevo.
         return {
           ...base,
-          policy_number: '', // El usuario lo llenará
+          policy_number: '',
         } as Policy;
 
       case 'new_company':
-        // Solo mantiene cliente. Limpia compañía, grupo, ramo.
         return {
           ...base,
           policy_number: '',
@@ -157,30 +149,31 @@ function RenewPolicyContent() {
   const handleSubmit = async (data: PolicyFormData) => {
     if (!tenantId || !userId || !originalPolicy || !originalPolicyId) return;
 
-    // Validar nuevo número si aplica
-    if (selectedOption === 'new_number' && !newPolicyNumber.trim()) {
-      setError('Debes ingresar el nuevo número de póliza');
-      return;
-    }
-
     setIsSaving(true);
     setError(null);
 
     try {
       const supabase = getBrowserClient();
 
-      const policyNumber = selectedOption === 'new_number'
-        ? newPolicyNumber.trim().toUpperCase()
-        : data.policy_number;
+      // 1. Primero: Marcar la póliza original y TODOS sus anexos como "inactiva"
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('policies')
+        .update({
+          status: 'inactiva',
+          updated_at: new Date().toISOString()
+        })
+        .eq('policy_number', originalPolicy.policy_number)
+        .eq('tenant_id', tenantId);
 
-      // 1. Crear la nueva póliza (renovación)
+      // 2. Crear la nueva póliza (renovación)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: newPolicy, error: insertError } = await (supabase as any)
         .from('policies')
         .insert({
           tenant_id: tenantId,
           client_id: originalPolicy.client_id,
-          policy_number: policyNumber,
+          policy_number: data.policy_number,
           anexo: '00',
           insurer: data.insurer,
           insurer_id: data.insurer_id || null,
@@ -206,25 +199,25 @@ function RenewPolicyContent() {
         .single();
 
       if (insertError) {
+        // Si falla el insert, revertir el estado de la original
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('policies')
+          .update({
+            status: 'activa',
+            updated_at: new Date().toISOString()
+          })
+          .eq('policy_number', originalPolicy.policy_number)
+          .eq('tenant_id', tenantId);
+
         if (insertError.code === '23505') {
-          setError('Ya existe una póliza con este número y anexo.');
+          setError('Ya existe una póliza con este número, anexo y fecha de inicio.');
         } else {
           setError(insertError.message || 'Error al crear la renovación');
         }
         setIsSaving(false);
         return;
       }
-
-      // 2. Actualizar la póliza original a estado "renovada"
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from('policies')
-        .update({
-          status: 'renovada',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', originalPolicyId)
-        .eq('tenant_id', tenantId);
 
       // 3. Redirigir a la nueva póliza
       router.push(`/polizas/${newPolicy.id}`);
@@ -369,7 +362,6 @@ function RenewPolicyContent() {
               size="sm"
               onClick={() => {
                 setSelectedOption(null);
-                setNewPolicyNumber('');
                 setError(null);
               }}
               className="text-xs text-muted-foreground"
@@ -377,24 +369,6 @@ function RenewPolicyContent() {
               Cambiar
             </Button>
           </div>
-
-          {/* Campo de nuevo número (solo para new_number) */}
-          {selectedOption === 'new_number' && (
-            <Card>
-              <CardContent className="pt-6">
-                <Label htmlFor="new_policy_number" className="font-semibold">
-                  Nuevo Número de Póliza *
-                </Label>
-                <Input
-                  id="new_policy_number"
-                  value={newPolicyNumber}
-                  onChange={(e) => setNewPolicyNumber(e.target.value)}
-                  placeholder="Ingresa el nuevo número asignado por la aseguradora"
-                  className="mt-2"
-                />
-              </CardContent>
-            </Card>
-          )}
 
           <Card>
             <CardHeader>
