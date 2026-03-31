@@ -176,7 +176,7 @@ export default function PolicyDetailPage() {
           insurance_group: data.insurance_group
         } as PolicyWithClient);
 
-        // Cargar anexos relacionados (todas las pólizas con el mismo policy_number excepto esta)
+        // Cargar anexos relacionados
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: anexosData } = await (supabase as any)
           .from('policies')
@@ -345,13 +345,14 @@ export default function PolicyDetailPage() {
     setDeleteDocId(null);
   };
 
-  const getStatusColor = (status: PolicyStatus) => {
-    const colors: Record<PolicyStatus, string> = {
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
       cotizacion: 'bg-gray-100 text-gray-800',
       activa: 'bg-green-100 text-green-800',
       vencida: 'bg-red-100 text-red-800',
       cancelada: 'bg-slate-100 text-slate-800',
-      renovacion: 'bg-yellow-100 text-yellow-800'
+      renovacion: 'bg-yellow-100 text-yellow-800',
+      renovada: 'bg-blue-100 text-blue-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -362,20 +363,11 @@ export default function PolicyDetailPage() {
 
   if (error || !policy) {
     return (
-      <div className="container mx-auto py-8 px-4">
-        <Card className="max-w-lg mx-auto">
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center text-center gap-4">
-              <AlertCircle className="h-12 w-12 text-red-500" />
-              <p className="text-lg font-medium text-slate-800">
-                {error || 'Póliza no encontrada'}
-              </p>
-              <Button onClick={() => router.push('/polizas')}>
-                Volver a Pólizas
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="container mx-auto py-6 px-4 text-center">
+        <p className="text-red-600">{error || 'Póliza no encontrada'}</p>
+        <Button variant="outline" className="mt-4" onClick={() => router.push('/polizas')}>
+          Volver a Pólizas
+        </Button>
       </div>
     );
   }
@@ -404,26 +396,24 @@ export default function PolicyDetailPage() {
   const totalConsolidado = baseTotal + anexosTotal;
 
   return (
-    <div className="container mx-auto py-6 px-4">
+    <div className="container mx-auto py-6 px-4 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="p-2 hover:bg-muted rounded-lg">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.back()} className="p-2 hover:bg-muted rounded-lg">
             <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex items-center gap-3">
-            <Shield className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                Póliza {policy.policy_number}
-                {policyAny.anexo && policyAny.anexo !== '00' && (
-                  <Badge variant="outline" className="ml-2">Anexo {policyAny.anexo}</Badge>
-                )}
-              </h1>
-              <Badge className={getStatusColor(policy.status as PolicyStatus)}>
-                {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
-              </Badge>
-            </div>
+          </button>
+          <Shield className="h-6 w-6 text-primary" />
+          <div>
+            <h1 className="text-xl font-bold">
+              Póliza {policy.policy_number}
+              {policyAny.anexo && policyAny.anexo !== '00' && (
+                <Badge variant="outline" className="ml-2">Anexo {policyAny.anexo}</Badge>
+              )}
+            </h1>
+            <Badge className={getStatusColor(policy.status)}>
+              {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
+            </Badge>
           </div>
         </div>
         <DropdownMenu>
@@ -437,12 +427,11 @@ export default function PolicyDetailPage() {
               <Edit className="mr-2 h-4 w-4" />
               Editar Póliza
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => router.push(`/polizas/modificar?poliza=${policyId}`)} className="cursor-pointer">
               <FilePlus className="mr-2 h-4 w-4" />
               Incluir Modificación
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push(`/polizas/nueva?renovacion=${policyId}`)} className="cursor-pointer">
+            <DropdownMenuItem onClick={() => router.push(`/polizas/renovar?poliza=${policyId}`)} className="cursor-pointer">
               <RefreshCw className="mr-2 h-4 w-4" />
               Renovar Póliza
             </DropdownMenuItem>
@@ -526,30 +515,22 @@ export default function PolicyDetailPage() {
                 Valores de la Póliza {policyAny.anexo && policyAny.anexo !== '00' && `(Anexo ${policyAny.anexo})`}
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-4 gap-4">
+            <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Prima</p>
-                <p className={`font-medium ${(policy.premium || 0) < 0 ? 'text-red-600' : ''}`}>
-                  {formatCurrency(policy.premium)}
-                </p>
+                <p className={`text-lg font-semibold ${policy.premium < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policy.premium)}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Gastos Exp.</p>
-                <p className={`font-medium ${(policyAny.gastos_expedicion || 0) < 0 ? 'text-red-600' : ''}`}>
-                  {formatCurrency(policyAny.gastos_expedicion)}
-                </p>
+                <p className={`text-lg font-semibold ${policyAny.gastos_expedicion < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policyAny.gastos_expedicion)}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">IVA</p>
-                <p className={`font-medium ${(policyAny.iva || 0) < 0 ? 'text-red-600' : ''}`}>
-                  {formatCurrency(policyAny.iva)}
-                </p>
+                <p className={`text-lg font-semibold ${policyAny.iva < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policyAny.iva)}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total</p>
-                <p className={`font-semibold text-lg ${displayTotal < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {formatCurrency(displayTotal)}
-                </p>
+                <p className={`text-lg font-semibold ${displayTotal < 0 ? 'text-red-600' : ''}`}>{formatCurrency(displayTotal)}</p>
               </div>
             </CardContent>
           </Card>
@@ -564,11 +545,11 @@ export default function PolicyDetailPage() {
             </CardHeader>
             <CardContent>
               {policyAny.notas ? (
-                <div className="bg-slate-50 p-4 rounded-lg">
-                  <p className="text-slate-700 whitespace-pre-wrap">{policyAny.notas}</p>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-sm whitespace-pre-wrap">{policyAny.notas}</p>
                 </div>
               ) : (
-                <p className="text-muted-foreground text-sm">
+                <p className="text-sm text-muted-foreground italic">
                   No hay comentarios registrados para esta póliza.
                 </p>
               )}
@@ -578,10 +559,7 @@ export default function PolicyDetailPage() {
           {/* Documentos */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Documentos
-              </CardTitle>
+              <CardTitle>Documentos</CardTitle>
               <CardDescription>Documentos adjuntos de la póliza</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -589,14 +567,14 @@ export default function PolicyDetailPage() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium">Documentos de Póliza</h4>
-                  <span className="text-sm text-muted-foreground">{polizaDocs.length} / 5</span>
+                  <Badge variant="outline">{polizaDocs.length} / 5</Badge>
                 </div>
                 {polizaDocs.length < 5 && (
                   <div className="mb-3">
                     <label className="cursor-pointer">
                       <input
                         type="file"
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        accept=".pdf,.jpg,.jpeg,.png"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) handleUploadDocument(file, 'poliza');
@@ -605,19 +583,21 @@ export default function PolicyDetailPage() {
                         className="hidden"
                         disabled={isUploadingPoliza}
                       />
-                      <div className="flex items-center gap-2 text-sm text-primary hover:underline">
-                        {isUploadingPoliza ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                        {isUploadingPoliza ? 'Subiendo...' : 'Subir documento'}
-                      </div>
+                      <Button variant="outline" size="sm" asChild>
+                        <span>
+                          {isUploadingPoliza ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                          {isUploadingPoliza ? 'Subiendo...' : 'Subir documento'}
+                        </span>
+                      </Button>
                     </label>
                   </div>
                 )}
                 {polizaDocs.length > 0 ? (
                   <div className="space-y-2">
                     {polizaDocs.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                      <div key={doc.id} className="flex items-center justify-between p-2 border rounded-lg">
                         <div className="flex items-center gap-2">
-                          <File className="h-4 w-4 text-slate-500" />
+                          <File className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">{doc.file_name}</span>
                         </div>
                         <div className="flex gap-1">
@@ -632,7 +612,7 @@ export default function PolicyDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No hay documentos de póliza</p>
+                  <p className="text-sm text-muted-foreground italic">No hay documentos de póliza</p>
                 )}
               </div>
 
@@ -640,14 +620,14 @@ export default function PolicyDetailPage() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium">Documentos de Soporte</h4>
-                  <span className="text-sm text-muted-foreground">{soporteDocs.length} / 8</span>
+                  <Badge variant="outline">{soporteDocs.length} / 8</Badge>
                 </div>
                 {soporteDocs.length < 8 && (
                   <div className="mb-3">
                     <label className="cursor-pointer">
                       <input
                         type="file"
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) handleUploadDocument(file, 'soporte');
@@ -656,19 +636,21 @@ export default function PolicyDetailPage() {
                         className="hidden"
                         disabled={isUploadingSoporte}
                       />
-                      <div className="flex items-center gap-2 text-sm text-primary hover:underline">
-                        {isUploadingSoporte ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                        {isUploadingSoporte ? 'Subiendo...' : 'Subir documento'}
-                      </div>
+                      <Button variant="outline" size="sm" asChild>
+                        <span>
+                          {isUploadingSoporte ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                          {isUploadingSoporte ? 'Subiendo...' : 'Subir documento'}
+                        </span>
+                      </Button>
                     </label>
                   </div>
                 )}
                 {soporteDocs.length > 0 ? (
                   <div className="space-y-2">
                     {soporteDocs.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                      <div key={doc.id} className="flex items-center justify-between p-2 border rounded-lg">
                         <div className="flex items-center gap-2">
-                          <File className="h-4 w-4 text-slate-500" />
+                          <File className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">{doc.file_name}</span>
                         </div>
                         <div className="flex gap-1">
@@ -683,7 +665,7 @@ export default function PolicyDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No hay documentos de soporte</p>
+                  <p className="text-sm text-muted-foreground italic">No hay documentos de soporte</p>
                 )}
               </div>
             </CardContent>
@@ -705,13 +687,15 @@ export default function PolicyDetailPage() {
                 <p className="text-sm text-muted-foreground">
                   {policy.client.doc_type.toUpperCase()}: {policy.client.doc_number}
                 </p>
-                {policy.client.email && (
-                  <p className="text-sm text-muted-foreground">{policy.client.email}</p>
-                )}
-                {policy.client.phone && (
-                  <p className="text-sm text-muted-foreground">{policy.client.phone}</p>
-                )}
-                <Button variant="outline" className="w-full mt-4" onClick={() => router.push(`/clientes/${policy.client?.id}`)}>
+                <div className="mt-3 space-y-1">
+                  {policy.client.email && (
+                    <p className="text-sm">{policy.client.email}</p>
+                  )}
+                  {policy.client.phone && (
+                    <p className="text-sm">{policy.client.phone}</p>
+                  )}
+                </div>
+                <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => router.push(`/clientes/${policy.client?.id}`)}>
                   Ver Cliente
                 </Button>
               </CardContent>
@@ -720,35 +704,26 @@ export default function PolicyDetailPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
+              <CardTitle>
                 Resumen {policyAny.anexo && policyAny.anexo !== '00' && `(Anexo ${policyAny.anexo})`}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Prima</span>
-                <span className={`font-medium ${(policy.premium || 0) < 0 ? 'text-red-600' : ''}`}>
-                  {formatCurrency(policy.premium)}
-                </span>
+                <span className="text-sm text-muted-foreground">Prima</span>
+                <span className={`font-medium ${policy.premium < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policy.premium)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Gastos</span>
-                <span className={`font-medium ${(policyAny.gastos_expedicion || 0) < 0 ? 'text-red-600' : ''}`}>
-                  {formatCurrency(policyAny.gastos_expedicion)}
-                </span>
+                <span className="text-sm text-muted-foreground">Gastos</span>
+                <span className={`font-medium ${policyAny.gastos_expedicion < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policyAny.gastos_expedicion)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">IVA</span>
-                <span className={`font-medium ${(policyAny.iva || 0) < 0 ? 'text-red-600' : ''}`}>
-                  {formatCurrency(policyAny.iva)}
-                </span>
+                <span className="text-sm text-muted-foreground">IVA</span>
+                <span className={`font-medium ${policyAny.iva < 0 ? 'text-red-600' : ''}`}>{formatCurrency(policyAny.iva)}</span>
               </div>
-              <div className="border-t pt-2 flex justify-between">
-                <span className="font-medium">Total</span>
-                <span className={`font-bold ${displayTotal < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {formatCurrency(displayTotal)}
-                </span>
+              <div className="flex justify-between border-t pt-2">
+                <span className="font-semibold">Total</span>
+                <span className={`font-semibold ${displayTotal < 0 ? 'text-red-600' : ''}`}>{formatCurrency(displayTotal)}</span>
               </div>
             </CardContent>
           </Card>
@@ -761,76 +736,64 @@ export default function PolicyDetailPage() {
                   <Layers className="h-5 w-5" />
                   Anexos Relacionados
                 </CardTitle>
-                <CardDescription>
-                  Modificaciones de esta póliza
-                </CardDescription>
+                <CardDescription>Modificaciones de esta póliza</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {/* Póliza Base */}
-                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <div>
-                    <p className="font-medium">Póliza Base (Anexo {policyAny.anexo || '00'})</p>
-                    <p className="text-xs text-muted-foreground">Este documento</p>
+                <div className="p-2 border rounded-lg bg-slate-50">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Póliza Base (Anexo {policyAny.anexo || '00'})</span>
+                    <span className="text-xs text-muted-foreground">Este documento</span>
                   </div>
-                  <div className="text-right">
-                    <p className={`font-semibold ${basePrima < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatCurrency(basePrima)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Prima</p>
-                  </div>
+                  <p className={`text-sm font-semibold mt-1 ${basePrima < 0 ? 'text-red-600' : ''}`}>
+                    {formatCurrency(basePrima)}
+                  </p>
+                  <span className="text-xs text-muted-foreground">Prima</span>
                 </div>
 
                 {/* Otros Anexos */}
                 {relatedAnexos.map((anexo) => (
-                  <div 
-                    key={anexo.id} 
-                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
+                  <div
+                    key={anexo.id}
+                    className={`p-2 border rounded-lg cursor-pointer hover:bg-slate-50 transition-colors ${
+                      anexo.premium < 0 ? 'border-red-200' : 'border-green-200'
+                    }`}
                     onClick={() => router.push(`/polizas/${anexo.id}`)}
                   >
-                    <div>
-                      <p className="font-medium">Anexo {anexo.anexo}</p>
-                      <p className="text-xs text-muted-foreground">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">Anexo {anexo.anexo}</span>
+                      <span className="text-xs text-muted-foreground">
                         {formatDate(anexo.fecha_expedicion || anexo.created_at)}
-                      </p>
+                      </span>
                     </div>
-                    <div className="text-right">
-                      <p className={`font-semibold ${(anexo.premium || 0) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {formatCurrency(anexo.premium)}
-                      </p>
-                      <Badge variant="outline" className="text-xs">
-                        {POLICY_STATUS_LABELS[anexo.status as PolicyStatus] || anexo.status}
-                      </Badge>
-                    </div>
+                    <p className={`text-sm font-semibold mt-1 ${anexo.premium < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatCurrency(anexo.premium)}
+                    </p>
+                    <Badge variant="outline" className="text-xs mt-1">
+                      {POLICY_STATUS_LABELS[anexo.status as PolicyStatus] || anexo.status}
+                    </Badge>
                   </div>
                 ))}
-                
+
                 {/* Totales Consolidados */}
-                <div className="border-t pt-3 mt-3 space-y-2">
-                  <div className="flex justify-between items-center text-sm">
+                <div className="border-t pt-3 space-y-2">
+                  <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Prima Consolidada</span>
-                    <span className={`font-semibold ${primaConsolidada < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatCurrency(primaConsolidada)}
-                    </span>
+                    <span className={`font-semibold ${primaConsolidada < 0 ? 'text-red-600' : ''}`}>{formatCurrency(primaConsolidada)}</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Gastos Consolidados</span>
-                    <span className={`font-semibold ${gastosConsolidados < 0 ? 'text-red-600' : ''}`}>
-                      {formatCurrency(gastosConsolidados)}
-                    </span>
+                    <span className={`font-semibold ${gastosConsolidados < 0 ? 'text-red-600' : ''}`}>{formatCurrency(gastosConsolidados)}</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">IVA Consolidado</span>
-                    <span className={`font-semibold ${ivaConsolidado < 0 ? 'text-red-600' : ''}`}>
-                      {formatCurrency(ivaConsolidado)}
-                    </span>
+                    <span className={`font-semibold ${ivaConsolidado < 0 ? 'text-red-600' : ''}`}>{formatCurrency(ivaConsolidado)}</span>
                   </div>
-                  <div className="flex justify-between items-center pt-2 border-t">
-                    <span className="font-medium">Total Consolidado</span>
-                    <span className={`font-bold text-lg ${totalConsolidado < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatCurrency(totalConsolidado)}
-                    </span>
+                  <div className="flex justify-between text-sm border-t pt-2">
+                    <span className="font-semibold">Total Consolidado</span>
+                    <span className={`font-bold ${totalConsolidado < 0 ? 'text-red-600' : ''}`}>{formatCurrency(totalConsolidado)}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground text-center mt-1">
                     Este documento + {relatedAnexos.length} anexo(s)
                   </p>
                 </div>
