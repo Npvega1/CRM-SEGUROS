@@ -3,7 +3,7 @@
 // =====================================================
 // PÁGINA: Lista de Pólizas
 // /polizas
-// Tabs: Activas | Canceladas | No Renovadas | Inactivas
+// NOTA: Solo muestra pólizas base (anexo 00), con prima consolidada
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -14,7 +14,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -50,11 +49,7 @@ import {
   Eye,
   Shield,
   AlertTriangle,
-  Layers,
-  RefreshCw,
-  XCircle,
-  Clock,
-  Archive
+  Layers
 } from 'lucide-react';
 
 interface PolicyWithRelations extends Policy {
@@ -66,29 +61,16 @@ interface PolicyWithRelations extends Policy {
   };
   consolidated_premium?: number;
   anexo_count?: number;
-  is_renewal?: boolean;
 }
 
 interface PolicyStats {
   total: number;
   active: number;
-  cancelled: number;
-  not_renewed: number;
-  inactive: number;
   byStatus: Record<string, number>;
   byLine: Record<string, number>;
   totalPremium: number;
   expiringThisMonth: number;
 }
-
-type TabValue = 'activas' | 'canceladas' | 'no_renovadas' | 'inactivas';
-
-const TAB_STATUS_MAP: Record<TabValue, string[]> = {
-  activas: ['activa', 'cotizacion', 'renovacion'],
-  canceladas: ['cancelada'],
-  no_renovadas: ['no_renovada', 'vencida'],
-  inactivas: ['inactiva']
-};
 
 export default function PoliciesPage() {
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
@@ -98,10 +80,10 @@ export default function PoliciesPage() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [lineFilter, setLineFilter] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<PolicyStats | null>(null);
-  const [activeTab, setActiveTab] = useState<TabValue>('activas');
 
   const loadPolicies = useCallback(async () => {
     if (!tenantId) return;
@@ -109,8 +91,6 @@ export default function PoliciesPage() {
     setIsLoading(true);
     try {
       const supabase = getBrowserClient();
-
-      const statusesForTab = TAB_STATUS_MAP[activeTab];
 
       let query = supabase
         .from('policies')
@@ -121,12 +101,14 @@ export default function PoliciesPage() {
         `, { count: 'exact' })
         .eq('tenant_id', tenantId)
         .or('anexo.eq.00,anexo.is.null')
-        .in('status', statusesForTab)
         .order('created_at', { ascending: false })
         .range((page - 1) * pageSize, page * pageSize - 1);
 
       if (searchQuery) {
         query = query.or(`policy_number.ilike.%${searchQuery}%,insurer.ilike.%${searchQuery}%`);
+      }
+      if (statusFilter && statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
       }
       if (lineFilter && lineFilter !== 'all') {
         query = query.eq('line', lineFilter);
@@ -144,14 +126,12 @@ export default function PoliciesPage() {
 
       let consolidatedPremiums: Record<string, { premium: number; count: number }> = {};
 
-      if (policyNumbers.length > 0 && activeTab === 'activas') {
-        // Solo calcular prima consolidada para pólizas activas
+      if (policyNumbers.length > 0) {
         const { data: allRelatedPolicies } = await supabase
           .from('policies')
-          .select('policy_number, premium, anexo, status')
+          .select('policy_number, premium, anexo')
           .eq('tenant_id', tenantId)
-          .in('policy_number', policyNumbers)
-          .in('status', ['activa', 'cotizacion', 'renovacion']);
+          .in('policy_number', policyNumbers);
 
         if (allRelatedPolicies) {
           allRelatedPolicies.forEach((p: Record<string, unknown>) => {
@@ -174,16 +154,13 @@ export default function PoliciesPage() {
       const mappedPolicies = (data || []).map((p: Record<string, unknown>) => {
         const policyNumber = p.policy_number as string;
         const consolidated = consolidatedPremiums[policyNumber];
-        const policyType = p.policy_type as string | null;
-        const renewedFrom = p.renewed_from_policy_id as string | null;
 
         return {
           ...p,
           client_name: (p.clients as { full_name: string })?.full_name,
           insurance_line: p.insurance_line as PolicyWithRelations['insurance_line'],
           consolidated_premium: consolidated?.premium || (p.premium as number) || 0,
-          anexo_count: consolidated?.count || 0,
-          is_renewal: policyType === 'renovacion' || !!renewedFrom
+          anexo_count: consolidated?.count || 0
         };
       }) as PolicyWithRelations[];
 
@@ -194,7 +171,7 @@ export default function PoliciesPage() {
       console.error('Error loading policies:', error);
     }
     setIsLoading(false);
-  }, [tenantId, page, pageSize, searchQuery, lineFilter, activeTab]);
+  }, [tenantId, page, pageSize, searchQuery, statusFilter, lineFilter]);
 
   const loadStats = useCallback(async () => {
     if (!tenantId) return;
@@ -202,77 +179,68 @@ export default function PoliciesPage() {
     try {
       const supabase = getBrowserClient();
 
-      // Contar directamente por status para cada tab (sin agrupar por policy_number)
-      const { count: activeCount } = await supabase
+      const { data: allPolicies } = await supabase
         .from('policies')
-        .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId)
-        .in('status', ['activa', 'cotizacion', 'renovacion'])
-        .or('anexo.eq.00,anexo.is.null');
+        .select('policy_number, status, line, premium, end_date, anexo')
+        .eq('tenant_id', tenantId);
 
-      const { count: cancelledCount } = await supabase
-        .from('policies')
-        .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId)
-        .eq('status', 'cancelada')
-        .or('anexo.eq.00,anexo.is.null');
+      if (allPolicies) {
+        const policyGroups: Record<string, { status: string; line: string; totalPremium: number; end_date: string | null; isBase: boolean; }> = {};
 
-      const { count: notRenewedCount } = await supabase
-        .from('policies')
-        .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId)
-        .in('status', ['no_renovada', 'vencida'])
-        .or('anexo.eq.00,anexo.is.null');
+        allPolicies.forEach((p: Record<string, unknown>) => {
+          const pn = p.policy_number as string;
+          const anexo = p.anexo as string;
+          const isBase = !anexo || anexo === '00';
 
-      const { count: inactiveCount } = await supabase
-        .from('policies')
-        .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId)
-        .eq('status', 'inactiva')
-        .or('anexo.eq.00,anexo.is.null');
+          if (!policyGroups[pn]) {
+            policyGroups[pn] = {
+              status: p.status as string,
+              line: p.line as string,
+              totalPremium: 0,
+              end_date: p.end_date as string | null,
+              isBase: false
+            };
+          }
 
-      // Calcular prima total de pólizas activas
-      const { data: activePolicies } = await supabase
-        .from('policies')
-        .select('premium')
-        .eq('tenant_id', tenantId)
-        .in('status', ['activa', 'cotizacion', 'renovacion']);
+          policyGroups[pn].totalPremium += (p.premium as number) || 0;
 
-      let totalPremium = 0;
-      if (activePolicies) {
-        activePolicies.forEach((p: Record<string, unknown>) => {
-          totalPremium += (p.premium as number) || 0;
+          if (isBase) {
+            policyGroups[pn].status = p.status as string;
+            policyGroups[pn].line = p.line as string;
+            policyGroups[pn].end_date = p.end_date as string | null;
+            policyGroups[pn].isBase = true;
+          }
+        });
+
+        const basePolicies = Object.values(policyGroups).filter(p => p.isBase);
+
+        const byStatus: Record<string, number> = {};
+        const byLine: Record<string, number> = {};
+        let totalPremium = 0;
+        let active = 0;
+        let expiringThisMonth = 0;
+
+        const endOfMonth = new Date();
+        endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+        endOfMonth.setDate(0);
+
+        basePolicies.forEach(p => {
+          byStatus[p.status] = (byStatus[p.status] || 0) + 1;
+          byLine[p.line] = (byLine[p.line] || 0) + 1;
+          totalPremium += p.totalPremium;
+          if (p.status === 'activa') active++;
+          if (p.end_date && new Date(p.end_date) <= endOfMonth) expiringThisMonth++;
+        });
+
+        setStats({
+          total: basePolicies.length,
+          active,
+          byStatus,
+          byLine,
+          totalPremium,
+          expiringThisMonth
         });
       }
-
-      // Contar pólizas que vencen este mes
-      const endOfMonth = new Date();
-      endOfMonth.setMonth(endOfMonth.getMonth() + 1);
-      endOfMonth.setDate(0);
-      const today = new Date().toISOString().split('T')[0];
-      const endOfMonthStr = endOfMonth.toISOString().split('T')[0];
-
-      const { count: expiringCount } = await supabase
-        .from('policies')
-        .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId)
-        .eq('status', 'activa')
-        .or('anexo.eq.00,anexo.is.null')
-        .gte('end_date', today)
-        .lte('end_date', endOfMonthStr);
-
-      setStats({
-        total: (activeCount || 0) + (cancelledCount || 0) + (notRenewedCount || 0) + (inactiveCount || 0),
-        active: activeCount || 0,
-        cancelled: cancelledCount || 0,
-        not_renewed: notRenewedCount || 0,
-        inactive: inactiveCount || 0,
-        byStatus: {},
-        byLine: {},
-        totalPremium,
-        expiringThisMonth: expiringCount || 0
-      });
-
     } catch (error) {
       console.error('Error loading stats:', error);
     }
@@ -285,10 +253,6 @@ export default function PoliciesPage() {
     }
   }, [isLoadingTenant, tenantId, loadPolicies, loadStats]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [activeTab]);
-
   const totalPages = Math.ceil(total / pageSize);
 
   const formatPremiumDisplay = (value: number, anexoCount?: number) => {
@@ -300,112 +264,12 @@ export default function PoliciesPage() {
           {formatted}
         </span>
         {typeof anexoCount === 'number' && anexoCount > 0 && (
-          <Badge variant="outline" className="text-xs px-1 py-0">
-            <Layers className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="text-[10px] px-1 py-0">
+            <Layers className="h-2.5 w-2.5 mr-0.5" />
             {anexoCount}
           </Badge>
         )}
       </div>
-    );
-  };
-
-  const getTableHeaders = () => {
-    if (activeTab === 'no_renovadas') {
-      return (
-        <TableRow>
-          <TableHead>Número</TableHead>
-          <TableHead>Cliente</TableHead>
-          <TableHead>Aseguradora</TableHead>
-          <TableHead>Ramo</TableHead>
-          <TableHead>Prima</TableHead>
-          <TableHead>Estado</TableHead>
-          <TableHead>Venció</TableHead>
-          <TableHead className="text-right">Acciones</TableHead>
-        </TableRow>
-      );
-    }
-    if (activeTab === 'inactivas') {
-      return (
-        <TableRow>
-          <TableHead>Número</TableHead>
-          <TableHead>Cliente</TableHead>
-          <TableHead>Aseguradora</TableHead>
-          <TableHead>Ramo</TableHead>
-          <TableHead>Prima</TableHead>
-          <TableHead>Estado</TableHead>
-          <TableHead>Vigencia</TableHead>
-          <TableHead className="text-right">Acciones</TableHead>
-        </TableRow>
-      );
-    }
-    return (
-      <TableRow>
-        <TableHead>Número</TableHead>
-        <TableHead>Cliente</TableHead>
-        <TableHead>Aseguradora</TableHead>
-        <TableHead>Ramo</TableHead>
-        <TableHead>Prima Consolidada</TableHead>
-        <TableHead>Estado</TableHead>
-        <TableHead>Vencimiento</TableHead>
-        <TableHead className="text-right">Acciones</TableHead>
-      </TableRow>
-    );
-  };
-
-  const getTableRow = (policy: PolicyWithRelations) => {
-    const vigenciaLabel = activeTab === 'inactivas'
-      ? `${formatDate(policy.start_date)} - ${formatDate(policy.end_date)}`
-      : formatDate(policy.end_date);
-
-    return (
-      <TableRow key={policy.id}>
-        <TableCell className="font-medium">
-          <div className="flex items-center gap-2">
-            {policy.policy_number}
-            {policy.is_renewal && activeTab === 'activas' && (
-              <Badge variant="outline" className="text-xs px-1.5 py-0 text-blue-700 border-blue-300 bg-blue-50">
-                <RefreshCw className="h-3 w-3 mr-1" />
-                Renovación
-              </Badge>
-            )}
-          </div>
-        </TableCell>
-        <TableCell>{policy.client_name || 'N/A'}</TableCell>
-        <TableCell>{policy.insurer}</TableCell>
-        <TableCell>
-          <Badge variant="outline">
-            {policy.insurance_line?.name || POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line || '-'}
-          </Badge>
-        </TableCell>
-        <TableCell>
-          {formatPremiumDisplay(
-            activeTab === 'activas' ? (policy.consolidated_premium || policy.premium) : policy.premium,
-            activeTab === 'activas' ? policy.anexo_count : undefined
-          )}
-        </TableCell>
-        <TableCell>
-          <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus]}>
-            {POLICY_STATUS_LABELS[policy.status as PolicyStatus]}
-          </Badge>
-        </TableCell>
-        <TableCell>{vigenciaLabel}</TableCell>
-        <TableCell className="text-right">
-          <div className="flex items-center justify-end gap-1">
-            <Link href={`/polizas/${policy.id}`}>
-              <Button variant="ghost" size="icon">
-                <Eye className="h-4 w-4" />
-              </Button>
-            </Link>
-            {activeTab === 'no_renovadas' && (
-              <Link href={`/polizas/renovar?poliza=${policy.id}`}>
-                <Button variant="ghost" size="icon" title="Renovar">
-                  <RefreshCw className="h-4 w-4 text-blue-600" />
-                </Button>
-              </Link>
-            )}
-          </div>
-        </TableCell>
-      </TableRow>
     );
   };
 
@@ -420,21 +284,27 @@ export default function PoliciesPage() {
         <div className="flex items-center gap-3">
           <Shield className="h-8 w-8 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Pólizas</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Polizas</h1>
             <p className="text-sm text-muted-foreground">{tenantName}</p>
           </div>
         </div>
         <Link href="/polizas/nueva">
           <Button>
             <Plus className="mr-2 h-4 w-4" />
-            Nueva Póliza
+            Nueva Poliza
           </Button>
         </Link>
       </div>
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">Total Polizas</p>
+              <p className="text-3xl font-bold">{stats.total}</p>
+            </CardContent>
+          </Card>
           <Card>
             <CardContent className="pt-6">
               <p className="text-sm text-muted-foreground">Activas</p>
@@ -443,8 +313,8 @@ export default function PoliciesPage() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">Prima Activa</p>
-              <p className={`text-2xl font-bold ${stats.totalPremium < 0 ? 'text-red-600' : ''}`}>
+              <p className="text-sm text-muted-foreground">Prima Total Consolidada</p>
+              <p className={`text-3xl font-bold ${stats.totalPremium < 0 ? 'text-red-600' : ''}`}>
                 {formatPremium(stats.totalPremium)}
               </p>
             </CardContent>
@@ -458,105 +328,105 @@ export default function PoliciesPage() {
               <p className="text-3xl font-bold text-amber-600">{stats.expiringThisMonth}</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">No Renovadas</p>
-              <p className="text-3xl font-bold text-orange-600">{stats.not_renewed}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">Inactivas</p>
-              <p className="text-3xl font-bold text-purple-600">{stats.inactive}</p>
-            </CardContent>
-          </Card>
         </div>
       )}
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
-        <TabsList>
-          <TabsTrigger value="activas" className="flex items-center gap-1.5">
-            <Shield className="h-4 w-4" />
-            Activas
-            {stats && <Badge variant="secondary" className="ml-1 text-xs">{stats.active}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="canceladas" className="flex items-center gap-1.5">
-            <XCircle className="h-4 w-4" />
-            Canceladas
-            {stats && stats.cancelled > 0 && <Badge variant="secondary" className="ml-1 text-xs">{stats.cancelled}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="no_renovadas" className="flex items-center gap-1.5">
-            <Clock className="h-4 w-4" />
-            No Renovadas
-            {stats && stats.not_renewed > 0 && <Badge variant="secondary" className="ml-1 text-xs">{stats.not_renewed}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="inactivas" className="flex items-center gap-1.5">
-            <Archive className="h-4 w-4" />
-            Inactivas
-            {stats && stats.inactive > 0 && <Badge variant="secondary" className="ml-1 text-xs">{stats.inactive}</Badge>}
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Filters */}
-        <div className="flex flex-col md:flex-row gap-4 mt-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por número o aseguradora..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-              data-testid="search-policies-input"
-            />
-          </div>
-          <Select value={lineFilter || 'all'} onValueChange={(v) => setLineFilter(v === 'all' ? undefined : v)}>
-            <SelectTrigger className="w-full md:w-48">
-              <SelectValue placeholder="Ramo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los ramos</SelectItem>
-              {Object.entries(POLICY_LINE_LABELS).map(([value, label]) => (
-                <SelectItem key={value} value={value}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {/* Filters */}
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por numero o aseguradora..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+            data-testid="search-policies-input"
+          />
         </div>
+        <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? undefined : v)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los estados</SelectItem>
+            {Object.entries(POLICY_STATUS_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={lineFilter || 'all'} onValueChange={(v) => setLineFilter(v === 'all' ? undefined : v)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los ramos</SelectItem>
+            {Object.entries(POLICY_LINE_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-        {/* Table content */}
-        {['activas', 'canceladas', 'no_renovadas', 'inactivas'].map((tab) => (
-          <TabsContent key={tab} value={tab}>
-            <Card>
-              <CardContent className="p-0">
-                {isLoading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <LoadingScreen />
-                  </div>
-                ) : policies.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <FileText className="h-12 w-12 mb-4" />
-                    <p>
-                      {tab === 'activas' && 'No hay pólizas activas'}
-                      {tab === 'canceladas' && 'No hay pólizas canceladas'}
-                      {tab === 'no_renovadas' && 'No hay pólizas sin renovar'}
-                      {tab === 'inactivas' && 'No hay pólizas inactivas'}
-                    </p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      {getTableHeaders()}
-                    </TableHeader>
-                    <TableBody>
-                      {policies.map((policy) => getTableRow(policy))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
-      </Tabs>
+      {/* Table */}
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <LoadingScreen />
+            </div>
+          ) : policies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <FileText className="h-12 w-12 mb-4" />
+              <p>No se encontraron polizas</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="text-xs">
+                  <TableHead className="text-xs">Numero</TableHead>
+                  <TableHead className="text-xs">Cliente</TableHead>
+                  <TableHead className="text-xs">Aseguradora</TableHead>
+                  <TableHead className="text-xs">Ramo</TableHead>
+                  <TableHead className="text-xs">Prima Consolidada</TableHead>
+                  <TableHead className="text-xs">Estado</TableHead>
+                  <TableHead className="text-xs">Vencimiento</TableHead>
+                  <TableHead className="text-xs text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {policies.map((policy) => (
+                  <TableRow key={policy.id} className="text-xs">
+                    <TableCell className="py-2 font-medium text-xs">{policy.policy_number}</TableCell>
+                    <TableCell className="py-2 text-xs">{policy.client_name || 'N/A'}</TableCell>
+                    <TableCell className="py-2 text-xs">{policy.insurer}</TableCell>
+                    <TableCell className="py-2">
+                      <Badge variant="outline" className="text-[10px]">
+                        {policy.insurance_line?.name || POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line || '-'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="py-2 text-xs">
+                      {formatPremiumDisplay(policy.consolidated_premium || policy.premium, policy.anexo_count)}
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <Badge className={`text-[10px] ${POLICY_STATUS_COLORS[policy.status as PolicyStatus]}`}>
+                        {POLICY_STATUS_LABELS[policy.status as PolicyStatus]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="py-2 text-xs">{formatDate(policy.end_date)}</TableCell>
+                    <TableCell className="py-2 text-right">
+                      <Link href={`/polizas/${policy.id}`}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Pagination */}
       {totalPages > 1 && (
@@ -565,21 +435,13 @@ export default function PoliciesPage() {
             Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, total)} de {total}
           </p>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-            >
+            <Button variant="outline" size="icon" onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm">Página {page} de {totalPages}</span>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-            >
+            <span className="text-sm">Pagina {page} de {totalPages}</span>
+            <Button variant="outline" size="icon" onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
