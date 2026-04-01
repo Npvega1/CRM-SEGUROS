@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { getBrowserClient } from '@/lib/supabase/client';
 import { 
   Users, 
@@ -15,12 +16,14 @@ import {
   TrendingUp, 
   AlertTriangle,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Handshake,
+  ExternalLink
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardPage() {
-  const { tenantName, tenantId, userFullName, isLoading } = useTenant();
+  const { tenantName, tenantId, tenantSlug, userFullName, isLoading } = useTenant();
 
   const [clientStats, setClientStats] = useState<{ total: number; thisMonth: number } | null>(null);
   const [policyStats, setPolicyStats] = useState<{ total: number; active: number; totalPremium: number } | null>(null);
@@ -146,14 +149,45 @@ export default function DashboardPage() {
     },
   ];
 
+  // Build portal URLs
+  const portalBaseUrl = tenantSlug ? `/${tenantSlug}` : '';
+
   return (
     <div className="p-6 space-y-6">
       {/* Welcome Header */}
-      <div>
-        <h1 className="text-2xl font-bold">¡Hola, {userFullName?.split(' ')[0] || 'Usuario'}!</h1>
-        <p className="text-muted-foreground">
-          Bienvenido al dashboard de {tenantName}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">¡Hola, {userFullName?.split(' ')[0] || 'Usuario'}!</h1>
+          <p className="text-muted-foreground">
+            Bienvenido al dashboard de {tenantName}
+          </p>
+        </div>
+        {tenantSlug && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`${portalBaseUrl}/aliado`, '_blank')}
+              className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800"
+              data-testid="portal-aliados-btn"
+            >
+              <Handshake className="w-4 h-4 mr-1.5" />
+              Portal Aliados
+              <ExternalLink className="w-3 h-3 ml-1.5 opacity-50" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`${portalBaseUrl}/login`, '_blank')}
+              className="border-sky-200 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
+              data-testid="portal-clientes-btn"
+            >
+              <Users className="w-4 h-4 mr-1.5" />
+              Portal Clientes
+              <ExternalLink className="w-3 h-3 ml-1.5 opacity-50" />
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Stats Grid */}
