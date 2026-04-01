@@ -133,19 +133,21 @@ export function PolicyForm({
     if (isEditing && policy) return (policy as any).allied_agent_id || '';
     return '';
   });
+  const [alliedAgentPctValue, setAlliedAgentPctValue] = useState(() => {
+    if (isEditing && policy) return (policy as any).allied_agent_pct || 0;
+    return 0;
+  });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [selectedCompanyId, setSelectedCompanyId] = useState(() => {
     if (isEditing && policy) return (policy as any).insurer_id || '';
     return '';
   });
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [selectedLineId, setSelectedLineId] = useState(() => {
     if (isEditing && policy) return (policy as any).line_id || '';
     return '';
   });
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [selectedGroupId, setSelectedGroupId] = useState(() => {
     if (isEditing && policy) return (policy as any).group_id || '';
@@ -185,10 +187,6 @@ export function PolicyForm({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       commission_pct: (policy as any).commission_pct || 0,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      allied_agent_id: (policy as any).allied_agent_id || null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      allied_agent_pct: (policy as any).allied_agent_pct || 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       fecha_expedicion: (policy as any).fecha_expedicion || '',
       start_date: policy.start_date || '',
       end_date: policy.end_date || '',
@@ -202,9 +200,7 @@ export function PolicyForm({
       gastos_expedicion: 0,
       iva: 0,
       total_a_pagar: 0,
-      commission_pct: 0,
-      allied_agent_id: null,
-      allied_agent_pct: 0
+      commission_pct: 0
     }
   });
 
@@ -256,24 +252,17 @@ export function PolicyForm({
     loadAlliedAgents();
   }, [tenantId, supabase]);
 
-  // Sincronizar aliado seleccionado → form values
+  // Sincronizar aliado seleccionado → % del aliado
   useEffect(() => {
-    if (selectedAlliedAgentId) {
+    if (selectedAlliedAgentId && !isEditing) {
       const agent = alliedAgents.find(a => a.id === selectedAlliedAgentId);
       if (agent) {
-        setValue('allied_agent_id', agent.id);
-        // Solo actualizar el % al crear nueva poliza, no al editar (para preservar snapshot)
-        if (!isEditing) {
-          setValue('allied_agent_pct', agent.commission_percentage);
-        }
+        setAlliedAgentPctValue(agent.commission_percentage);
       }
-    } else {
-      setValue('allied_agent_id', null);
-      if (!isEditing) {
-        setValue('allied_agent_pct', 0);
-      }
+    } else if (!selectedAlliedAgentId) {
+      if (!isEditing) setAlliedAgentPctValue(0);
     }
-  }, [selectedAlliedAgentId, alliedAgents, setValue, isEditing]);
+  }, [selectedAlliedAgentId, alliedAgents, isEditing]);
 
   // Cargar comisión cuando cambia compañía + grupo
   useEffect(() => {
@@ -454,11 +443,13 @@ export function PolicyForm({
   };
 
   const handleFormSubmit = async (data: PolicyFormData) => {
-    const dataWithNotas: PolicyFormData = {
+    const dataWithExtras: PolicyFormData = {
       ...data,
-      notas: notasValue || undefined
+      notas: notasValue || undefined,
+      allied_agent_id: selectedAlliedAgentId || null,
+      allied_agent_pct: selectedAlliedAgentId ? alliedAgentPctValue : 0,
     };
-    await onSubmit(dataWithNotas);
+    await onSubmit(dataWithExtras);
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -726,7 +717,7 @@ export function PolicyForm({
             </Select>
             <p className="text-xs text-muted-foreground mt-1">
               {selectedAlliedAgentId
-                ? `El % se fija al crear la póliza y no cambia si se modifica el aliado después`
+                ? 'El % se fija al crear la póliza y no cambia si se modifica el aliado después'
                 : 'Selecciona si esta póliza tiene un agente aliado'}
             </p>
           </div>
@@ -736,9 +727,9 @@ export function PolicyForm({
               <Input
                 type="number"
                 step="0.1"
-                {...register('allied_agent_pct', { valueAsNumber: true })}
+                value={alliedAgentPctValue}
+                onChange={(e) => setAlliedAgentPctValue(parseFloat(e.target.value) || 0)}
                 disabled={loading}
-                className="bg-slate-50"
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Porcentaje sobre la comisión de la agencia
