@@ -133,7 +133,25 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
 
       onSuccess();
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Error al guardar aliado';
+      let errorMessage = 'Error al guardar aliado';
+
+      if (error && typeof error === 'object' && 'code' in error) {
+        const pgError = error as { code: string; message: string };
+        if (pgError.code === '23505') {
+          if (pgError.message?.includes('email')) {
+            errorMessage = 'Ya existe un aliado registrado con este correo electrónico';
+          } else if (pgError.message?.includes('identification')) {
+            errorMessage = 'Ya existe un aliado registrado con esta identificación';
+          } else {
+            errorMessage = 'Ya existe un aliado con estos datos. Verifica el correo o la identificación.';
+          }
+        } else {
+          errorMessage = pgError.message || errorMessage;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
       toast.error(errorMessage);
       console.error(error);
     } finally {
