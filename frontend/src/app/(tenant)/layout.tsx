@@ -5,7 +5,7 @@
 // Oculta secciones según permisos Y plan del tenant
 // =====================================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTenant } from '@/lib/context/TenantContext';
@@ -28,6 +28,7 @@ import {
   X,
   Building2,
   ChevronRight,
+  ChevronLeft,
   Zap,
   MessageSquare,
   Sparkles,
@@ -35,9 +36,11 @@ import {
   Handshake,
   Lock,
   Crown,
- ClipboardList,
+  ClipboardList,
   Wallet,
-  Coins
+  Coins,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { UnreadMessagesBadge } from '@/components/ui/UnreadMessagesBadge';
@@ -82,14 +85,28 @@ export default function TenantLayout({
   const { tenantName, userFullName, role, isLoading, signOut, tenantPlan } = useTenant();
   const { canView, isAdmin, loading: loadingPermissions } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   useTenantBranding();
+
+  // Cargar estado colapsado desde localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('sidebar-collapsed');
+    if (saved === 'true') setCollapsed(true);
+  }, []);
+
+  // Guardar estado colapsado
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem('sidebar-collapsed', String(next));
+  };
 
   // Verificar si tiene acceso premium
   const hasPremiumAccess = tenantPlan === 'premium' || tenantPlan === 'trial';
 
   // Mostrar loading solo en la carga inicial
   if (isLoading || loadingPermissions) {
-    return <LoadingScreen message="Cargando..." />;
+    return <LoadingScreen />;
   }
 
   const isActiveRoute = (href: string) => {
@@ -103,15 +120,15 @@ export default function TenantLayout({
   const filteredNavItems = navItems.filter((item) => {
     // Si siempre se muestra (Dashboard)
     if (item.alwaysShow) return true;
-    
+
     // Si es solo para admin
     if (item.adminOnly) return isAdmin;
-    
+
     // Si tiene clave de permiso, verificar si puede ver
     if (item.permissionKey) {
       return isAdmin || canView(item.permissionKey);
     }
-    
+
     return true;
   });
 
@@ -121,16 +138,18 @@ export default function TenantLayout({
     const isLocked = item.premiumOnly && !hasPremiumAccess;
 
     if (isLocked) {
-      // Mostrar item bloqueado
       return (
         <div
           key={item.href}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium cursor-not-allowed opacity-50 text-muted-foreground"
-          title="Módulo Premium - Actualiza tu plan"
+          className={cn(
+            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground/50 cursor-not-allowed',
+            collapsed && !isMobile && 'justify-center px-2'
+          )}
+          title={collapsed && !isMobile ? item.title : undefined}
         >
           <item.icon className="h-5 w-5 flex-shrink-0" />
-          <span>{item.title}</span>
-          <Lock className="ml-auto h-4 w-4 text-amber-500" />
+          {(!collapsed || isMobile) && <span>{item.title}</span>}
+          {(!collapsed || isMobile) && <Lock className="h-3 w-3 ml-auto" />}
         </div>
       );
     }
@@ -144,204 +163,184 @@ export default function TenantLayout({
           'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
           isActive
             ? 'bg-primary/10 text-primary'
-            : 'text-muted-foreground hover:bg-slate-100 hover:text-foreground'
+            : 'text-muted-foreground hover:bg-slate-100 hover:text-foreground',
+          collapsed && !isMobile && 'justify-center px-2'
         )}
+        title={collapsed && !isMobile ? item.title : undefined}
         data-testid={`nav-${item.title.toLowerCase()}`}
       >
         <item.icon className="h-5 w-5 flex-shrink-0" />
-        <span>{item.title}</span>
-        {item.href === '/mensajes' && <UnreadMessagesBadge className="ml-auto" />}
-        {item.badge && (
-          <span className="ml-auto text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+        {(!collapsed || isMobile) && <span>{item.title}</span>}
+        {(!collapsed || isMobile) && item.href === '/mensajes' && <UnreadMessagesBadge />}
+        {(!collapsed || isMobile) && item.badge && (
+          <span className="ml-auto text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
             {item.badge}
           </span>
         )}
-        {isActive && !item.badge && item.href !== '/mensajes' && <ChevronRight className="ml-auto h-4 w-4" />}
+        {(!collapsed || isMobile) && isActive && !item.badge && item.href !== '/mensajes' && <ChevronRight className="h-4 w-4 ml-auto" />}
       </Link>
     );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-background">
       {/* Sidebar - Desktop */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r">
-        {/* Logo/Brand */}
-        <div className="flex items-center gap-3 px-6 py-5 border-b">
-          <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Building2 className="h-5 w-5 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm truncate">{tenantName || 'CRM Seguros'}</p>
-            <div className="flex items-center gap-1">
-              <p className="text-xs text-muted-foreground truncate">
-                {role === 'admin' ? 'Administrador' : 'Agente'}
-              </p>
+      <aside
+        className={cn(
+          'hidden md:flex flex-col fixed inset-y-0 left-0 z-30 bg-white border-r transition-all duration-300',
+          collapsed ? 'w-16' : 'w-64'
+        )}
+      >
+        {/* Logo / Tenant Name */}
+        <div className={cn(
+          'flex items-center h-16 border-b px-4 flex-shrink-0',
+          collapsed ? 'justify-center' : 'gap-3'
+        )}>
+          <Building2 className="h-6 w-6 text-primary flex-shrink-0" />
+          {!collapsed && (
+            <div className="flex-1 min-w-0">
+              <h2 className="font-semibold text-sm truncate">{tenantName || 'CRM'}</h2>
               {hasPremiumAccess && (
-                <span className="inline-flex items-center gap-0.5 text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
-                  <Crown className="h-3 w-3" />
-                  Pro
+                <span className="text-[10px] text-amber-600 flex items-center gap-1">
+                  <Crown className="h-3 w-3" /> Premium
                 </span>
               )}
             </div>
-          </div>
-          <NotificationBell />
+          )}
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {filteredNavItems.map((item) => renderNavItem(item, false))}
         </nav>
 
-        {/* Upgrade Banner (solo para plan básico) */}
-        {!hasPremiumAccess && (
-          <div className="mx-3 mb-3 p-3 rounded-lg bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200">
-            <div className="flex items-center gap-2 mb-1">
-              <Crown className="h-4 w-4 text-amber-600" />
-              <span className="text-sm font-medium text-amber-800">Plan Básico</span>
+        {/* Toggle collapse button */}
+        <div className="border-t px-3 py-2">
+          <button
+            onClick={toggleCollapsed}
+            className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-slate-100 hover:text-foreground transition-colors"
+            title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+            data-testid="toggle-sidebar"
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-5 w-5 flex-shrink-0 mx-auto" />
+            ) : (
+              <>
+                <PanelLeftClose className="h-5 w-5 flex-shrink-0" />
+                <span>Colapsar</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* User info + Logout */}
+        <div className={cn(
+          'border-t p-4 flex-shrink-0',
+          collapsed && 'px-2'
+        )}>
+          {!collapsed && (
+            <div className="mb-3">
+              <p className="text-sm font-medium truncate">{userFullName}</p>
+              <p className="text-xs text-muted-foreground capitalize">{role}</p>
             </div>
-            <p className="text-xs text-amber-700 mb-2">
-              Desbloquea Pipeline, Cotizador IA y más.
-            </p>
-            <Button 
-              size="sm" 
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs"
-              onClick={() => window.open('mailto:contact@integratech.com.co?subject=Upgrade a Premium', '_blank')}
+          )}
+          <div className={cn(
+            'flex items-center',
+            collapsed ? 'flex-col gap-2' : 'gap-2'
+          )}>
+            <NotificationBell />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={signOut}
+              className={cn(
+                'text-red-600 hover:text-red-700 hover:bg-red-50',
+                collapsed ? 'w-10 h-10 p-0' : 'flex-1'
+              )}
+              title={collapsed ? 'Cerrar sesión' : undefined}
+              data-testid="logout-button"
             >
-              Actualizar a Premium
+              <LogOut className="h-4 w-4" />
+              {!collapsed && <span className="ml-2">Salir</span>}
             </Button>
           </div>
-        )}
-
-        {/* User Section */}
-        <div className="border-t px-3 py-4">
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div className="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center">
-              <span className="text-sm font-medium text-slate-600">
-                {userFullName?.charAt(0)?.toUpperCase() || 'U'}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{userFullName || 'Usuario'}</p>
-              <p className="text-xs text-muted-foreground truncate">{role === 'admin' ? 'Administrador' : 'Agente'}</p>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start mt-2 text-muted-foreground hover:text-foreground"
-            onClick={signOut}
-            data-testid="sidebar-logout"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Cerrar Sesión
-          </Button>
         </div>
       </aside>
 
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSidebarOpen(true)}
-              data-testid="mobile-menu-toggle"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-            <div className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-primary" />
-              <span className="font-semibold text-sm">{tenantName || 'CRM'}</span>
-              {hasPremiumAccess && (
-                <Crown className="h-4 w-4 text-amber-500" />
-              )}
-            </div>
-          </div>
+      <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-white border-b h-14 flex items-center px-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setSidebarOpen(true)}
+          data-testid="mobile-menu-toggle"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+        <span className="ml-3 font-semibold text-sm">{tenantName || 'CRM'}</span>
+        {hasPremiumAccess && (
+          <Crown className="h-4 w-4 text-amber-500 ml-2" />
+        )}
+        <div className="ml-auto flex items-center gap-2">
           <NotificationBell />
         </div>
       </div>
 
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-50 bg-black/50"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="md:hidden fixed inset-0 z-40">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <aside className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl flex flex-col">
+            {/* Mobile sidebar header */}
+            <div className="flex items-center justify-between h-14 border-b px-4">
+              <div className="flex items-center gap-3">
+                <Building2 className="h-6 w-6 text-primary" />
+                <h2 className="font-semibold text-sm">{tenantName || 'CRM'}</h2>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(false)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* Mobile navigation */}
+            <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+              {filteredNavItems.map((item) => renderNavItem(item, true))}
+            </nav>
+
+            {/* Mobile user info */}
+            <div className="border-t p-4">
+              <div className="mb-3">
+                <p className="text-sm font-medium">{userFullName}</p>
+                <p className="text-xs text-muted-foreground capitalize">{role}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={signOut}
+                className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                data-testid="mobile-logout-button"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Cerrar Sesión
+              </Button>
+            </div>
+          </aside>
+        </div>
       )}
 
-      {/* Mobile Sidebar */}
-      <aside
-        className={cn(
-          'lg:hidden fixed inset-y-0 left-0 z-50 w-72 bg-white transform transition-transform duration-300 ease-in-out',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        )}
-      >
-        {/* Mobile Header */}
-        <div className="flex items-center justify-between px-4 py-4 border-b">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary" />
-            <span className="font-semibold">{tenantName || 'CRM Seguros'}</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-
-        {/* Mobile Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {filteredNavItems.map((item) => renderNavItem(item, true))}
-        </nav>
-
-        {/* Mobile Upgrade Banner */}
-        {!hasPremiumAccess && (
-          <div className="mx-3 mb-3 p-3 rounded-lg bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200">
-            <div className="flex items-center gap-2 mb-1">
-              <Crown className="h-4 w-4 text-amber-600" />
-              <span className="text-sm font-medium text-amber-800">Plan Básico</span>
-            </div>
-            <p className="text-xs text-amber-700">
-              Contacta para actualizar a Premium
-            </p>
-          </div>
-        )}
-
-        {/* Mobile User Section */}
-        <div className="border-t px-3 py-4">
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div className="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center">
-              <span className="text-sm font-medium text-slate-600">
-                {userFullName?.charAt(0)?.toUpperCase() || 'U'}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{userFullName || 'Usuario'}</p>
-              <p className="text-xs text-muted-foreground truncate">{role === 'admin' ? 'Administrador' : 'Agente'}</p>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start mt-2"
-            onClick={signOut}
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Cerrar Sesión
-          </Button>
-        </div>
-      </aside>
-
       {/* Main Content */}
-      <main className="flex-1 lg:pl-64">
+      <main className={cn(
+        'transition-all duration-300',
+        collapsed ? 'md:ml-16' : 'md:ml-64'
+      )}>
         {/* Spacer for mobile header */}
-        <div className="lg:hidden h-14" />
+        <div className="h-14 md:hidden" />
 
         {/* Page Content */}
-        <div className="min-h-screen">
+        <div className="min-h-[calc(100vh-3.5rem)] md:min-h-screen">
           {children}
         </div>
       </main>
