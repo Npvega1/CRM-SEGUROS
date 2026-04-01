@@ -370,7 +370,16 @@ export default function CarteraPage() {
   };
 
   const getRawPago = (): number => parseInt(pagoTotal.replace(/\D/g, '') || '0');
-  const calcularDesglose = (v: number) => { const prima = Math.round(v / 1.19); return { prima, iva: v - prima, total: v }; };
+  const calcularDesglose = (v: number) => {
+    if (selectedCartera && selectedCartera.valor_total > 0) {
+      const prima = Math.round(v * (selectedCartera.valor_prima || 0) / selectedCartera.valor_total);
+      const gastos = Math.round(v * (selectedCartera.valor_gastos || 0) / selectedCartera.valor_total);
+      const iva = v - prima - gastos;
+      return { prima, gastos, iva, total: v };
+    }
+    const prima = Math.round(v / 1.19);
+    return { prima, gastos: 0, iva: v - prima, total: v };
+  };
 
   const handleSubmitPago = async () => {
     if (!selectedCartera) return;
