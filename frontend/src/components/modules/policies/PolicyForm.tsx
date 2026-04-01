@@ -127,12 +127,9 @@ export function PolicyForm({
   const [loadingCatalogs, setLoadingCatalogs] = useState(true);
   const [loadingCommission, setLoadingCommission] = useState(false);
 
-  // Allied agents
-  const [alliedAgents, setAlliedAgents] = useState<AlliedAgentOption[]>([]);
-  const [selectedAlliedAgentId, setSelectedAlliedAgentId] = useState(() => {
-    if (isEditing && policy) return (policy as any).allied_agent_id || '';
-    return '';
-  });
+  // Allied agent (viene del cliente, no se elige manualmente)
+  const [clientAlliedAgent, setClientAlliedAgent] = useState<AlliedAgentOption | null>(null);
+  const [loadingAlliedAgent, setLoadingAlliedAgent] = useState(false);
   const [alliedAgentPctValue, setAlliedAgentPctValue] = useState(() => {
     if (isEditing && policy) return (policy as any).allied_agent_pct || 0;
     return 0;
@@ -210,7 +207,6 @@ export function PolicyForm({
   const status = watch('status');
   const startDate = watch('start_date');
 
-  // Opciones de estado: solo "Activa" al editar
   const statusOptions = isEditing
     ? POLICY_STATUS_OPTIONS.filter(o => o.value === 'activa')
     : POLICY_STATUS_OPTIONS;
@@ -232,37 +228,55 @@ export function PolicyForm({
     setValue('total_a_pagar', total);
   }, [premium, gastosExpedicion, iva, setValue]);
 
-  // Cargar agentes aliados
+  // Cargar aliado del CLIENTE automáticamente
   useEffect(() => {
-    async function loadAlliedAgents() {
-      if (!tenantId) return;
+    async function loadClientAlliedAgent() {
+      const cId = clientId || (isEditing && policy ? policy.client_id : null);
+      if (!cId || !tenantId) {
+        setClientAlliedAgent(null);
+        if (!isEditing) setAlliedAgentPctValue(0);
+        return;
+      }
+
+      setLoadingAlliedAgent(true);
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any)
-          .from('allied_agents')
-          .select('id, full_name, commission_percentage')
-          .eq('tenant_id', tenantId)
-          .eq('is_active', true)
-          .order('full_name');
-        if (data) setAlliedAgents(data as AlliedAgentOption[]);
-      } catch (err) {
-        console.error('Error loading allied agents:', err);
-      }
-    }
-    loadAlliedAgents();
-  }, [tenantId, supabase]);
+        const { data: clientData } = await (supabase as any)
+          .from('clients')
+          .select('allied_agent_id')
+          .eq('id', cId)
+          .single();
 
-  // Sincronizar aliado seleccionado → % del aliado
-  useEffect(() => {
-    if (selectedAlliedAgentId && !isEditing) {
-      const agent = alliedAgents.find(a => a.id === selectedAlliedAgentId);
-      if (agent) {
-        setAlliedAgentPctValue(agent.commission_percentage);
+        if (clientData?.allied_agent_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: agentData } = await (supabase as any)
+            .from('allied_agents')
+            .select('id, full_name, commission_percentage')
+            .eq('id', clientData.allied_agent_id)
+            .single();
+
+          if (agentData) {
+            setClientAlliedAgent(agentData as AlliedAgentOption);
+            // Solo auto-setear el % si es póliza nueva (no editando)
+            if (!isEditing) {
+              setAlliedAgentPctValue(agentData.commission_percentage);
+            }
+          } else {
+            setClientAlliedAgent(null);
+            if (!isEditing) setAlliedAgentPctValue(0);
+          }
+        } else {
+          setClientAlliedAgent(null);
+          if (!isEditing) setAlliedAgentPctValue(0);
+        }
+      } catch (err) {
+        console.error('Error loading client allied agent:', err);
+        setClientAlliedAgent(null);
       }
-    } else if (!selectedAlliedAgentId) {
-      if (!isEditing) setAlliedAgentPctValue(0);
+      setLoadingAlliedAgent(false);
     }
-  }, [selectedAlliedAgentId, alliedAgents, isEditing]);
+    loadClientAlliedAgent();
+  }, [clientId, tenantId, isEditing, policy, supabase]);
 
   // Cargar comisión cuando cambia compañía + grupo
   useEffect(() => {
@@ -446,8 +460,8 @@ export function PolicyForm({
     const dataWithExtras: PolicyFormData = {
       ...data,
       notas: notasValue || undefined,
-      allied_agent_id: selectedAlliedAgentId || null,
-      allied_agent_pct: selectedAlliedAgentId ? alliedAgentPctValue : 0,
+      allied_agent_id: clientAlliedAgent?.id || null,
+      allied_agent_pct: clientAlliedAgent ? alliedAgentPctValue : 0,
     };
     await onSubmit(dataWithExtras);
   };
@@ -689,39 +703,34 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* Agente Aliado */}
+      {/* Agente Aliado (automático desde el cliente) */}
       <div className="border rounded-lg p-4 space-y-4">
         <h3 className="font-semibold flex items-center gap-2">
           <Handshake className="h-4 w-4" />
-          Agente Aliado (Opcional)
+          Agente Aliado
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label>Aliado</Label>
-            <Select
-              value={selectedAlliedAgentId || '_none'}
-              onValueChange={(value) => setSelectedAlliedAgentId(value === '_none' ? '' : value)}
-              disabled={loading}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Sin aliado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">Sin aliado</SelectItem>
-                {alliedAgents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.full_name} ({agent.commission_percentage}%)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Aliado (del cliente)</Label>
+            {loadingAlliedAgent ? (
+              <div className="flex items-center gap-2 h-10 px-3 text-sm text-muted-foreground border rounded-md bg-slate-50">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando...
+              </div>
+            ) : (
+              <Input
+                value={clientAlliedAgent ? clientAlliedAgent.full_name : 'Directo (sin aliado)'}
+                disabled
+                className="bg-slate-50"
+              />
+            )}
             <p className="text-xs text-muted-foreground mt-1">
-              {selectedAlliedAgentId
-                ? 'El % se fija al crear la póliza y no cambia si se modifica el aliado después'
-                : 'Selecciona si esta póliza tiene un agente aliado'}
+              {clientAlliedAgent
+                ? 'Aliado asignado al cliente. Para cambiarlo, edita el cliente.'
+                : 'Este cliente no tiene aliado asignado.'}
             </p>
           </div>
-          {selectedAlliedAgentId && (
+          {clientAlliedAgent && (
             <div>
               <Label>% Comisión Aliado</Label>
               <Input
@@ -732,7 +741,7 @@ export function PolicyForm({
                 disabled={loading}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Porcentaje sobre la comisión de la agencia
+                Porcentaje sobre la comisión de la agencia (modificable por negocio)
               </p>
             </div>
           )}
