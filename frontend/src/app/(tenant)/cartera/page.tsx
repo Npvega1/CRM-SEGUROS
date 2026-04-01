@@ -484,7 +484,8 @@ export default function CarteraPage() {
   const filteredAcuerdos = applyReportSearch(acuerdosData);
 
   return (
-    <div className="space-y-5 p-4 md:p-6" data-testid="cartera-page">
+    <div className="flex flex-col h-full" data-testid="cartera-page">
+      <div className="flex-shrink-0 p-4 md:p-6 pb-0 space-y-4 bg-background">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Cartera</h1>
         <p className="text-sm text-muted-foreground">{tenantName}</p>
@@ -545,7 +546,9 @@ export default function CarteraPage() {
         </div>
       </div>
 
-      {/* Content area */}
+     </div>
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-4 pt-4 space-y-4">
+        {/* Content area */}
       {reportTab === 'none' ? (
         <>
           <div className="relative max-w-md">
