@@ -175,6 +175,8 @@ export default function ModificarPolizaPage() {
         iva: data.iva || 0,
         total_a_pagar: data.total_a_pagar || 0,
         commission_pct: data.commission_pct || 0,
+        allied_agent_id: data.allied_agent_id || null,
+        allied_agent_pct: data.allied_agent_pct || 0,
         start_date: data.start_date || null,
         end_date: data.end_date || null,
         fecha_expedicion: data.fecha_expedicion || null,
