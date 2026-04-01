@@ -19,7 +19,7 @@ import {
   type Policy,
   type PolicyStatus
 } from '@/lib/validations/policies';
-import { Loader2, Save, X, Building, Layers, FileText, Calendar, MessageSquare } from 'lucide-react';
+import { Loader2, Save, X, Building, Layers, FileText, Calendar, MessageSquare, Handshake } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
 
@@ -57,6 +57,12 @@ interface TenantCompany {
   company: InsuranceCompany;
 }
 
+interface AlliedAgentOption {
+  id: string;
+  full_name: string;
+  commission_percentage: number;
+}
+
 export interface PolicyFormData {
   client_id: string;
   policy_number: string;
@@ -73,6 +79,8 @@ export interface PolicyFormData {
   iva: number;
   total_a_pagar: number;
   commission_pct: number;
+  allied_agent_id?: string | null;
+  allied_agent_pct?: number;
   fecha_expedicion?: string | null;
   start_date?: string | null;
   end_date?: string | null;
@@ -119,17 +127,25 @@ export function PolicyForm({
   const [loadingCatalogs, setLoadingCatalogs] = useState(true);
   const [loadingCommission, setLoadingCommission] = useState(false);
 
-  // Inicializar directamente desde la póliza cuando se edita
+  // Allied agents
+  const [alliedAgents, setAlliedAgents] = useState<AlliedAgentOption[]>([]);
+  const [selectedAlliedAgentId, setSelectedAlliedAgentId] = useState(() => {
+    if (isEditing && policy) return (policy as any).allied_agent_id || '';
+    return '';
+  });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [selectedCompanyId, setSelectedCompanyId] = useState(() => {
     if (isEditing && policy) return (policy as any).insurer_id || '';
     return '';
   });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [selectedLineId, setSelectedLineId] = useState(() => {
     if (isEditing && policy) return (policy as any).line_id || '';
     return '';
   });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [selectedGroupId, setSelectedGroupId] = useState(() => {
     if (isEditing && policy) return (policy as any).group_id || '';
@@ -169,6 +185,10 @@ export function PolicyForm({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       commission_pct: (policy as any).commission_pct || 0,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      allied_agent_id: (policy as any).allied_agent_id || null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      allied_agent_pct: (policy as any).allied_agent_pct || 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       fecha_expedicion: (policy as any).fecha_expedicion || '',
       start_date: policy.start_date || '',
       end_date: policy.end_date || '',
@@ -182,7 +202,9 @@ export function PolicyForm({
       gastos_expedicion: 0,
       iva: 0,
       total_a_pagar: 0,
-      commission_pct: 0
+      commission_pct: 0,
+      allied_agent_id: null,
+      allied_agent_pct: 0
     }
   });
 
@@ -214,6 +236,45 @@ export function PolicyForm({
     setValue('total_a_pagar', total);
   }, [premium, gastosExpedicion, iva, setValue]);
 
+  // Cargar agentes aliados
+  useEffect(() => {
+    async function loadAlliedAgents() {
+      if (!tenantId) return;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase as any)
+          .from('allied_agents')
+          .select('id, full_name, commission_percentage')
+          .eq('tenant_id', tenantId)
+          .eq('is_active', true)
+          .order('full_name');
+        if (data) setAlliedAgents(data as AlliedAgentOption[]);
+      } catch (err) {
+        console.error('Error loading allied agents:', err);
+      }
+    }
+    loadAlliedAgents();
+  }, [tenantId, supabase]);
+
+  // Sincronizar aliado seleccionado → form values
+  useEffect(() => {
+    if (selectedAlliedAgentId) {
+      const agent = alliedAgents.find(a => a.id === selectedAlliedAgentId);
+      if (agent) {
+        setValue('allied_agent_id', agent.id);
+        // Solo actualizar el % al crear nueva poliza, no al editar (para preservar snapshot)
+        if (!isEditing) {
+          setValue('allied_agent_pct', agent.commission_percentage);
+        }
+      }
+    } else {
+      setValue('allied_agent_id', null);
+      if (!isEditing) {
+        setValue('allied_agent_pct', 0);
+      }
+    }
+  }, [selectedAlliedAgentId, alliedAgents, setValue, isEditing]);
+
   // Cargar comisión cuando cambia compañía + grupo
   useEffect(() => {
     async function loadCommission() {
@@ -227,6 +288,7 @@ export function PolicyForm({
           .eq('company_id', selectedCompanyId)
           .eq('group_id', selectedGroupId)
           .single();
+
         if (data && !error) {
           setValue('commission_pct', data.commission_pct);
         } else {
@@ -254,6 +316,7 @@ export function PolicyForm({
           .select(`company_id, is_active, company_code, company:insurance_companies(id, name, slug)`)
           .eq('tenant_id', tenantId)
           .eq('is_active', true);
+
         if (tcData) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const formattedData = tcData.map((tc: any) => ({
@@ -287,6 +350,7 @@ export function PolicyForm({
           .select(`line_id, line:insurance_lines(id, name, slug, unit)`)
           .eq('company_id', selectedCompanyId)
           .eq('is_active', true);
+
         if (clData) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const lines = clData.map((cl: any) => cl.line).filter(Boolean);
@@ -314,6 +378,7 @@ export function PolicyForm({
           .eq('line_id', selectedLineId)
           .eq('is_active', true)
           .order('display_order');
+
         if (groupsData) {
           setAvailableGroups(groupsData as InsuranceGroup[]);
         }
@@ -630,6 +695,56 @@ export function PolicyForm({
               {loadingCommission && <Loader2 className="h-4 w-4 animate-spin" />}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Agente Aliado */}
+      <div className="border rounded-lg p-4 space-y-4">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Handshake className="h-4 w-4" />
+          Agente Aliado (Opcional)
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label>Aliado</Label>
+            <Select
+              value={selectedAlliedAgentId || '_none'}
+              onValueChange={(value) => setSelectedAlliedAgentId(value === '_none' ? '' : value)}
+              disabled={loading}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Sin aliado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">Sin aliado</SelectItem>
+                {alliedAgents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.full_name} ({agent.commission_percentage}%)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              {selectedAlliedAgentId
+                ? `El % se fija al crear la póliza y no cambia si se modifica el aliado después`
+                : 'Selecciona si esta póliza tiene un agente aliado'}
+            </p>
+          </div>
+          {selectedAlliedAgentId && (
+            <div>
+              <Label>% Comisión Aliado</Label>
+              <Input
+                type="number"
+                step="0.1"
+                {...register('allied_agent_pct', { valueAsNumber: true })}
+                disabled={loading}
+                className="bg-slate-50"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Porcentaje sobre la comisión de la agencia
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
