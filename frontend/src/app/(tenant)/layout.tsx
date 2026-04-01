@@ -183,7 +183,7 @@ export default function TenantLayout({
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen overflow-hidden bg-background">
       {/* Sidebar - Desktop */}
       <aside
         className={cn(
@@ -333,14 +333,14 @@ export default function TenantLayout({
 
       {/* Main Content */}
       <main className={cn(
-        'transition-all duration-300',
+        'h-screen flex flex-col overflow-hidden transition-all duration-300',
         collapsed ? 'md:ml-16' : 'md:ml-64'
       )}>
         {/* Spacer for mobile header */}
-        <div className="h-14 md:hidden" />
+        <div className="h-14 md:hidden flex-shrink-0" />
 
         {/* Page Content */}
-        <div className="min-h-[calc(100vh-3.5rem)] md:min-h-screen">
+        <div className="flex-1 overflow-hidden">
           {children}
         </div>
       </main>
