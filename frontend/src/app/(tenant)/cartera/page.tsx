@@ -1,4 +1,3 @@
-tsx
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
