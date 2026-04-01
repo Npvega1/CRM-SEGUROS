@@ -35,8 +35,9 @@ import {
   Handshake,
   Lock,
   Crown,
-  ClipboardList,
-  Wallet
+ ClipboardList,
+  Wallet,
+  Coins
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { UnreadMessagesBadge } from '@/components/ui/UnreadMessagesBadge';
@@ -61,6 +62,7 @@ const navItems: NavItem[] = [
   { title: 'Pólizas', href: '/polizas', icon: FileText, permissionKey: 'polizas' },
   { title: 'Remisiones', href: '/remisiones', icon: ClipboardList, permissionKey: 'polizas' },
   { title: 'Cartera', href: '/cartera', icon: Wallet, permissionKey: 'polizas' },
+  { title: 'Control Comisiones', href: '/comisiones', icon: Coins, adminOnly: true },
   { title: 'Siniestros', href: '/siniestros', icon: AlertTriangle, permissionKey: 'siniestros' },
   { title: 'Facturación', href: '/billing', icon: Receipt, permissionKey: 'facturacion' },
   { title: 'Pipeline', href: '/pipeline', icon: TrendingUp, permissionKey: 'pipeline', premiumOnly: true },
