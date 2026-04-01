@@ -9,13 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Table,
   TableBody,
   TableCell,
@@ -175,6 +168,7 @@ export default function PoliciesPage() {
 
       if (data) {
         let activa = 0, no_renovada = 0, vencida = 0, cancelada = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         data.forEach((p: any) => {
           if (p.status === 'activa') activa++;
           else if (p.status === 'no_renovada') no_renovada++;
@@ -201,17 +195,14 @@ export default function PoliciesPage() {
     const isNegative = value < 0;
     const formatted = formatPremium(value);
     return (
-      <div className="flex items-center gap-1">
-        <span className={isNegative ? 'text-red-600' : ''}>
-          {formatted}
-        </span>
+      <span className={`inline-flex items-center gap-1 ${isNegative ? 'text-red-600' : ''}`}>
+        {formatted}
         {typeof anexoCount === 'number' && anexoCount > 0 && (
-          <Badge variant="outline" className="text-[10px] px-1 py-0">
-            <Layers className="h-2.5 w-2.5 mr-0.5" />
-            {anexoCount}
+          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
+            <Layers className="w-2.5 h-2.5 mr-0.5" />{anexoCount}
           </Badge>
         )}
-      </div>
+      </span>
     );
   };
 
@@ -220,130 +211,140 @@ export default function PoliciesPage() {
   }
 
   return (
-    <div className="space-y-5 p-4 md:p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Polizas</h1>
-          <p className="text-sm text-muted-foreground">{tenantName}</p>
-        </div>
-        <Link href="/polizas/nueva">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Nueva Poliza
-          </Button>
-        </Link>
-      </div>
-
-      {/* Status Tabs */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          { key: 'all', label: 'Todas', count: statusCounts.all },
-          { key: 'activa', label: 'Activas', count: statusCounts.activa },
-          { key: 'no_renovada', label: 'No renovadas', count: statusCounts.no_renovada },
-          { key: 'vencida', label: 'Inactivas', count: statusCounts.vencida },
-          { key: 'cancelada', label: 'Canceladas', count: statusCounts.cancelada },
-        ].map(tab => (
-          <Button key={tab.key} size="sm"
-            variant={(statusFilter || 'all') === tab.key ? 'default' : 'outline'}
-            onClick={() => { setStatusFilter(tab.key === 'all' ? undefined : tab.key); setPage(1); }}>
-            {tab.label} ({tab.count})
-          </Button>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por numero o aseguradora..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-          data-testid="search-policies-input"
-        />
-      </div>
-
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <LoadingScreen />
-            </div>
-          ) : policies.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <FileText className="h-12 w-12 mb-4" />
-              <p>No se encontraron polizas</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="text-xs">
-                  <TableHead className="text-xs">Numero</TableHead>
-                  <TableHead className="text-xs">Cliente</TableHead>
-                  <TableHead className="text-xs">Aseguradora</TableHead>
-                  <TableHead className="text-xs">Ramo</TableHead>
-                  <TableHead className="text-xs">Prima Consolidada</TableHead>
-                  <TableHead className="text-xs">Estado</TableHead>
-                  <TableHead className="text-xs">Vencimiento</TableHead>
-                  <TableHead className="text-xs text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {policies.map((policy) => (
-                  <TableRow key={policy.id} className="text-xs">
-                    <TableCell className="py-2 font-medium text-xs">{policy.policy_number}</TableCell>
-                    <TableCell className="py-2 text-xs">{policy.client_name || 'N/A'}</TableCell>
-                    <TableCell className="py-2 text-xs">{policy.insurer}</TableCell>
-                    <TableCell className="py-2">
-                      <Badge variant="outline" className="text-[10px]">
-                        {policy.insurance_line?.name || POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line || '-'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="py-2 text-xs">
-                      {formatPremiumDisplay(policy.consolidated_premium || policy.premium, policy.anexo_count)}
-                    </TableCell>
-                    <TableCell className="py-2">
-                      <Badge className={`text-[10px] ${POLICY_STATUS_COLORS[policy.status as PolicyStatus]}`}>
-                        {POLICY_STATUS_LABELS[policy.status as PolicyStatus]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="py-2 text-xs">{formatDate(policy.end_date)}</TableCell>
-                    <TableCell className="py-2 text-right">
-                      <Link href={`/polizas/${policy.id}`}>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, total)} de {total}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm">Pagina {page} de {totalPages}</span>
-            <Button variant="outline" size="icon" onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+    <div className="flex flex-col h-full" data-testid="polizas-page">
+      {/* Header fijo */}
+      <div className="flex-shrink-0 p-4 md:p-6 pb-0 space-y-4 bg-background">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Polizas</h1>
+            <p className="text-sm text-muted-foreground">{tenantName}</p>
           </div>
+          <Link href="/polizas/nueva">
+            <Button className="gap-2" data-testid="new-policy-button">
+              <Plus className="w-4 h-4" />
+              Nueva Poliza
+            </Button>
+          </Link>
         </div>
-      )}
+
+        {/* Status Tabs */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {[
+            { key: 'all', label: 'Todas', count: statusCounts.all },
+            { key: 'activa', label: 'Activas', count: statusCounts.activa },
+            { key: 'no_renovada', label: 'No renovadas', count: statusCounts.no_renovada },
+            { key: 'vencida', label: 'Inactivas', count: statusCounts.vencida },
+            { key: 'cancelada', label: 'Canceladas', count: statusCounts.cancelada },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => { setStatusFilter(tab.key === 'all' ? undefined : tab.key); setPage(1); }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                (statusFilter || 'all') === tab.key
+                  ? 'bg-slate-200 text-slate-800 ring-1 ring-slate-400'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+              data-testid={`tab-${tab.key}`}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por numero o aseguradora..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+            data-testid="search-policies-input"
+          />
+        </div>
+      </div>
+
+      {/* Tabla scrolleable */}
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-4 pt-4">
+        <Card>
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="flex justify-center p-12">
+                <FileText className="w-8 h-8 animate-pulse text-muted-foreground" />
+              </div>
+            ) : policies.length === 0 ? (
+              <div className="text-center text-muted-foreground p-12">
+                <Shield className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p>No se encontraron polizas</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="text-xs">
+                    <TableHead className="text-xs">Numero</TableHead>
+                    <TableHead className="text-xs">Cliente</TableHead>
+                    <TableHead className="text-xs">Aseguradora</TableHead>
+                    <TableHead className="text-xs">Ramo</TableHead>
+                    <TableHead className="text-xs text-right">Prima Consolidada</TableHead>
+                    <TableHead className="text-xs">Estado</TableHead>
+                    <TableHead className="text-xs">Vencimiento</TableHead>
+                    <TableHead className="text-xs text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {policies.map((policy) => (
+                    <TableRow key={policy.id} className="text-xs">
+                      <TableCell className="py-2 font-medium text-xs">{policy.policy_number}</TableCell>
+                      <TableCell className="py-2 text-xs whitespace-nowrap">{policy.client_name || 'N/A'}</TableCell>
+                      <TableCell className="py-2 text-xs">{policy.insurer}</TableCell>
+                      <TableCell className="py-2 text-xs">
+                        {policy.insurance_line?.name || POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line || '-'}
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-right font-medium">
+                        {formatPremiumDisplay(policy.consolidated_premium || policy.premium, policy.anexo_count)}
+                      </TableCell>
+                      <TableCell className="py-2">
+                        <Badge variant="outline" className={`text-[10px] ${POLICY_STATUS_COLORS[policy.status as PolicyStatus]}`}>
+                          {POLICY_STATUS_LABELS[policy.status as PolicyStatus]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">{formatDate(policy.end_date)}</TableCell>
+                      <TableCell className="py-2 text-right">
+                        <Link href={`/polizas/${policy.id}`}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`ver-poliza-${policy.id}`}>
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-sm text-muted-foreground">
+              Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, total)} de {total}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm">Pagina {page} de {totalPages}</span>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
