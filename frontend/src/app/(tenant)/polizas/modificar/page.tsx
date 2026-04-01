@@ -25,17 +25,19 @@ interface ParentPolicyInfo {
   end_date: string | null;
   premium: number;
   commission_pct: number;
+  allied_agent_id: string | null;
+  allied_agent_pct: number;
 }
 
 export default function ModificarPolizaPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const polizaId = searchParams.get('poliza');
-  
+
   const { isLoading: isLoadingTenant, tenantId } = useTenant();
-  
+
   const [parentPolicy, setParentPolicy] = useState<ParentPolicyInfo | null>(null);
-  const [nextAnexo, setNextAnexo] = useState<string>('01');
+  const [nextAnexo, setNextAnexo] = useState('01');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +78,8 @@ export default function ModificarPolizaPage() {
           end_date,
           premium,
           commission_pct,
+          allied_agent_id,
+          allied_agent_pct,
           clients!inner(full_name)
         `)
         .eq('id', polizaId)
@@ -109,7 +113,7 @@ export default function ModificarPolizaPage() {
       if (anexosData && anexosData.length > 0) {
         maxAnexo = anexosData[0].anexo || '00';
       }
-      
+
       // Incrementar el anexo
       const nextAnexoNum = parseInt(maxAnexo, 10) + 1;
       const calculatedNextAnexo = nextAnexoNum.toString().padStart(2, '0');
@@ -130,7 +134,9 @@ export default function ModificarPolizaPage() {
         start_date: policyData.start_date,
         end_date: policyData.end_date,
         premium: policyData.premium || 0,
-        commission_pct: policyData.commission_pct || 0
+        commission_pct: policyData.commission_pct || 0,
+        allied_agent_id: policyData.allied_agent_id || null,
+        allied_agent_pct: policyData.allied_agent_pct || 0
       });
 
     } catch (err) {
@@ -175,8 +181,8 @@ export default function ModificarPolizaPage() {
         iva: data.iva || 0,
         total_a_pagar: data.total_a_pagar || 0,
         commission_pct: data.commission_pct || 0,
-        allied_agent_id: data.allied_agent_id || null,
-        allied_agent_pct: data.allied_agent_pct || 0,
+        allied_agent_id: parentPolicy.allied_agent_id || null,
+        allied_agent_pct: parentPolicy.allied_agent_pct || 0,
         start_date: data.start_date || null,
         end_date: data.end_date || null,
         fecha_expedicion: data.fecha_expedicion || null,
@@ -223,28 +229,21 @@ export default function ModificarPolizaPage() {
 
   if (error || !parentPolicy) {
     return (
-      <div className="container mx-auto py-8 px-4">
-        <Card className="max-w-lg mx-auto">
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center text-center gap-4">
-              <AlertCircle className="h-12 w-12 text-red-500" />
-              <p className="text-lg font-medium text-slate-800">
-                {error || 'No se pudo cargar la póliza'}
-              </p>
-              <Button onClick={() => router.push('/polizas')}>
-                Volver a Pólizas
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <AlertCircle className="h-12 w-12 text-red-500" />
+        <p className="text-lg text-red-600">{error || 'No se pudo cargar la póliza'}</p>
+        <Button variant="outline" onClick={() => router.push('/polizas')}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Volver a Pólizas
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-5xl">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-4">
         <Button
           variant="ghost"
           size="icon"
@@ -254,11 +253,8 @@ export default function ModificarPolizaPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <FileEdit className="h-6 w-6 text-amber-600" />
-            Crear Modificación
-          </h1>
-          <p className="text-slate-500">
+          <h1 className="text-2xl font-bold">Crear Modificación</h1>
+          <p className="text-sm text-muted-foreground">
             Anexo {nextAnexo} sobre Póliza {parentPolicy.policy_number}
           </p>
         </div>
@@ -267,9 +263,12 @@ export default function ModificarPolizaPage() {
       {/* Formulario */}
       <Card>
         <CardHeader>
-          <CardTitle>Nueva Modificación (Anexo)</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <FileEdit className="h-5 w-5" />
+            Nueva Modificación (Anexo)
+          </CardTitle>
           <CardDescription>
-            Complete los datos de la modificación. Los campos de identificación 
+            Complete los datos de la modificación. Los campos de identificación
             se heredan de la póliza original.
           </CardDescription>
         </CardHeader>
