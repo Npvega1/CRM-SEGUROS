@@ -902,12 +902,21 @@ export default function CarteraPage() {
                 className="font-semibold text-lg h-11" />
             </div>
             {getRawPago() > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-sm">
-                <p className="font-medium text-blue-800 text-xs mb-1">Desglose automatico:</p>
-                <div className="flex justify-between text-blue-700 text-xs"><span>Prima:</span><span>{formatPremium(calcularDesglose(getRawPago()).prima)}</span></div>
-                <div className="flex justify-between text-blue-700 text-xs"><span>IVA (19%):</span><span>{formatPremium(calcularDesglose(getRawPago()).iva)}</span></div>
-              </div>
-            )}
+                <div className="bg-blue-50 rounded-lg p-3 space-y-1">
+                  <p className="text-xs font-medium text-blue-800">Desglose automatico:</p>
+                  <div className="flex justify-between text-xs">
+                    <span>Prima:</span><span className="font-medium">{formatPremium(calcularDesglose(getRawPago()).prima)}</span>
+                  </div>
+                  {calcularDesglose(getRawPago()).gastos > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span>Gastos Exp.:</span><span className="font-medium">{formatPremium(calcularDesglose(getRawPago()).gastos)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs">
+                    <span>IVA:</span><span className="font-medium">{formatPremium(calcularDesglose(getRawPago()).iva)}</span>
+                  </div>
+                </div>
+              )}
             <div className="space-y-1">
               <Label className="text-sm">Notas (opcional)</Label>
               <Textarea placeholder="Referencia de pago..." value={pagoNotas} onChange={(e) => setPagoNotas(e.target.value)} rows={2} className="text-sm" />
