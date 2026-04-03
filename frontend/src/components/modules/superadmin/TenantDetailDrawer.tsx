@@ -3,6 +3,7 @@
 // =====================================================
 // COMPONENT: Tenant Detail Drawer
 // Panel lateral con detalles completos del tenant
+// Actualizado: Toggle de IA agregado
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -10,6 +11,8 @@ import { getUntypedClient } from '@/lib/supabase/untyped-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import {
   Sheet,
   SheetContent,
@@ -25,6 +28,8 @@ import {
   Calendar,
   Clock,
   ExternalLink,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -34,6 +39,7 @@ interface TenantWithStats {
   name: string;
   slug: string;
   is_active: boolean;
+  ai_enabled?: boolean;
   created_at: string;
   updated_at: string;
   agents_count: number;
@@ -65,17 +71,27 @@ interface TenantDetailDrawerProps {
   tenant: TenantWithStats | null;
   isOpen: boolean;
   onClose: () => void;
+  onTenantUpdate?: () => void;
 }
 
-export function TenantDetailDrawer({ tenant, isOpen, onClose }: TenantDetailDrawerProps) {
+export function TenantDetailDrawer({ tenant, isOpen, onClose, onTenantUpdate }: TenantDetailDrawerProps) {
   const [metrics, setMetrics] = useState<TenantMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [isTogglingAI, setIsTogglingAI] = useState(false);
+
   const supabase = getUntypedClient();
+
+  // Inicializar estado de IA cuando cambia el tenant
+  useEffect(() => {
+    if (tenant) {
+      setAiEnabled(tenant.ai_enabled || false);
+    }
+  }, [tenant]);
 
   const fetchMetrics = useCallback(async () => {
     if (!tenant) return;
-    
+
     setIsLoading(true);
     try {
       // Obtener usuarios del tenant
@@ -129,107 +145,146 @@ export function TenantDetailDrawer({ tenant, isOpen, onClose }: TenantDetailDraw
     }
   }, [isOpen, tenant, fetchMetrics]);
 
+  // Handler para toggle de IA
+  const handleAIToggle = async (enabled: boolean) => {
+    if (!tenant) return;
+
+    setIsTogglingAI(true);
+    try {
+      const { error } = await supabase
+        .from('tenants')
+        .update({ ai_enabled: enabled })
+        .eq('id', tenant.id);
+
+      if (error) throw error;
+
+      setAiEnabled(enabled);
+      
+      // Notificar al componente padre para refrescar la lista
+      if (onTenantUpdate) {
+        onTenantUpdate();
+      }
+    } catch (error) {
+      console.error('Error updating AI status:', error);
+      // Revertir el estado en caso de error
+      setAiEnabled(!enabled);
+      alert('Error al actualizar el estado de IA');
+    } finally {
+      setIsTogglingAI(false);
+    }
+  };
+
   if (!tenant) return null;
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className="w-full sm:max-w-lg bg-zinc-900 border-zinc-800 overflow-y-auto">
-        <SheetHeader className="pb-4 border-b border-zinc-800">
-          <div className="flex items-start justify-between">
-            <div>
-              <SheetTitle className="text-white flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-red-500" />
-                {tenant.name}
-              </SheetTitle>
-              <p className="text-sm text-zinc-500 mt-1 font-mono">{tenant.slug}</p>
-            </div>
-            <Badge
-              className={tenant.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}
-            >
+      <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+        <SheetHeader className="pb-4">
+          <SheetTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5" />
+            {tenant.name}
+          </SheetTitle>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">/{tenant.slug}</span>
+            <Badge variant={tenant.is_active ? 'default' : 'destructive'}>
               {tenant.is_active ? 'Activo' : 'Suspendido'}
             </Badge>
           </div>
         </SheetHeader>
 
-        <div className="py-6 space-y-6">
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 gap-3">
-            <Card className="bg-zinc-800/50 border-zinc-700">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-blue-500" />
-                  <span className="text-2xl font-bold text-white">{tenant.agents_count}</span>
-                </div>
-                <p className="text-xs text-zinc-500 mt-1">Agentes</p>
-              </CardContent>
-            </Card>
-            
-            <Card className="bg-zinc-800/50 border-zinc-700">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-purple-500" />
-                  <span className="text-2xl font-bold text-white">{tenant.clients_count}</span>
-                </div>
-                <p className="text-xs text-zinc-500 mt-1">Clientes</p>
-              </CardContent>
-            </Card>
-            
-            <Card className="bg-zinc-800/50 border-zinc-700">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-green-500" />
-                  <span className="text-2xl font-bold text-white">{tenant.policies_count}</span>
-                </div>
-                <p className="text-xs text-zinc-500 mt-1">Pólizas</p>
-              </CardContent>
-            </Card>
+        <div className="space-y-6 py-4">
 
-            <Card className="bg-zinc-800/50 border-zinc-700">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  <span className="text-2xl font-bold text-white">{metrics?.claims_count || 0}</span>
+          {/* AI Toggle Section */}
+          <Card className="border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-indigo-50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-600" />
+                Servicio de Inteligencia Artificial
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="ai-toggle" className="text-sm font-medium">
+                    Lectura automática de pólizas
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Permite a los usuarios cargar PDFs y extraer datos automáticamente
+                  </p>
                 </div>
-                <p className="text-xs text-zinc-500 mt-1">Siniestros</p>
-              </CardContent>
-            </Card>
+                <div className="flex items-center gap-2">
+                  {isTogglingAI && <Loader2 className="h-4 w-4 animate-spin text-purple-600" />}
+                  <Switch
+                    id="ai-toggle"
+                    checked={aiEnabled}
+                    onCheckedChange={handleAIToggle}
+                    disabled={isTogglingAI}
+                  />
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Estado actual:</span>
+                  <Badge variant={aiEnabled ? 'default' : 'secondary'} className={aiEnabled ? 'bg-purple-600' : ''}>
+                    {aiEnabled ? 'Habilitado' : 'Deshabilitado'}
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quick Stats */}
+          <div className="grid grid-cols-4 gap-2">
+            <div className="text-center p-3 bg-muted rounded-lg">
+              <div className="text-2xl font-bold">{tenant.agents_count}</div>
+              <div className="text-xs text-muted-foreground">Agentes</div>
+            </div>
+            <div className="text-center p-3 bg-muted rounded-lg">
+              <div className="text-2xl font-bold">{tenant.clients_count}</div>
+              <div className="text-xs text-muted-foreground">Clientes</div>
+            </div>
+            <div className="text-center p-3 bg-muted rounded-lg">
+              <div className="text-2xl font-bold">{tenant.policies_count}</div>
+              <div className="text-xs text-muted-foreground">Pólizas</div>
+            </div>
+            <div className="text-center p-3 bg-muted rounded-lg">
+              <div className="text-2xl font-bold">{metrics?.claims_count || 0}</div>
+              <div className="text-xs text-muted-foreground">Siniestros</div>
+            </div>
           </div>
 
           {/* Additional Metrics */}
-          <Card className="bg-zinc-800/50 border-zinc-700">
+          <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-zinc-400">Métricas adicionales</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Métricas adicionales
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-400 flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  Oportunidades
-                </span>
-                <span className="text-white font-medium">{metrics?.opportunities_count || 0}</span>
+            <CardContent className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Oportunidades</span>
+                <span className="font-medium">{metrics?.opportunities_count || 0}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-400 flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  Comparativos IA
-                </span>
-                <span className="text-white font-medium">{metrics?.comparisons_count || 0}</span>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Comparativos IA</span>
+                <span className="font-medium">{metrics?.comparisons_count || 0}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-400 flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
                   Creado
                 </span>
-                <span className="text-white font-medium">
+                <span className="font-medium">
                   {format(new Date(tenant.created_at), "d MMM yyyy", { locale: es })}
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-400 flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
                   Última actividad
                 </span>
-                <span className="text-white font-medium">
+                <span className="font-medium">
                   {tenant.last_activity
                     ? format(new Date(tenant.last_activity), "d MMM, HH:mm", { locale: es })
                     : 'Sin actividad'}
@@ -239,43 +294,42 @@ export function TenantDetailDrawer({ tenant, isOpen, onClose }: TenantDetailDraw
           </Card>
 
           {/* Users List */}
-          <Card className="bg-zinc-800/50 border-zinc-700">
+          <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-zinc-400 flex items-center gap-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 Usuarios ({metrics?.users.length || 0})
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <p className="text-zinc-500 text-sm">Cargando...</p>
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Cargando...</span>
+                </div>
               ) : metrics?.users.length === 0 ? (
-                <p className="text-zinc-500 text-sm">No hay usuarios</p>
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  No hay usuarios
+                </div>
               ) : (
-                <div className="space-y-3 max-h-48 overflow-y-auto">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {metrics?.users.map((user) => (
-                    <div key={user.id} className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-zinc-700 flex items-center justify-center">
-                          <span className="text-xs font-medium text-white">
-                            {user.full_name?.charAt(0)?.toUpperCase() || 'U'}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm text-white">{user.full_name}</p>
-                          <p className="text-xs text-zinc-500">{user.email}</p>
-                        </div>
+                    <div key={user.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
+                        {user.full_name?.charAt(0)?.toUpperCase() || 'U'}
                       </div>
-                      <div className="text-right">
-                        <Badge variant="outline" className="text-xs border-zinc-600 text-zinc-400">
-                          {user.role}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{user.full_name}</div>
+                        <div className="text-xs text-muted-foreground truncate">{user.email}</div>
+                      </div>
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        {user.role}
+                      </Badge>
+                      {!user.is_active && (
+                        <Badge variant="destructive" className="text-xs shrink-0">
+                          Inactivo
                         </Badge>
-                        {!user.is_active && (
-                          <Badge className="ml-1 bg-red-500/20 text-red-400 text-xs">
-                            Inactivo
-                          </Badge>
-                        )}
-                      </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -284,24 +338,29 @@ export function TenantDetailDrawer({ tenant, isOpen, onClose }: TenantDetailDraw
           </Card>
 
           {/* Recent Activities */}
-          <Card className="bg-zinc-800/50 border-zinc-700">
+          <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-zinc-400 flex items-center gap-2">
-                <Clock className="h-4 w-4" />
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4" />
                 Actividad reciente
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <p className="text-zinc-500 text-sm">Cargando...</p>
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Cargando...</span>
+                </div>
               ) : metrics?.recentActivities.length === 0 ? (
-                <p className="text-zinc-500 text-sm">Sin actividad registrada</p>
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  Sin actividad registrada
+                </div>
               ) : (
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {metrics?.recentActivities.map((activity, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm">
-                      <span className="text-zinc-400 truncate">{activity.action}</span>
-                      <span className="text-zinc-600 text-xs">
+                    <div key={index} className="flex items-center justify-between text-sm p-2 rounded-lg hover:bg-muted">
+                      <span className="truncate">{activity.action}</span>
+                      <span className="text-xs text-muted-foreground shrink-0 ml-2">
                         {format(new Date(activity.created_at), "d MMM, HH:mm", { locale: es })}
                       </span>
                     </div>
@@ -312,10 +371,10 @@ export function TenantDetailDrawer({ tenant, isOpen, onClose }: TenantDetailDraw
           </Card>
 
           {/* Actions */}
-          <div className="pt-4 border-t border-zinc-800">
+          <div className="flex gap-2">
             <Button
               variant="outline"
-              className="w-full border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
+              className="flex-1"
               onClick={() => window.open(`/${tenant.slug}/dashboard`, '_blank')}
             >
               <ExternalLink className="h-4 w-4 mr-2" />
