@@ -51,7 +51,7 @@ const formatCurrency = (value: number | null | undefined): string => {
 export default function DetallePolizaPage() {
   const params = useParams();
   const router = useRouter();
-  const { tenantId, slug } = useTenant();
+  const { tenantId, tenantSlug } = useTenant();
   const supabase = createClient();
   const policyId = params.id as string;
 
@@ -149,7 +149,7 @@ export default function DetallePolizaPage() {
       if (error) throw error;
 
       toast.success('Poliza eliminada');
-      router.push(`/${slug}/polizas`);
+      router.push(`/${tenantSlug}/polizas`);
     } catch (err: any) {
       console.error('Error deleting policy:', err);
       toast.error(err.message || 'Error al eliminar la poliza');
@@ -172,7 +172,7 @@ export default function DetallePolizaPage() {
       <div className="container mx-auto py-6 px-4">
         <div className="text-center py-12">
           <p className="text-muted-foreground">Poliza no encontrada</p>
-          <Link href={`/${slug}/polizas`}>
+          <Link href={`/${tenantSlug}/polizas`}>
             <Button variant="outline" className="mt-4">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Volver a Polizas
@@ -198,7 +198,7 @@ export default function DetallePolizaPage() {
       {/* ============================================= */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
-          <Link href={`/${slug}/polizas`}>
+          <Link href={`/${tenantSlug}/polizas`}>
             <Button variant="ghost" size="icon">
               <ArrowLeft className="h-5 w-5" />
             </Button>
@@ -220,7 +220,7 @@ export default function DetallePolizaPage() {
 
         {/* 4 Botones visibles (sin DropdownMenu de 3 puntos) */}
         <div className="flex items-center gap-2 flex-wrap">
-          <Link href={`/${slug}/polizas/${policyId}/editar`}>
+          <Link href={`/${tenantSlug}/polizas/${policyId}/editar`}>
             <Button variant="outline" size="sm">
               <Edit className="h-4 w-4 mr-2" />
               Editar
