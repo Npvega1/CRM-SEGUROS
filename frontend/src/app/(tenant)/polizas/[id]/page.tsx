@@ -33,6 +33,7 @@ import {
   Calendar,
   FileText,
   User,
+  Users,
   MoreVertical,
   Edit,
   FilePlus,
@@ -204,7 +205,6 @@ export default function PolicyDetailPage() {
         setDocuments(docsData as PolicyDocument[]);
       }
 
-      // Cargar estado de remision
       const { data: remData } = await (supabase as any)
         .from('remisiones')
         .select('estado, numero_remision')
@@ -215,7 +215,6 @@ export default function PolicyDetailPage() {
         setRemisionData(remData as {estado: string; numero_remision: string | null});
       }
 
-      // Cargar estado de cartera
       const { data: cartData } = await (supabase as any)
         .from('cartera')
         .select('estado')
@@ -374,7 +373,8 @@ export default function PolicyDetailPage() {
       activa: 'bg-green-100 text-green-800',
       vencida: 'bg-red-100 text-red-800',
       cancelada: 'bg-slate-100 text-slate-800',
-      renovacion: 'bg-yellow-100 text-yellow-800'
+      renovacion: 'bg-yellow-100 text-yellow-800',
+      verificacion: 'bg-amber-100 text-amber-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -396,10 +396,10 @@ export default function PolicyDetailPage() {
     );
   }
 
-  const polizaDocs = documents.filter(d => d.document_type === 'poliza');
-  const soporteDocs = documents.filter(d => d.document_type === 'soporte');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const policyAny = policy as any;
+  const polizaDocs = documents.filter(d => d.document_type === 'poliza');
+  const soporteDocs = documents.filter(d => d.document_type === 'soporte');
   const calculatedTotal = (policy.premium || 0) + (policyAny.gastos_expedicion || 0) + (policyAny.iva || 0);
   const displayTotal = policyAny.total_a_pagar || calculatedTotal;
 
@@ -417,15 +417,14 @@ export default function PolicyDetailPage() {
   const gastosConsolidados = baseGastos + anexosGastos;
   const ivaConsolidado = baseIva + anexosIva;
   const totalConsolidado = baseTotal + anexosTotal;
-
   return (
     <div className="space-y-6 p-4 md:p-6" data-testid="policy-detail-page">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3">
-          <button onClick={() => router.back()} className="p-2 hover:bg-muted rounded-lg">
+          <Button onClick={() => router.back()} className="p-2 hover:bg-muted rounded-lg" variant="ghost">
             <ArrowLeft className="w-5 h-5" />
-          </button>
+          </Button>
           <div>
             <div className="flex items-center gap-2">
               <Shield className="w-6 h-6 text-primary" />
@@ -444,11 +443,7 @@ export default function PolicyDetailPage() {
                   <Badge variant="outline" className={remisionData?.estado === 'remisionada' ? 'bg-green-50 text-green-700 border-green-400 px-3 py-1' : 'bg-gray-50 text-gray-400 border-gray-300 px-3 py-1'}>
                     {remisionData?.estado === 'remisionada' ? 'Remisionada' : 'Sin remisionar'}
                   </Badge>
-                  <Badge variant="outline" className={
-                    carteraData?.estado === 'pagada' ? 'bg-green-50 text-green-700 border-green-400 px-3 py-1'
-                    : carteraData?.estado === 'abono' ? 'bg-blue-50 text-blue-700 border-blue-400 px-3 py-1'
-                    : 'bg-gray-50 text-gray-400 border-gray-300 px-3 py-1'
-                  }>
+                  <Badge variant="outline" className={carteraData?.estado === 'pagada' ? 'bg-green-50 text-green-700 border-green-400 px-3 py-1' : carteraData?.estado === 'abono' ? 'bg-blue-50 text-blue-700 border-blue-400 px-3 py-1' : 'bg-gray-50 text-gray-400 border-gray-300 px-3 py-1'}>
                     {carteraData?.estado === 'pagada' ? 'Pagada' : carteraData?.estado === 'abono' ? 'Abono parcial' : 'Sin recaudo'}
                   </Badge>
                 </div>
@@ -494,9 +489,9 @@ export default function PolicyDetailPage() {
                 <div><p className="text-sm text-muted-foreground">Numero</p><p className="font-medium">{policy.policy_number}</p></div>
                 <div><p className="text-sm text-muted-foreground">Anexo</p><p className="font-medium">{policyAny.anexo || '00'}</p></div>
                 <div><p className="text-sm text-muted-foreground">Aseguradora</p><p className="font-medium">{policy.insurance_company?.name || policy.insurer}</p></div>
-                <div><p className="text-sm text-muted-foreground">Grupo</p><p className="font-medium">{policy.insurance_line?.name || '-'}</p></div>
-                <div><p className="text-sm text-muted-foreground">Ramo</p><p className="font-medium">{policy.insurance_group?.name || '-'}</p></div>
-                <div><p className="text-sm text-muted-foreground">Comision</p><p className="font-medium">{policyAny.commission_pct || 0}%</p></div>
+                <div><p className="text-sm text-muted-foreground">Ramo</p><p className="font-medium">{policy.insurance_line?.name || '-'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Grupo</p><p className="font-medium">{policy.insurance_group?.name || '-'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Tipo Movimiento</p><p className="font-medium capitalize">{policyAny.tipo_movimiento || '-'}</p></div>
               </div>
             </CardContent>
           </Card>
@@ -513,15 +508,43 @@ export default function PolicyDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Tomador */}
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2"><User className="w-5 h-5" />Tomador</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div><p className="text-sm text-muted-foreground">Nombre / Razon Social</p><p className="font-medium">{policyAny.tomador_nombre || policy.client?.full_name || '-'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Tipo Identificacion</p><p className="font-medium capitalize">{(policyAny.tomador_tipo_identificacion || policy.client?.doc_type || '-').replace(/_/g, ' ')}</p></div>
+                <div><p className="text-sm text-muted-foreground">Numero Identificacion</p><p className="font-medium">{policyAny.tomador_numero_identificacion || policy.client?.doc_number || '-'}</p></div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Asegurado (solo si es diferente al tomador) */}
+          {policyAny.asegurado_diferente && (
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Users className="w-5 h-5" />Asegurado</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div><p className="text-sm text-muted-foreground">Nombre</p><p className="font-medium">{policyAny.asegurado_nombre || '-'}</p></div>
+                  <div><p className="text-sm text-muted-foreground">Tipo Identificacion</p><p className="font-medium capitalize">{(policyAny.asegurado_tipo_identificacion || '-').replace(/_/g, ' ')}</p></div>
+                  <div><p className="text-sm text-muted-foreground">Numero Identificacion</p><p className="font-medium">{policyAny.asegurado_numero_identificacion || '-'}</p></div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Valores */}
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><DollarSign className="w-5 h-5" />Valores de la Poliza {policyAny.anexo && policyAny.anexo !== '00' && `(Anexo ${policyAny.anexo})`}</CardTitle></CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div><p className="text-sm text-muted-foreground">Prima</p><p className="font-medium text-lg">{formatCurrency(policy.premium)}</p></div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div><p className="text-sm text-muted-foreground">Valor Asegurado</p><p className="font-medium text-lg">{formatCurrency(policyAny.valor_asegurado)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Prima Neta</p><p className="font-medium text-lg">{formatCurrency(policy.premium)}</p></div>
                 <div><p className="text-sm text-muted-foreground">Gastos Exp.</p><p className="font-medium text-lg">{formatCurrency(policyAny.gastos_expedicion)}</p></div>
                 <div><p className="text-sm text-muted-foreground">IVA</p><p className="font-medium text-lg">{formatCurrency(policyAny.iva)}</p></div>
-                <div><p className="text-sm text-muted-foreground">Total</p><p className="font-medium text-lg">{formatCurrency(displayTotal)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Total a Pagar</p><p className="font-medium text-lg text-emerald-600">{formatCurrency(displayTotal)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Comision</p><p className="font-medium text-lg">{policyAny.commission_pct || 0}%</p></div>
               </div>
             </CardContent>
           </Card>
@@ -550,7 +573,6 @@ export default function PolicyDetailPage() {
               <CardDescription>Documentos adjuntos de la poliza</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Documentos de Poliza */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-sm">Documentos de Poliza</h4>
@@ -559,10 +581,7 @@ export default function PolicyDetailPage() {
                 {polizaDocs.length < 5 && (
                   <div className="mb-3">
                     <label>
-                      <input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.webp"
-                        onChange={(e) => {
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) handleUploadDocument(file, 'poliza');
                           e.target.value = '';
@@ -599,7 +618,6 @@ export default function PolicyDetailPage() {
                 )}
               </div>
 
-              {/* Documentos de Soporte */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-sm">Documentos de Soporte</h4>
@@ -608,10 +626,7 @@ export default function PolicyDetailPage() {
                 {soporteDocs.length < 8 && (
                   <div className="mb-3">
                     <label>
-                      <input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.webp"
-                        onChange={(e) => {
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) handleUploadDocument(file, 'soporte');
                           e.target.value = '';
@@ -681,7 +696,6 @@ export default function PolicyDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Anexos Relacionados */}
           {relatedAnexos.length > 0 && (
             <Card>
               <CardHeader>
@@ -689,7 +703,6 @@ export default function PolicyDetailPage() {
                 <CardDescription>Modificaciones de esta poliza</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {/* Poliza Base */}
                 <div className="border rounded-lg p-3">
                   <div className="flex justify-between items-start">
                     <div>
@@ -701,13 +714,8 @@ export default function PolicyDetailPage() {
                   <p className="text-xs text-muted-foreground mt-1">Prima</p>
                 </div>
 
-                {/* Otros Anexos */}
                 {relatedAnexos.map((anexo) => (
-                  <div
-                    key={anexo.id}
-                    className="border rounded-lg p-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => router.push(`/polizas/${anexo.id}`)}
-                  >
+                  <div key={anexo.id} className="border rounded-lg p-3 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(`/polizas/${anexo.id}`)}>
                     <div className="flex justify-between items-start">
                       <div>
                         <p className="text-sm font-medium">Anexo {anexo.anexo}</p>
@@ -721,7 +729,6 @@ export default function PolicyDetailPage() {
                   </div>
                 ))}
 
-                {/* Totales Consolidados */}
                 <div className="bg-muted/50 rounded-lg p-3 space-y-1">
                   <div className="flex justify-between text-sm"><span className="text-muted-foreground">Prima Consolidada</span><span className="font-medium">{formatCurrency(primaConsolidada)}</span></div>
                   <div className="flex justify-between text-sm"><span className="text-muted-foreground">Gastos Consolidados</span><span className="font-medium">{formatCurrency(gastosConsolidados)}</span></div>
