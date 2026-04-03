@@ -571,6 +571,182 @@ Siempre responde SOLO con JSON válido, sin texto adicional ni markdown."""
         )
 
 # Include the router in the main app
+# =====================================================
+# NUEVO ENDPOINT: /api/ai/extract-policy
+# Agregar este código al final del archivo server.py
+# ANTES de la línea: app.include_router(api_router)
+# =====================================================
+
+# =====================================================
+# POLICY EXTRACTION MODELS
+# =====================================================
+
+class ExtractPolicyRequest(BaseModel):
+    tenantId: str
+    file_name: str
+    file_type: str  # 'pdf' o 'docx'
+    base64_content: str
+
+class ExtractPolicyResponse(BaseModel):
+    success: bool
+    data: Optional[Dict] = None
+    needs_verification: bool = False
+    verification_fields: Optional[List[str]] = None
+    error: Optional[str] = None
+
+# =====================================================
+# POLICY EXTRACTION ENDPOINT
+# Extrae datos de una póliza desde un PDF/DOCX
+# =====================================================
+
+@api_router.post("/ai/extract-policy", response_model=ExtractPolicyResponse)
+async def extract_policy_data(request: ExtractPolicyRequest):
+    """
+    Extrae datos de una póliza desde un PDF o DOCX usando IA.
+    Retorna los campos del formulario pre-llenados.
+    """
+    try:
+        api_key = os.environ.get('EMERGENT_LLM_KEY')
+        if not api_key:
+            raise HTTPException(status_code=500, detail="API key not configured")
+
+        # Decodificar archivo
+        base64_content = request.base64_content
+        if ',' in base64_content:
+            base64_content = base64_content.split(',')[1]
+
+        binary_data = base64.b64decode(base64_content)
+
+        # Extraer texto según tipo de archivo
+        if request.file_type == 'pdf':
+            text = extract_text_from_pdf(binary_data)
+        elif request.file_type == 'docx':
+            text = extract_text_from_docx(binary_data)
+        else:
+            raise HTTPException(status_code=400, detail="Tipo de archivo no soportado. Use PDF o DOCX.")
+
+        if not text.strip():
+            return ExtractPolicyResponse(
+                success=False,
+                error="No se pudo extraer texto del documento. Verifique que no sea una imagen escaneada."
+            )
+
+        logger.info(f"Extracted {len(text)} chars from {request.file_name}")
+
+        # Limitar texto para evitar timeouts
+        text = text[:15000]
+
+        # Prompt para extracción de póliza
+        extraction_prompt = f"""Eres un experto en seguros colombiano. Analiza este documento de póliza y extrae TODOS los datos disponibles.
+
+DOCUMENTO:
+{text}
+
+EXTRAE la siguiente información. Si un campo no está disponible, déjalo como null.
+Si un campo tiene información ambigua o posiblemente incorrecta, márcalo en "campos_verificar".
+
+RESPONDE SOLO CON JSON VÁLIDO:
+{{
+    "datos_generales": {{
+        "numero_poliza": "string o null",
+        "anexo": "string o null (ej: '00', '01')",
+        "aseguradora": "string o null",
+        "ramo": "string o null (ej: 'Vida', 'Auto', 'Hogar', 'Salud', 'Cumplimiento')",
+        "tipo_movimiento": "expedicion|renovacion|modificacion|cancelacion o null",
+        "fecha_expedicion": "YYYY-MM-DD o null"
+    }},
+    "vigencia": {{
+        "fecha_desde": "YYYY-MM-DD o null",
+        "fecha_hasta": "YYYY-MM-DD o null"
+    }},
+    "tomador": {{
+        "nombre": "string o null",
+        "tipo_identificacion": "nit|cedula_ciudadania|cedula_extranjeria|pasaporte|nit_extranjero o null",
+        "numero_identificacion": "string o null"
+    }},
+    "asegurado": {{
+        "es_diferente_tomador": true/false,
+        "nombre": "string o null (solo si es diferente al tomador)",
+        "tipo_identificacion": "string o null",
+        "numero_identificacion": "string o null"
+    }},
+    "valores": {{
+        "valor_asegurado": number o null (sin formato, solo número),
+        "prima_neta": number o null,
+        "gastos_expedicion": number o null,
+        "iva": number o null,
+        "total_pagar": number o null
+    }},
+    "beneficiarios": [
+        {{
+            "nombre": "string",
+            "tipo_identificacion": "string",
+            "numero_identificacion": "string"
+        }}
+    ],
+    "campos_verificar": ["lista de campos que requieren verificación manual"],
+    "confianza_extraccion": "alta|media|baja",
+    "notas_extraccion": "string con observaciones sobre la extracción"
+}}"""
+
+        # Inicializar chat con Gemini
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"extract-policy-{uuid.uuid4()}",
+            system_message="""Eres un experto en seguros colombiano especializado en análisis de pólizas.
+Tu tarea es extraer información estructurada de documentos de pólizas de seguros.
+Siempre responde SOLO con JSON válido, sin texto adicional ni markdown.
+Si no encuentras un dato, usa null. No inventes información."""
+        ).with_model("gemini", "gemini-2.5-pro")
+
+        # Obtener respuesta de IA
+        logger.info(f"Sending policy extraction request to Gemini...")
+        response_text = await chat.send_message(UserMessage(text=extraction_prompt))
+        logger.info(f"Received extraction response: {len(response_text)} chars")
+
+        # Parsear respuesta JSON
+        try:
+            clean_response = response_text.strip()
+            if clean_response.startswith('```'):
+                clean_response = clean_response.split('```')[1]
+                if clean_response.startswith('json'):
+                    clean_response = clean_response[4:]
+            if clean_response.endswith('```'):
+                clean_response = clean_response[:-3]
+
+            extraction_data = json.loads(clean_response.strip())
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response: {response_text[:500]}")
+            return ExtractPolicyResponse(
+                success=False,
+                error=f"Error al parsear respuesta de IA: {str(e)}"
+            )
+
+        # Determinar si necesita verificación
+        campos_verificar = extraction_data.get('campos_verificar', [])
+        confianza = extraction_data.get('confianza_extraccion', 'media')
+        needs_verification = len(campos_verificar) > 0 or confianza in ['baja', 'media']
+
+        return ExtractPolicyResponse(
+            success=True,
+            data=extraction_data,
+            needs_verification=needs_verification,
+            verification_fields=campos_verificar if campos_verificar else None
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error extracting policy data: {e}", exc_info=True)
+        return ExtractPolicyResponse(
+            success=False,
+            error=str(e)
+        )
+
+# =====================================================
+# FIN DEL NUEVO ENDPOINT
+# =====================================================
+
 app.include_router(api_router)
 
 app.add_middleware(
