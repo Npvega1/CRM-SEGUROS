@@ -27,15 +27,29 @@ interface PolicyFormData {
   line_id?: string;
   group_id?: string;
   status: PolicyStatus;
+  tipo_movimiento?: string;
   currency: string;
+  valor_asegurado?: number;
   premium: number;
   gastos_expedicion: number;
   iva: number;
   total_a_pagar: number;
   commission_pct: number;
+  allied_agent_id?: string | null;
+  allied_agent_pct?: number;
+  comercial_id?: string | null;
+  grupo_empresarial_id?: string | null;
   fecha_expedicion?: string | null;
   start_date?: string | null;
   end_date?: string | null;
+  tomador_nombre?: string;
+  tomador_tipo_identificacion?: string;
+  tomador_numero_identificacion?: string;
+  asegurado_diferente?: boolean;
+  asegurado_nombre?: string;
+  asegurado_tipo_identificacion?: string;
+  asegurado_numero_identificacion?: string;
+  beneficiarios?: Array<{ nombre: string; tipo_identificacion: string; numero_identificacion: string }>;
   notas?: string;
   metadata?: Record<string, unknown>;
 }
@@ -95,40 +109,6 @@ export default function EditPolicyPage() {
       const supabase = getBrowserClient();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          <div className="container mx-auto py-6 px-4">
-Solo eliminas max-w-4xl para que el formulario use todo el ancho disponible.
-
-Corrección 2B: Guardar nuevos campos al editar
-BUSCAR este bloque en el handleSubmit (la operación .update()):
-
-      const { error: updateError } = await (supabase as any)
-        .from('policies')
-        .update({
-          policy_number: data.policy_number,
-          anexo: data.anexo || '00',
-          insurer: data.insurer,
-          insurer_id: data.insurer_id || null,
-          line: data.line,
-          line_id: data.line_id || null,
-          group_id: data.group_id || null,
-          status: data.status || 'activa',
-          premium: data.premium,
-          gastos_expedicion: data.gastos_expedicion || 0,
-          iva: data.iva || 0,
-          total_a_pagar: data.total_a_pagar || 0,
-          currency: data.currency || 'COP',
-          fecha_expedicion: data.fecha_expedicion || null,
-          start_date: data.start_date || null,
-          end_date: data.end_date || null,
-          commission_pct: data.commission_pct || 0,
-          notas: data.notas || null,
-          metadata: data.metadata || {},
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', policyId)
-        .eq('tenant_id', tenantId);
-REEMPLAZAR POR:
-
       const { error: updateError } = await (supabase as any)
         .from('policies')
         .update({
