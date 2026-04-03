@@ -44,10 +44,6 @@ import {
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
 
-// =====================================================
-// CONSTANTES Y TIPOS
-// =====================================================
-
 const POLICY_STATUS_OPTIONS: { value: PolicyStatus; label: string }[] = [
   { value: 'activa', label: 'Activa' },
   { value: 'vencida', label: 'Vencida' },
@@ -167,10 +163,6 @@ interface PolicyFormProps {
   isLoading?: boolean;
 }
 
-// =====================================================
-// UTILIDADES
-// =====================================================
-
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
@@ -194,10 +186,6 @@ const calcularDiasVigencia = (startDate: string | null | undefined, endDate: str
   return diffDays;
 };
 
-// =====================================================
-// COMPONENTE PRINCIPAL
-// =====================================================
-
 export function PolicyForm({
   policy,
   clientId,
@@ -209,7 +197,6 @@ export function PolicyForm({
   const { tenantId } = useTenant();
   const supabase = createClient();
 
-  // Estados para IA
   const [aiEnabled, setAiEnabled] = useState(false);
   const [loadingAiStatus, setLoadingAiStatus] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -221,18 +208,15 @@ export function PolicyForm({
     error?: string;
   } | null>(null);
 
-  // Estados para catálogos
   const [tenantCompanies, setTenantCompanies] = useState<TenantCompany[]>([]);
   const [availableLines, setAvailableLines] = useState<InsuranceLine[]>([]);
   const [availableGroups, setAvailableGroups] = useState<InsuranceGroup[]>([]);
   const [loadingCatalogs, setLoadingCatalogs] = useState(true);
   const [loadingCommission, setLoadingCommission] = useState(false);
 
-  // Estado para datos del cliente/tomador
   const [clientData, setClientData] = useState<ClientData | null>(null);
   const [loadingClient, setLoadingClient] = useState(false);
 
-  // Allied agent (viene del cliente)
   const [clientAlliedAgent, setClientAlliedAgent] = useState<AlliedAgentOption | null>(null);
   const [loadingAlliedAgent, setLoadingAlliedAgent] = useState(false);
   const [alliedAgentPctValue, setAlliedAgentPctValue] = useState(() => {
@@ -240,16 +224,10 @@ export function PolicyForm({
     return 0;
   });
 
-  // Usuario actual (quien crea la póliza)
   const [currentUser, setCurrentUser] = useState<{ id: string; full_name: string } | null>(null);
-
-  // Comercial del cliente
   const [comercialName, setComercialName] = useState<string>('');
-
-  // Grupo empresarial del cliente
   const [grupoEmpresarialName, setGrupoEmpresarialName] = useState<string>('');
 
-  // Selecciones de catálogos
   const [selectedCompanyId, setSelectedCompanyId] = useState(() => {
     if (isEditing && policy) return (policy as any).insurer_id || '';
     return '';
@@ -263,21 +241,16 @@ export function PolicyForm({
     return '';
   });
 
-  // Displays de valores formateados
   const [valorAseguradoDisplay, setValorAseguradoDisplay] = useState('');
   const [premiumDisplay, setPremiumDisplay] = useState('');
   const [gastosDisplay, setGastosDisplay] = useState('');
   const [ivaDisplay, setIvaDisplay] = useState('');
   const [notasValue, setNotasValue] = useState('');
 
-  // Asegurado diferente al tomador
   const [aseguradoDiferente, setAseguradoDiferente] = useState(false);
-
-  // Beneficiarios (múltiples)
   const [beneficiarios, setBeneficiarios] = useState<Beneficiario[]>([]);
   const [mostrarBeneficiarios, setMostrarBeneficiarios] = useState(false);
 
-  // Form
   const {
     register,
     handleSubmit,
@@ -331,7 +304,6 @@ export function PolicyForm({
     }
   });
 
-  // Watchers
   const premium = watch('premium') || 0;
   const gastosExpedicion = watch('gastos_expedicion') || 0;
   const iva = watch('iva') || 0;
@@ -342,11 +314,6 @@ export function PolicyForm({
     ? POLICY_STATUS_OPTIONS
     : POLICY_STATUS_OPTIONS.filter(o => o.value === 'activa' || o.value === 'verificacion');
 
-  // =====================================================
-  // EFFECTS
-  // =====================================================
-
-  // Cargar estado de IA del tenant
   useEffect(() => {
     async function loadAiStatus() {
       if (!tenantId) return;
@@ -356,7 +323,6 @@ export function PolicyForm({
           .select('ai_enabled')
           .eq('id', tenantId)
           .single();
-        
         if (data) {
           setAiEnabled(data.ai_enabled || false);
         }
@@ -369,7 +335,6 @@ export function PolicyForm({
     loadAiStatus();
   }, [tenantId, supabase]);
 
-  // Cargar usuario actual
   useEffect(() => {
     async function loadCurrentUser() {
       try {
@@ -380,7 +345,6 @@ export function PolicyForm({
             .select('id, full_name')
             .eq('id', user.id)
             .single();
-          
           if (userData) {
             setCurrentUser(userData);
           }
@@ -392,7 +356,6 @@ export function PolicyForm({
     loadCurrentUser();
   }, [supabase]);
 
-  // Cargar datos del cliente/tomador
   useEffect(() => {
     async function loadClientData() {
       const cId = clientId || (isEditing && policy ? policy.client_id : null);
@@ -404,13 +367,11 @@ export function PolicyForm({
           .select('id, full_name, doc_type, doc_number, allied_agent_id, comercial_id, grupo_empresarial_id')
           .eq('id', cId)
           .single();
-
         if (data) {
           setClientData(data);
           setValue('tomador_nombre', data.full_name || '');
           setValue('tomador_tipo_identificacion', data.doc_type || 'cedula_ciudadania');
           setValue('tomador_numero_identificacion', data.doc_number || '');
-
           if (data.comercial_id) {
             const { data: comercialData } = await (supabase as any)
               .from('users')
@@ -421,7 +382,6 @@ export function PolicyForm({
               setComercialName(comercialData.full_name);
             }
           }
-
           if (data.grupo_empresarial_id) {
             const { data: grupoData } = await (supabase as any)
               .from('grupos_empresariales')
@@ -441,7 +401,6 @@ export function PolicyForm({
     loadClientData();
   }, [clientId, isEditing, policy, supabase, setValue]);
 
-  // Inicializar displays de valores cuando hay policy existente
   useEffect(() => {
     if (policy) {
       setNotasValue((policy as any).notas || '');
@@ -454,19 +413,16 @@ export function PolicyForm({
     }
   }, [policy]);
 
-  // Calcular total automáticamente
   useEffect(() => {
     const total = Number(premium) + Number(gastosExpedicion) + Number(iva);
     setValue('total_a_pagar', total);
   }, [premium, gastosExpedicion, iva, setValue]);
 
-  // Calcular días de vigencia
   useEffect(() => {
     const dias = calcularDiasVigencia(startDate, endDate);
     setValue('dias_vigencia', dias);
   }, [startDate, endDate, setValue]);
 
-  // Cargar aliado del CLIENTE automáticamente
   useEffect(() => {
     async function loadClientAlliedAgent() {
       const cId = clientId || (isEditing && policy ? policy.client_id : null);
@@ -475,7 +431,6 @@ export function PolicyForm({
         if (!isEditing) setAlliedAgentPctValue(0);
         return;
       }
-
       setLoadingAlliedAgent(true);
       try {
         const { data: clientDataRes } = await (supabase as any)
@@ -483,14 +438,12 @@ export function PolicyForm({
           .select('allied_agent_id')
           .eq('id', cId)
           .single();
-
         if (clientDataRes?.allied_agent_id) {
           const { data: agentData } = await (supabase as any)
             .from('allied_agents')
             .select('id, full_name, commission_percentage')
             .eq('id', clientDataRes.allied_agent_id)
             .single();
-
           if (agentData) {
             setClientAlliedAgent(agentData as AlliedAgentOption);
             if (!isEditing) {
@@ -513,7 +466,6 @@ export function PolicyForm({
     loadClientAlliedAgent();
   }, [clientId, tenantId, isEditing, policy, supabase]);
 
-  // Cargar comisión cuando cambia compañía + grupo
   useEffect(() => {
     async function loadCommission() {
       if (!selectedCompanyId || !selectedGroupId) return;
@@ -525,7 +477,6 @@ export function PolicyForm({
           .eq('company_id', selectedCompanyId)
           .eq('group_id', selectedGroupId)
           .single();
-
         if (data && !error) {
           setValue('commission_pct', data.commission_pct);
         } else {
@@ -540,8 +491,6 @@ export function PolicyForm({
     }
     loadCommission();
   }, [selectedCompanyId, selectedGroupId, setValue, supabase]);
-
-  // Cargar compañías del tenant
   useEffect(() => {
     async function loadTenantCompanies() {
       if (!tenantId) return;
@@ -552,7 +501,6 @@ export function PolicyForm({
           .select(`company_id, is_active, company_code, company:insurance_companies(id, name, slug)`)
           .eq('tenant_id', tenantId)
           .eq('is_active', true);
-
         if (tcData) {
           const formattedData = tcData.map((tc: any) => ({
             company_id: tc.company_id,
@@ -571,7 +519,6 @@ export function PolicyForm({
     loadTenantCompanies();
   }, [tenantId, supabase]);
 
-  // Cargar líneas cuando cambia la compañía seleccionada
   useEffect(() => {
     async function loadLinesForCompany() {
       if (!selectedCompanyId) {
@@ -584,7 +531,6 @@ export function PolicyForm({
           .select(`line_id, line:insurance_lines(id, name, slug, unit)`)
           .eq('company_id', selectedCompanyId)
           .eq('is_active', true);
-
         if (clData) {
           const lines = clData.map((cl: any) => cl.line).filter(Boolean);
           setAvailableLines(lines);
@@ -596,7 +542,6 @@ export function PolicyForm({
     loadLinesForCompany();
   }, [selectedCompanyId, supabase]);
 
-  // Cargar grupos cuando cambia la línea seleccionada
   useEffect(() => {
     async function loadGroupsForLine() {
       if (!selectedLineId) {
@@ -610,7 +555,6 @@ export function PolicyForm({
           .eq('line_id', selectedLineId)
           .eq('is_active', true)
           .order('display_order');
-
         if (groupsData) {
           setAvailableGroups(groupsData as InsuranceGroup[]);
         }
@@ -621,7 +565,6 @@ export function PolicyForm({
     loadGroupsForLine();
   }, [selectedLineId, supabase]);
 
-  // Sincronizar compañía seleccionada → form values
   useEffect(() => {
     if (selectedCompanyId) {
       const company = tenantCompanies.find(tc => tc.company_id === selectedCompanyId)?.company;
@@ -632,7 +575,6 @@ export function PolicyForm({
     }
   }, [selectedCompanyId, tenantCompanies, setValue]);
 
-  // Sincronizar línea seleccionada → form values
   useEffect(() => {
     if (selectedLineId) {
       const line = availableLines.find(l => l.id === selectedLineId);
@@ -643,7 +585,6 @@ export function PolicyForm({
     }
   }, [selectedLineId, availableLines, setValue]);
 
-  // Sincronizar grupo seleccionado → form values
   useEffect(() => {
     if (selectedGroupId) {
       setValue('group_id', selectedGroupId);
@@ -656,11 +597,6 @@ export function PolicyForm({
     }
   }, [clientId, isEditing, setValue]);
 
-  // =====================================================
-  // HANDLERS
-  // =====================================================
-
-  // Handler para archivo de póliza (IA)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -674,26 +610,18 @@ export function PolicyForm({
     }
   };
 
-  // Handler para extraer datos con IA
   const handleExtractWithAI = async () => {
     if (!selectedFile || !tenantId) return;
-
     setIsExtractingAI(true);
     setAiExtractionResult(null);
-
     try {
-      // Convertir archivo a base64
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = reject;
         reader.readAsDataURL(selectedFile);
       });
-
-      // Determinar tipo de archivo
       const fileType = selectedFile.type === 'application/pdf' ? 'pdf' : 'docx';
-
-      // Llamar al endpoint de extracción
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       const response = await fetch(`${backendUrl}/api/ai/extract-policy`, {
         method: 'POST',
@@ -705,35 +633,24 @@ export function PolicyForm({
           base64_content: base64
         })
       });
-
       const result = await response.json();
-
       if (result.success && result.data) {
-        // Pre-llenar formulario con datos extraídos
         const data = result.data;
-
-        // Datos generales
         if (data.datos_generales) {
           if (data.datos_generales.numero_poliza) setValue('policy_number', data.datos_generales.numero_poliza);
           if (data.datos_generales.anexo) setValue('anexo', data.datos_generales.anexo);
           if (data.datos_generales.tipo_movimiento) setValue('tipo_movimiento', data.datos_generales.tipo_movimiento);
           if (data.datos_generales.fecha_expedicion) setValue('fecha_expedicion', data.datos_generales.fecha_expedicion);
         }
-
-        // Vigencia
         if (data.vigencia) {
           if (data.vigencia.fecha_desde) setValue('start_date', data.vigencia.fecha_desde);
           if (data.vigencia.fecha_hasta) setValue('end_date', data.vigencia.fecha_hasta);
         }
-
-        // Tomador
         if (data.tomador) {
           if (data.tomador.nombre) setValue('tomador_nombre', data.tomador.nombre);
           if (data.tomador.tipo_identificacion) setValue('tomador_tipo_identificacion', data.tomador.tipo_identificacion);
           if (data.tomador.numero_identificacion) setValue('tomador_numero_identificacion', data.tomador.numero_identificacion);
         }
-
-        // Asegurado
         if (data.asegurado) {
           setAseguradoDiferente(data.asegurado.es_diferente_tomador || false);
           if (data.asegurado.es_diferente_tomador) {
@@ -742,8 +659,6 @@ export function PolicyForm({
             if (data.asegurado.numero_identificacion) setValue('asegurado_numero_identificacion', data.asegurado.numero_identificacion);
           }
         }
-
-        // Valores
         if (data.valores) {
           if (data.valores.valor_asegurado) {
             setValue('valor_asegurado', data.valores.valor_asegurado);
@@ -762,23 +677,16 @@ export function PolicyForm({
             setIvaDisplay(formatCurrency(data.valores.iva));
           }
         }
-
-        // Beneficiarios
         if (data.beneficiarios && data.beneficiarios.length > 0) {
           setBeneficiarios(data.beneficiarios);
           setMostrarBeneficiarios(true);
         }
-
-        // Notas de extracción
         if (data.notas_extraccion) {
           setNotasValue(data.notas_extraccion);
         }
-
-        // Establecer estado según verificación
         if (result.needs_verification) {
           setValue('status', 'verificacion');
         }
-
         setAiExtractionResult({
           success: true,
           needsVerification: result.needs_verification,
@@ -879,16 +787,9 @@ export function PolicyForm({
   const anexoOptions = Array.from({ length: 100 }, (_, i) => i.toString().padStart(2, '0'));
   const diasVigencia = calcularDiasVigencia(startDate, endDate);
 
-  // =====================================================
-  // RENDER
-  // =====================================================
-
   return (
     <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
       
-      {/* ============================================= */}
-      {/* SECCIÓN IA: Carga de PDF (Solo si está habilitado) */}
-      {/* ============================================= */}
       {!isEditing && aiEnabled && !loadingAiStatus && (
         <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 rounded-lg p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-4 pb-2 border-b border-purple-200">
@@ -896,11 +797,9 @@ export function PolicyForm({
             <h3 className="font-semibold text-purple-900">Lectura Automática con IA</h3>
             <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Beta</span>
           </div>
-          
           <p className="text-sm text-purple-700 mb-4">
             Sube el PDF de la póliza y la IA extraerá los datos automáticamente.
           </p>
-
           <div className="flex items-center gap-4">
             <div className="flex-1">
               <Input
@@ -930,14 +829,11 @@ export function PolicyForm({
               )}
             </Button>
           </div>
-
           {selectedFile && (
             <p className="text-xs text-purple-600 mt-2">
               Archivo: {selectedFile.name}
             </p>
           )}
-
-          {/* Resultado de extracción */}
           {aiExtractionResult && (
             <div className="mt-4">
               {aiExtractionResult.success ? (
@@ -967,8 +863,9 @@ export function PolicyForm({
               )}
             </div>
           )}
+        </div>
+      )}
 
-      {/* Mensaje si IA no está habilitada */}
       {!isEditing && !aiEnabled && !loadingAiStatus && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
           <div className="flex items-center gap-2 text-gray-600">
@@ -980,17 +877,12 @@ export function PolicyForm({
         </div>
       )}
 
-      {/* ============================================= */}
-      {/* MARCO 1: DATOS GENERALES DE LA PÓLIZA */}
-      {/* ============================================= */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4 pb-2 border-b">
           <FileText className="h-5 w-5 text-blue-600" />
           <h3 className="font-semibold text-gray-900">1. Datos Generales de la Póliza</h3>
         </div>
-        
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Número de Póliza */}
           <div className="space-y-2">
             <Label htmlFor="policy_number">Número de Póliza *</Label>
             <Input
@@ -1004,8 +896,6 @@ export function PolicyForm({
               <p className="text-red-500 text-xs">{errors.policy_number.message}</p>
             )}
           </div>
-
-          {/* Anexo */}
           <div className="space-y-2">
             <Label>Anexo</Label>
             <Select
@@ -1023,8 +913,6 @@ export function PolicyForm({
               </SelectContent>
             </Select>
           </div>
-
-          {/* Aseguradora */}
           <div className="space-y-2">
             <Label>Aseguradora *</Label>
             {loadingCatalogs ? (
@@ -1063,8 +951,6 @@ export function PolicyForm({
               </Select>
             )}
           </div>
-
-          {/* Ramo (Línea) */}
           <div className="space-y-2">
             <Label>Ramo *</Label>
             <Select
@@ -1086,8 +972,6 @@ export function PolicyForm({
               </SelectContent>
             </Select>
           </div>
-
-          {/* Tipo de Movimiento */}
           <div className="space-y-2">
             <Label>Tipo de Movimiento *</Label>
             <Select
@@ -1105,8 +989,6 @@ export function PolicyForm({
               </SelectContent>
             </Select>
           </div>
-
-          {/* Fecha de Expedición */}
           <div className="space-y-2">
             <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
             <Input
@@ -1119,17 +1001,12 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* ============================================= */}
-      {/* MARCO 2: VIGENCIA DE LA PÓLIZA */}
-      {/* ============================================= */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4 pb-2 border-b">
           <Calendar className="h-5 w-5 text-green-600" />
           <h3 className="font-semibold text-gray-900">2. Vigencia de la Póliza</h3>
         </div>
-        
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Vigencia Desde */}
           <div className="space-y-2">
             <Label htmlFor="start_date">Vigencia Desde *</Label>
             <Input
@@ -1140,8 +1017,6 @@ export function PolicyForm({
               disabled={loading}
             />
           </div>
-
-          {/* Vigencia Hasta */}
           <div className="space-y-2">
             <Label htmlFor="end_date">Vigencia Hasta *</Label>
             <Input
@@ -1151,8 +1026,6 @@ export function PolicyForm({
               disabled={loading}
             />
           </div>
-
-          {/* Días de Vigencia (calculado) */}
           <div className="space-y-2">
             <Label>Días de Vigencia</Label>
             <Input
@@ -1161,8 +1034,6 @@ export function PolicyForm({
               className="bg-gray-50"
             />
           </div>
-
-          {/* Estado */}
           <div className="space-y-2">
             <Label>Estado de la Póliza *</Label>
             <Select
@@ -1186,22 +1057,18 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* ============================================= */}
-      {/* MARCO 3: INFORMACIÓN DEL TOMADOR */}
-      {/* ============================================= */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4 pb-2 border-b">
           <User className="h-5 w-5 text-purple-600" />
           <h3 className="font-semibold text-gray-900">3. Información del Tomador</h3>
         </div>
-       {loadingClient ? (
+        {loadingClient ? (
           <div className="flex items-center gap-2 text-gray-500">
             <Loader2 className="h-4 w-4 animate-spin" />
             Cargando datos del tomador...
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Nombre / Razón Social */}
             <div className="space-y-2">
               <Label htmlFor="tomador_nombre">Nombre / Razón Social *</Label>
               <Input
@@ -1211,8 +1078,6 @@ export function PolicyForm({
                 disabled={loading}
               />
             </div>
-
-            {/* Tipo de Identificación */}
             <div className="space-y-2">
               <Label>Tipo de Identificación *</Label>
               <Select
@@ -1230,8 +1095,6 @@ export function PolicyForm({
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Número de Identificación */}
             <div className="space-y-2">
               <Label htmlFor="tomador_numero_identificacion">Número de Identificación *</Label>
               <Input
@@ -1244,17 +1107,11 @@ export function PolicyForm({
           </div>
         )}
       </div>
-
-      {/* ============================================= */}
-      {/* MARCO 4: ASEGURADO Y BENEFICIARIO */}
-      {/* ============================================= */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4 pb-2 border-b">
           <Users className="h-5 w-5 text-orange-600" />
           <h3 className="font-semibold text-gray-900">4. Asegurado y Beneficiario</h3>
         </div>
-        
-        {/* Checkbox: Asegurado diferente al tomador */}
         <div className="flex items-center space-x-2 mb-4">
           <Checkbox
             id="asegurado_diferente"
@@ -1266,8 +1123,6 @@ export function PolicyForm({
             El asegurado es diferente al tomador
           </Label>
         </div>
-
-        {/* Campos de Asegurado (solo si es diferente) */}
         {aseguradoDiferente && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-orange-50 rounded-lg">
             <div className="space-y-2">
@@ -1307,8 +1162,6 @@ export function PolicyForm({
             </div>
           </div>
         )}
-
-        {/* Beneficiarios */}
         <div className="border-t pt-4 mt-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center space-x-2">
@@ -1335,7 +1188,6 @@ export function PolicyForm({
               </Button>
             )}
           </div>
-
           {mostrarBeneficiarios && beneficiarios.length > 0 && (
             <div className="space-y-3">
               {beneficiarios.map((ben, index) => (
@@ -1392,17 +1244,12 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* ============================================= */}
-      {/* MARCO 5: VALORES DE LA PÓLIZA */}
-      {/* ============================================= */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4 pb-2 border-b">
           <DollarSign className="h-5 w-5 text-emerald-600" />
           <h3 className="font-semibold text-gray-900">5. Valores de la Póliza</h3>
         </div>
-        
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          {/* Valor Asegurado */}
           <div className="space-y-2">
             <Label htmlFor="valor_asegurado">Valor Asegurado *</Label>
             <Input
@@ -1413,8 +1260,6 @@ export function PolicyForm({
               disabled={loading}
             />
           </div>
-
-          {/* Prima Neta */}
           <div className="space-y-2">
             <Label htmlFor="premium">Prima Neta *</Label>
             <Input
@@ -1425,8 +1270,6 @@ export function PolicyForm({
               disabled={loading}
             />
           </div>
-
-          {/* Gastos de Expedición */}
           <div className="space-y-2">
             <Label htmlFor="gastos_expedicion">Gastos Expedición</Label>
             <Input
@@ -1437,8 +1280,6 @@ export function PolicyForm({
               disabled={loading}
             />
           </div>
-
-          {/* IVA */}
           <div className="space-y-2">
             <Label htmlFor="iva">IVA</Label>
             <Input
@@ -1449,8 +1290,6 @@ export function PolicyForm({
               disabled={loading}
             />
           </div>
-
-          {/* Total a Pagar */}
           <div className="space-y-2">
             <Label>Total a Pagar</Label>
             <Input
@@ -1459,8 +1298,6 @@ export function PolicyForm({
               className="bg-emerald-50 font-semibold text-emerald-700"
             />
           </div>
-
-          {/* Comisión % */}
           <div className="space-y-2">
             <Label htmlFor="commission_pct">Comisión %</Label>
             <div className="relative">
@@ -1479,17 +1316,12 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* ============================================= */}
-      {/* MARCO 6: GESTIÓN INTERNA CRM */}
-      {/* ============================================= */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4 pb-2 border-b">
           <Settings className="h-5 w-5 text-gray-600" />
           <h3 className="font-semibold text-gray-900">6. Gestión Interna CRM</h3>
         </div>
-        
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Usuario del Tenant (quien crea) */}
           <div className="space-y-2">
             <Label>Usuario</Label>
             <Input
@@ -1499,8 +1331,6 @@ export function PolicyForm({
             />
             <p className="text-xs text-gray-500">Usuario que crea la póliza</p>
           </div>
-
-          {/* Comercial */}
           <div className="space-y-2">
             <Label>Comercial</Label>
             <Input
@@ -1510,8 +1340,6 @@ export function PolicyForm({
             />
             <p className="text-xs text-gray-500">Viene de la HV del tomador</p>
           </div>
-
-          {/* Aliado */}
           <div className="space-y-2">
             <Label>Aliado</Label>
             {loadingAlliedAgent ? (
@@ -1528,8 +1356,6 @@ export function PolicyForm({
             )}
             <p className="text-xs text-gray-500">Viene de la HV del tomador</p>
           </div>
-
-          {/* Grupo Empresarial */}
           <div className="space-y-2">
             <Label>Grupo Empresarial</Label>
             <Input
@@ -1540,8 +1366,6 @@ export function PolicyForm({
             <p className="text-xs text-gray-500">Viene de la HV del tomador</p>
           </div>
         </div>
-
-        {/* % Comisión Aliado (si aplica) */}
         {clientAlliedAgent && (
           <div className="mt-4 pt-4 border-t">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1562,15 +1386,11 @@ export function PolicyForm({
         )}
       </div>
 
-      {/* ============================================= */}
-      {/* NOTAS Y COMENTARIOS */}
-      {/* ============================================= */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4 pb-2 border-b">
           <MessageSquare className="h-5 w-5 text-gray-600" />
           <h3 className="font-semibold text-gray-900">Notas y Comentarios</h3>
         </div>
-        
         <Textarea
           placeholder="Observaciones adicionales sobre la póliza..."
           value={notasValue}
@@ -1580,9 +1400,6 @@ export function PolicyForm({
         />
       </div>
 
-      {/* ============================================= */}
-      {/* BOTONES DE ACCIÓN */}
-      {/* ============================================= */}
       <div className="flex justify-end gap-3 pt-4 border-t">
         {onCancel && (
           <Button
