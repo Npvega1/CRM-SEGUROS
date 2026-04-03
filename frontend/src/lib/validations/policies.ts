@@ -1,7 +1,7 @@
 // =====================================================
 // VALIDACIONES ZOD - Pólizas
 // Módulo 01: Gestión de Pólizas
-// Incluye campos: anexo, gastos_expedicion, iva, total_a_pagar, fecha_expedicion
+// Actualizado con campos: tipo_movimiento, valor_asegurado, tomador, asegurado, beneficiarios
 // =====================================================
 
 import { z } from 'zod';
@@ -19,7 +19,17 @@ export type PolicyLine = z.infer<typeof PolicyLineEnum>;
 /**
  * Estado de póliza
  */
-export const PolicyStatusEnum = z.enum(['cotizacion', 'activa', 'vencida', 'cancelada', 'renovacion', 'renovada', 'no_renovada', 'inactiva']);
+export const PolicyStatusEnum = z.enum([
+  'cotizacion', 
+  'activa', 
+  'vencida', 
+  'cancelada', 
+  'renovacion', 
+  'renovada', 
+  'no_renovada', 
+  'inactiva',
+  'verificacion' // NUEVO: cuando la IA detecta errores
+]);
 export type PolicyStatus = z.infer<typeof PolicyStatusEnum>;
 
 /**
@@ -28,9 +38,38 @@ export type PolicyStatus = z.infer<typeof PolicyStatusEnum>;
 export const PolicyTypeEnum = z.enum(['original', 'anexo', 'renovacion']);
 export type PolicyType = z.infer<typeof PolicyTypeEnum>;
 
+/**
+ * Tipo de movimiento
+ */
+export const TipoMovimientoEnum = z.enum(['expedicion', 'renovacion', 'modificacion', 'cancelacion']);
+export type TipoMovimiento = z.infer<typeof TipoMovimientoEnum>;
+
+/**
+ * Tipo de identificación
+ */
+export const TipoIdentificacionEnum = z.enum([
+  'nit',
+  'cedula_ciudadania',
+  'cedula_extranjeria',
+  'pasaporte',
+  'nit_extranjero'
+]);
+export type TipoIdentificacion = z.infer<typeof TipoIdentificacionEnum>;
+
 // =====================================================
 // SCHEMAS ZOD
 // =====================================================
+
+/**
+ * Schema para beneficiario
+ */
+export const BeneficiarioSchema = z.object({
+  nombre: z.string().min(1, 'El nombre es requerido'),
+  tipo_identificacion: TipoIdentificacionEnum,
+  numero_identificacion: z.string().min(1, 'El número de identificación es requerido')
+});
+
+export type Beneficiario = z.infer<typeof BeneficiarioSchema>;
 
 /**
  * Schema completo de Póliza
@@ -47,6 +86,8 @@ export const PolicySchema = z.object({
   line_id: z.string().uuid().nullable().optional(),
   group_id: z.string().uuid().nullable().optional(),
   status: PolicyStatusEnum,
+  tipo_movimiento: TipoMovimientoEnum.default('expedicion'),
+  valor_asegurado: z.number().min(0).default(0),
   premium: z.number().min(0),
   gastos_expedicion: z.number().min(0).default(0),
   iva: z.number().min(0).default(0),
@@ -54,12 +95,32 @@ export const PolicySchema = z.object({
   currency: z.string().length(3).default('COP'),
   start_date: z.string().nullable().optional(),
   end_date: z.string().nullable().optional(),
+  dias_vigencia: z.number().min(0).default(0),
   fecha_expedicion: z.string().nullable().optional(),
   document_url: z.string().url().nullable().optional(),
   commission_pct: z.number().min(0).max(100).default(0),
   policy_type: PolicyTypeEnum.nullable().optional(),
   parent_policy_id: z.string().uuid().nullable().optional(),
   renewed_from_policy_id: z.string().uuid().nullable().optional(),
+  // Tomador
+  tomador_nombre: z.string().min(1),
+  tomador_tipo_identificacion: TipoIdentificacionEnum,
+  tomador_numero_identificacion: z.string().min(1),
+  // Asegurado
+  asegurado_diferente: z.boolean().default(false),
+  asegurado_nombre: z.string().nullable().optional(),
+  asegurado_tipo_identificacion: TipoIdentificacionEnum.nullable().optional(),
+  asegurado_numero_identificacion: z.string().nullable().optional(),
+  // Beneficiarios
+  beneficiarios: z.array(BeneficiarioSchema).nullable().optional(),
+  // Gestión CRM
+  usuario_id: z.string().uuid().nullable().optional(),
+  comercial_id: z.string().uuid().nullable().optional(),
+  allied_agent_id: z.string().uuid().nullable().optional(),
+  allied_agent_pct: z.number().min(0).max(100).default(0),
+  grupo_empresarial_id: z.string().uuid().nullable().optional(),
+  // Notas
+  notas: z.string().nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).default({}),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime()
@@ -84,6 +145,10 @@ export const CreatePolicyInputSchema = z.object({
   line_id: z.string().uuid().optional().nullable(),
   group_id: z.string().uuid().optional().nullable(),
   status: PolicyStatusEnum.default('activa'),
+  tipo_movimiento: TipoMovimientoEnum.default('expedicion'),
+  valor_asegurado: z.coerce.number()
+    .min(0, 'El valor asegurado debe ser mayor o igual a 0')
+    .default(0),
   premium: z.coerce.number()
     .min(0, 'La prima debe ser mayor o igual a 0'),
   gastos_expedicion: z.coerce.number()
@@ -98,6 +163,7 @@ export const CreatePolicyInputSchema = z.object({
   currency: z.string().length(3).default('COP'),
   start_date: z.string().optional().nullable(),
   end_date: z.string().optional().nullable(),
+  dias_vigencia: z.coerce.number().min(0).default(0),
   fecha_expedicion: z.string().optional().nullable(),
   commission_pct: z.coerce.number()
     .min(0, 'La comisión debe ser mayor o igual a 0')
@@ -106,6 +172,29 @@ export const CreatePolicyInputSchema = z.object({
   policy_type: PolicyTypeEnum.optional().nullable(),
   parent_policy_id: z.string().uuid().optional().nullable(),
   renewed_from_policy_id: z.string().uuid().optional().nullable(),
+  // Tomador
+  tomador_nombre: z.string()
+    .min(1, 'El nombre del tomador es requerido')
+    .transform(val => val.trim()),
+  tomador_tipo_identificacion: TipoIdentificacionEnum.default('cedula_ciudadania'),
+  tomador_numero_identificacion: z.string()
+    .min(1, 'El número de identificación del tomador es requerido')
+    .transform(val => val.trim()),
+  // Asegurado
+  asegurado_diferente: z.boolean().default(false),
+  asegurado_nombre: z.string().optional().nullable(),
+  asegurado_tipo_identificacion: TipoIdentificacionEnum.optional().nullable(),
+  asegurado_numero_identificacion: z.string().optional().nullable(),
+  // Beneficiarios
+  beneficiarios: z.array(BeneficiarioSchema).optional().nullable(),
+  // Gestión CRM
+  usuario_id: z.string().uuid().optional().nullable(),
+  comercial_id: z.string().uuid().optional().nullable(),
+  allied_agent_id: z.string().uuid().optional().nullable(),
+  allied_agent_pct: z.coerce.number().min(0).max(100).default(0),
+  grupo_empresarial_id: z.string().uuid().optional().nullable(),
+  // Notas
+  notas: z.string().optional().nullable(),
   metadata: z.record(z.string(), z.unknown()).default({})
 });
 
@@ -171,7 +260,7 @@ export type ExpiringPolicy = z.infer<typeof ExpiringPolicySchema>;
 /**
  * Labels para líneas de seguro
  */
-export const POLICY_LINE_LABELS: Record<string, string> = {
+export const POLICY_LINE_LABELS: Record<PolicyLine, string> = {
   vida: 'Vida',
   auto: 'Auto',
   salud: 'Salud',
@@ -183,7 +272,7 @@ export const POLICY_LINE_LABELS: Record<string, string> = {
 /**
  * Labels para estados de póliza
  */
-export const POLICY_STATUS_LABELS: Record<string, string> = {
+export const POLICY_STATUS_LABELS: Record<PolicyStatus, string> = {
   cotizacion: 'Cotización',
   activa: 'Activa',
   vencida: 'Vencida',
@@ -191,13 +280,14 @@ export const POLICY_STATUS_LABELS: Record<string, string> = {
   renovacion: 'En Renovación',
   renovada: 'Renovada',
   no_renovada: 'No Renovada',
-  inactiva: 'Inactiva'
+  inactiva: 'Inactiva',
+  verificacion: 'En Verificación'
 };
 
 /**
  * Colores para estados de póliza (Tailwind classes)
  */
-export const POLICY_STATUS_COLORS: Record<string, string> = {
+export const POLICY_STATUS_COLORS: Record<PolicyStatus, string> = {
   cotizacion: 'bg-gray-100 text-gray-800',
   activa: 'bg-green-100 text-green-800',
   vencida: 'bg-red-100 text-red-800',
@@ -205,13 +295,35 @@ export const POLICY_STATUS_COLORS: Record<string, string> = {
   renovacion: 'bg-yellow-100 text-yellow-800',
   renovada: 'bg-blue-100 text-blue-800',
   no_renovada: 'bg-orange-100 text-orange-800',
-  inactiva: 'bg-purple-100 text-purple-800'
+  inactiva: 'bg-purple-100 text-purple-800',
+  verificacion: 'bg-amber-100 text-amber-800'
+};
+
+/**
+ * Labels para tipos de movimiento
+ */
+export const TIPO_MOVIMIENTO_LABELS: Record<TipoMovimiento, string> = {
+  expedicion: 'Expedición',
+  renovacion: 'Renovación',
+  modificacion: 'Modificación',
+  cancelacion: 'Cancelación'
+};
+
+/**
+ * Labels para tipos de identificación
+ */
+export const TIPO_IDENTIFICACION_LABELS: Record<TipoIdentificacion, string> = {
+  nit: 'NIT',
+  cedula_ciudadania: 'Cédula de Ciudadanía',
+  cedula_extranjeria: 'Cédula de Extranjería',
+  pasaporte: 'Pasaporte',
+  nit_extranjero: 'NIT Extranjero'
 };
 
 /**
  * Iconos para líneas de seguro (Lucide icon names)
  */
-export const POLICY_LINE_ICONS: Record<string, string> = {
+export const POLICY_LINE_ICONS: Record<PolicyLine, string> = {
   vida: 'Heart',
   auto: 'Car',
   salud: 'Stethoscope',
@@ -223,7 +335,7 @@ export const POLICY_LINE_ICONS: Record<string, string> = {
 /**
  * Transiciones de estado válidas
  */
-export const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
+export const VALID_STATUS_TRANSITIONS: Record<PolicyStatus, PolicyStatus[]> = {
   cotizacion: ['activa', 'cancelada'],
   activa: ['vencida', 'cancelada', 'renovacion', 'inactiva'],
   vencida: ['no_renovada', 'cancelada'],
@@ -231,7 +343,8 @@ export const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
   renovada: [],
   no_renovada: ['activa'],
   inactiva: [],
-  cancelada: []
+  cancelada: [],
+  verificacion: ['activa', 'cancelada']
 };
 
 /**
@@ -268,4 +381,19 @@ export function formatDate(dateString: string | null | undefined): string {
     month: 'short',
     day: 'numeric'
   });
+}
+
+/**
+ * Calcula días de vigencia entre dos fechas
+ */
+export function calcularDiasVigencia(
+  startDate: string | null | undefined,
+  endDate: string | null | undefined
+): number {
+  if (!startDate || !endDate) return 0;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
 }
