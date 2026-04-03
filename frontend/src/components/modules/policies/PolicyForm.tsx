@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import {
   CreatePolicyInputSchema,
+  UpdatePolicyInputSchema,
   type Policy,
   type PolicyStatus
 } from '@/lib/validations/policies';
@@ -258,7 +259,7 @@ export function PolicyForm({
     watch,
     formState: { errors, isSubmitting }
   } = useForm<PolicyFormData>({
-    resolver: zodResolver(CreatePolicyInputSchema) as any,
+    resolver: zodResolver(isEditing ? UpdatePolicyInputSchema : CreatePolicyInputSchema) as any,
     defaultValues: policy ? {
       client_id: policy.client_id,
       policy_number: policy.policy_number,
