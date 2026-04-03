@@ -259,7 +259,7 @@ export function PolicyForm({
     watch,
     formState: { errors, isSubmitting }
   } = useForm<PolicyFormData>({
-    resolver: zodResolver(isEditing ? UpdatePolicyInputSchema : CreatePolicyInputSchema) as any,
+    ...(isEditing ? {} : { resolver: zodResolver(CreatePolicyInputSchema) as any }),
     defaultValues: policy ? {
       client_id: policy.client_id,
       policy_number: policy.policy_number,
