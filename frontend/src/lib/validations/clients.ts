@@ -1,6 +1,7 @@
 // =====================================================
 // VALIDACIONES ZOD - Clientes
 // Módulo 01: Gestión de Clientes
+// Actualizado con campos: comercial_id, grupo_empresarial_id
 // =====================================================
 
 import { z } from 'zod';
@@ -39,6 +40,8 @@ export const ClientSchema = z.object({
   segment: ClientSegmentEnum,
   agent_id: z.string().uuid().nullable().optional(),
   allied_agent_id: z.string().uuid().nullable().optional(),
+  comercial_id: z.string().uuid().nullable().optional(),
+  grupo_empresarial_id: z.string().uuid().nullable().optional(),
   tags: z.array(z.string()).default([]),
   metadata: z.record(z.string(), z.unknown()).default({}),
   is_active: z.boolean().default(true),
@@ -70,6 +73,8 @@ export const CreateClientInputSchema = z.object({
   segment: ClientSegmentEnum.default('persona_natural'),
   agent_id: z.string().uuid().optional().nullable(),
   allied_agent_id: z.string().uuid().optional().nullable(),
+  comercial_id: z.string().uuid().optional().nullable(),
+  grupo_empresarial_id: z.string().uuid().optional().nullable(),
   tags: z.array(z.string().max(50)).max(20).default([]),
   metadata: z.record(z.string(), z.unknown()).default({})
 });
@@ -82,6 +87,8 @@ export const SearchClientsInputSchema = z.object({
   query: z.string().min(1).max(100),
   segment: ClientSegmentEnum.optional(),
   agent_id: z.string().uuid().optional(),
+  comercial_id: z.string().uuid().optional(),
+  grupo_empresarial_id: z.string().uuid().optional(),
   limit: z.number().int().min(1).max(100).default(50)
 });
 
@@ -125,9 +132,9 @@ export type CSVImportResult = z.infer<typeof CSVImportResultSchema>;
 // =====================================================
 
 export const DOC_TYPE_LABELS: Record<DocType, string> = {
-  cedula: 'Cedula',
-  cedula_extranjeria: 'Cedula de Extranjeria',
-  carnet_diplomatico: 'Carnet Diplomatico',
+  cedula: 'Cédula de Ciudadanía',
+  cedula_extranjeria: 'Cédula de Extranjería',
+  carnet_diplomatico: 'Carnet Diplomático',
   consorcio: 'Consorcio',
   nit: 'NIT',
   pasaporte: 'Pasaporte',
@@ -136,7 +143,7 @@ export const DOC_TYPE_LABELS: Record<DocType, string> = {
 
 export const SEGMENT_LABELS: Record<ClientSegment, string> = {
   persona_natural: 'Persona Natural',
-  persona_juridica: 'Persona Juridica'
+  persona_juridica: 'Persona Jurídica'
 };
 
 export const SEGMENT_COLORS: Record<ClientSegment, string> = {
