@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 export default function EditarPolizaPage() {
   const params = useParams();
   const router = useRouter();
-  const { tenantId, slug } = useTenant();
+  const { tenantId, tenantSlug } = useTenant();
   const supabase = createClient();
   const policyId = params.id as string;
 
@@ -22,7 +22,7 @@ export default function EditarPolizaPage() {
   const [saving, setSaving] = useState(false);
 
   // =====================================================
-  // Cargar póliza existente
+  // Cargar poliza existente
   // =====================================================
   useEffect(() => {
     async function loadPolicy() {
@@ -40,7 +40,7 @@ export default function EditarPolizaPage() {
         setPolicy(data);
       } catch (err) {
         console.error('Error loading policy:', err);
-        toast.error('Error al cargar la póliza');
+        toast.error('Error al cargar la poliza');
       } finally {
         setLoading(false);
       }
@@ -115,7 +115,7 @@ export default function EditarPolizaPage() {
       if (updateError) throw updateError;
 
       toast.success('Poliza actualizada correctamente');
-      router.push(`/${slug}/polizas/${policyId}`);
+      router.push(`/${tenantSlug}/polizas/${policyId}`);
     } catch (err: any) {
       console.error('Error updating policy:', err);
       toast.error(err.message || 'Error al actualizar la poliza');
@@ -140,7 +140,7 @@ export default function EditarPolizaPage() {
       <div className="container mx-auto py-6 px-4">
         <div className="text-center py-12">
           <p className="text-muted-foreground">Poliza no encontrada</p>
-          <Link href={`/${slug}/polizas`}>
+          <Link href={`/${tenantSlug}/polizas`}>
             <Button variant="outline" className="mt-4">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Volver a Polizas
@@ -157,7 +157,7 @@ export default function EditarPolizaPage() {
   return (
     <div className="container mx-auto py-6 px-4">
       <div className="flex items-center gap-4 mb-6">
-        <Link href={`/${slug}/polizas/${policyId}`}>
+        <Link href={`/${tenantSlug}/polizas/${policyId}`}>
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -173,7 +173,7 @@ export default function EditarPolizaPage() {
       <PolicyForm
         policy={policy}
         onSubmit={handleSubmit}
-        onCancel={() => router.push(`/${slug}/polizas/${policyId}`)}
+        onCancel={() => router.push(`/${tenantSlug}/polizas/${policyId}`)}
         isLoading={saving}
       />
     </div>
