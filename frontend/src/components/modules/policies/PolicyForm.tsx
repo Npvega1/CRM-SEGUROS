@@ -557,13 +557,17 @@ export function PolicyForm({
           .order('display_order');
         if (groupsData) {
           setAvailableGroups(groupsData as InsuranceGroup[]);
+          // Auto-seleccionar primer grupo para cargar comisión del ramo
+          if (groupsData.length > 0 && !isEditing) {
+            setSelectedGroupId(groupsData[0].id);
+          }
         }
       } catch (error) {
         console.error('Error loading groups:', error);
       }
     }
     loadGroupsForLine();
-  }, [selectedLineId, supabase]);
+  }, [selectedLineId, supabase, isEditing]);
 
   useEffect(() => {
     if (selectedCompanyId) {
@@ -1329,7 +1333,6 @@ export function PolicyForm({
               disabled
               className="bg-gray-100"
             />
-            <p className="text-xs text-gray-500">Usuario que crea la póliza</p>
           </div>
           <div className="space-y-2">
             <Label>Comercial</Label>
@@ -1338,7 +1341,6 @@ export function PolicyForm({
               disabled
               className="bg-gray-100"
             />
-            <p className="text-xs text-gray-500">Viene de la HV del tomador</p>
           </div>
           <div className="space-y-2">
             <Label>Aliado</Label>
@@ -1354,7 +1356,6 @@ export function PolicyForm({
                 className="bg-gray-100"
               />
             )}
-            <p className="text-xs text-gray-500">Viene de la HV del tomador</p>
           </div>
           <div className="space-y-2">
             <Label>Grupo Empresarial</Label>
@@ -1363,7 +1364,6 @@ export function PolicyForm({
               disabled
               className="bg-gray-100"
             />
-            <p className="text-xs text-gray-500">Viene de la HV del tomador</p>
           </div>
         </div>
         {clientAlliedAgent && (
