@@ -398,7 +398,6 @@ export function PolicyForm({
     async function loadClientData() {
       const cId = clientId || (isEditing && policy ? policy.client_id : null);
       if (!cId) return;
-
       setLoadingClient(true);
       try {
         const { data } = await (supabase as any)
