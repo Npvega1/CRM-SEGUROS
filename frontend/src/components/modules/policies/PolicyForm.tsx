@@ -942,13 +942,13 @@ export function PolicyForm({
           {aiExtractionResult && (
             <div className="mt-4">
               {aiExtractionResult.success ? (
-                <Alert className={aiExtractionResult.needsVerification ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}>
+                <div className={`flex items-start gap-3 p-4 rounded-lg border ${aiExtractionResult.needsVerification ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}`}>
                   {aiExtractionResult.needsVerification ? (
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                   ) : (
-                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <CheckCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
                   )}
-                  <AlertDescription className={aiExtractionResult.needsVerification ? 'text-amber-700' : 'text-green-700'}>
+                  <div className={aiExtractionResult.needsVerification ? 'text-amber-700' : 'text-green-700'}>
                     {aiExtractionResult.needsVerification ? (
                       <>
                         <strong>Datos extraídos con observaciones.</strong> Verifica los siguientes campos: {aiExtractionResult.verificationFields?.join(', ')}
@@ -956,20 +956,18 @@ export function PolicyForm({
                     ) : (
                       <strong>Datos extraídos correctamente.</strong>
                     )}
-                  </AlertDescription>
-                </Alert>
+                  </div>
+                </div>
               ) : (
-                <Alert className="border-red-500 bg-red-50">
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                  <AlertDescription className="text-red-700">
+                <div className="flex items-start gap-3 p-4 rounded-lg border border-red-500 bg-red-50">
+                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                  <div className="text-red-700">
                     {aiExtractionResult.error}
-                  </AlertDescription>
-                </Alert>
+                  </div>
+                </div>
               )}
             </div>
           )}
-        </div>
-      )}
 
       {/* Mensaje si IA no está habilitada */}
       {!isEditing && !aiEnabled && !loadingAiStatus && (
