@@ -95,6 +95,12 @@ export default function EditPolicyPage() {
       const supabase = getBrowserClient();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          <div className="container mx-auto py-6 px-4">
+Solo eliminas max-w-4xl para que el formulario use todo el ancho disponible.
+
+Corrección 2B: Guardar nuevos campos al editar
+BUSCAR este bloque en el handleSubmit (la operación .update()):
+
       const { error: updateError } = await (supabase as any)
         .from('policies')
         .update({
@@ -115,6 +121,48 @@ export default function EditPolicyPage() {
           start_date: data.start_date || null,
           end_date: data.end_date || null,
           commission_pct: data.commission_pct || 0,
+          notas: data.notas || null,
+          metadata: data.metadata || {},
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', policyId)
+        .eq('tenant_id', tenantId);
+REEMPLAZAR POR:
+
+      const { error: updateError } = await (supabase as any)
+        .from('policies')
+        .update({
+          policy_number: data.policy_number,
+          anexo: data.anexo || '00',
+          insurer: data.insurer,
+          insurer_id: data.insurer_id || null,
+          line: data.line,
+          line_id: data.line_id || null,
+          group_id: data.group_id || null,
+          status: data.status || 'activa',
+          tipo_movimiento: data.tipo_movimiento || null,
+          premium: data.premium,
+          valor_asegurado: data.valor_asegurado || 0,
+          gastos_expedicion: data.gastos_expedicion || 0,
+          iva: data.iva || 0,
+          total_a_pagar: data.total_a_pagar || 0,
+          currency: data.currency || 'COP',
+          fecha_expedicion: data.fecha_expedicion || null,
+          start_date: data.start_date || null,
+          end_date: data.end_date || null,
+          commission_pct: data.commission_pct || 0,
+          tomador_nombre: data.tomador_nombre || null,
+          tomador_tipo_identificacion: data.tomador_tipo_identificacion || null,
+          tomador_numero_identificacion: data.tomador_numero_identificacion || null,
+          asegurado_diferente: data.asegurado_diferente || false,
+          asegurado_nombre: data.asegurado_nombre || null,
+          asegurado_tipo_identificacion: data.asegurado_tipo_identificacion || null,
+          asegurado_numero_identificacion: data.asegurado_numero_identificacion || null,
+          beneficiarios: data.beneficiarios || null,
+          allied_agent_id: data.allied_agent_id || null,
+          allied_agent_pct: data.allied_agent_pct || 0,
+          comercial_id: data.comercial_id || null,
+          grupo_empresarial_id: data.grupo_empresarial_id || null,
           notas: data.notas || null,
           metadata: data.metadata || {},
           updated_at: new Date().toISOString(),
@@ -162,7 +210,7 @@ export default function EditPolicyPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-4xl">
+    <div className="container mx-auto py-6 px-4">
       {error && policy && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
           {error}
