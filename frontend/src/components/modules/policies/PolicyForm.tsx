@@ -498,3 +498,1121 @@ export function PolicyForm({
             if (!isEditing) {
               setAlliedAgentPctValue(agentData.commission_percentage);
             }
+          } else {
+            setClientAlliedAgent(null);
+            if (!isEditing) setAlliedAgentPctValue(0);
+          }
+        } else {
+          setClientAlliedAgent(null);
+          if (!isEditing) setAlliedAgentPctValue(0);
+        }
+      } catch (err) {
+        console.error('Error loading client allied agent:', err);
+        setClientAlliedAgent(null);
+      }
+      setLoadingAlliedAgent(false);
+    }
+    loadClientAlliedAgent();
+  }, [clientId, tenantId, isEditing, policy, supabase]);
+
+  // Cargar comisión cuando cambia compañía + grupo
+  useEffect(() => {
+    async function loadCommission() {
+      if (!selectedCompanyId || !selectedGroupId) return;
+      setLoadingCommission(true);
+      try {
+        const { data, error } = await (supabase as any)
+          .from('company_group_commissions')
+          .select('commission_pct')
+          .eq('company_id', selectedCompanyId)
+          .eq('group_id', selectedGroupId)
+          .single();
+
+        if (data && !error) {
+          setValue('commission_pct', data.commission_pct);
+        } else {
+          setValue('commission_pct', 10);
+        }
+      } catch (err) {
+        console.error('Error loading commission:', err);
+        setValue('commission_pct', 10);
+      } finally {
+        setLoadingCommission(false);
+      }
+    }
+    loadCommission();
+  }, [selectedCompanyId, selectedGroupId, setValue, supabase]);
+
+  // Cargar compañías del tenant
+  useEffect(() => {
+    async function loadTenantCompanies() {
+      if (!tenantId) return;
+      setLoadingCatalogs(true);
+      try {
+        const { data: tcData } = await (supabase as any)
+          .from('tenant_companies')
+          .select(`company_id, is_active, company_code, company:insurance_companies(id, name, slug)`)
+          .eq('tenant_id', tenantId)
+          .eq('is_active', true);
+
+        if (tcData) {
+          const formattedData = tcData.map((tc: any) => ({
+            company_id: tc.company_id,
+            is_active: tc.is_active,
+            company_code: tc.company_code,
+            company: tc.company
+          }));
+          setTenantCompanies(formattedData);
+        }
+      } catch (error) {
+        console.error('Error loading tenant companies:', error);
+      } finally {
+        setLoadingCatalogs(false);
+      }
+    }
+    loadTenantCompanies();
+  }, [tenantId, supabase]);
+
+  // Cargar líneas cuando cambia la compañía seleccionada
+  useEffect(() => {
+    async function loadLinesForCompany() {
+      if (!selectedCompanyId) {
+        setAvailableLines([]);
+        return;
+      }
+      try {
+        const { data: clData } = await (supabase as any)
+          .from('company_lines')
+          .select(`line_id, line:insurance_lines(id, name, slug, unit)`)
+          .eq('company_id', selectedCompanyId)
+          .eq('is_active', true);
+
+        if (clData) {
+          const lines = clData.map((cl: any) => cl.line).filter(Boolean);
+          setAvailableLines(lines);
+        }
+      } catch (error) {
+        console.error('Error loading lines:', error);
+      }
+    }
+    loadLinesForCompany();
+  }, [selectedCompanyId, supabase]);
+
+  // Cargar grupos cuando cambia la línea seleccionada
+  useEffect(() => {
+    async function loadGroupsForLine() {
+      if (!selectedLineId) {
+        setAvailableGroups([]);
+        return;
+      }
+      try {
+        const { data: groupsData } = await (supabase as any)
+          .from('insurance_groups')
+          .select('id, name, slug, line_id')
+          .eq('line_id', selectedLineId)
+          .eq('is_active', true)
+          .order('display_order');
+
+        if (groupsData) {
+          setAvailableGroups(groupsData as InsuranceGroup[]);
+        }
+      } catch (error) {
+        console.error('Error loading groups:', error);
+      }
+    }
+    loadGroupsForLine();
+  }, [selectedLineId, supabase]);
+
+  // Sincronizar compañía seleccionada → form values
+  useEffect(() => {
+    if (selectedCompanyId) {
+      const company = tenantCompanies.find(tc => tc.company_id === selectedCompanyId)?.company;
+      if (company) {
+        setValue('insurer', company.name);
+        setValue('insurer_id', company.id);
+      }
+    }
+  }, [selectedCompanyId, tenantCompanies, setValue]);
+
+  // Sincronizar línea seleccionada → form values
+  useEffect(() => {
+    if (selectedLineId) {
+      const line = availableLines.find(l => l.id === selectedLineId);
+      if (line) {
+        setValue('line', line.slug);
+        setValue('line_id', line.id);
+      }
+    }
+  }, [selectedLineId, availableLines, setValue]);
+
+  // Sincronizar grupo seleccionado → form values
+  useEffect(() => {
+    if (selectedGroupId) {
+      setValue('group_id', selectedGroupId);
+    }
+  }, [selectedGroupId, setValue]);
+
+  useEffect(() => {
+    if (clientId && !isEditing) {
+      setValue('client_id', clientId);
+    }
+  }, [clientId, isEditing, setValue]);
+
+  // =====================================================
+  // HANDLERS
+  // =====================================================
+
+  // Handler para archivo de póliza (IA)
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!validTypes.includes(file.type)) {
+        alert('Por favor seleccione un archivo PDF o DOCX');
+        return;
+      }
+      setSelectedFile(file);
+      setAiExtractionResult(null);
+    }
+  };
+
+  // Handler para extraer datos con IA
+  const handleExtractWithAI = async () => {
+    if (!selectedFile || !tenantId) return;
+
+    setIsExtractingAI(true);
+    setAiExtractionResult(null);
+
+    try {
+      // Convertir archivo a base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedFile);
+      });
+
+      // Determinar tipo de archivo
+      const fileType = selectedFile.type === 'application/pdf' ? 'pdf' : 'docx';
+
+      // Llamar al endpoint de extracción
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+      const response = await fetch(`${backendUrl}/api/ai/extract-policy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId,
+          file_name: selectedFile.name,
+          file_type: fileType,
+          base64_content: base64
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Pre-llenar formulario con datos extraídos
+        const data = result.data;
+
+        // Datos generales
+        if (data.datos_generales) {
+          if (data.datos_generales.numero_poliza) setValue('policy_number', data.datos_generales.numero_poliza);
+          if (data.datos_generales.anexo) setValue('anexo', data.datos_generales.anexo);
+          if (data.datos_generales.tipo_movimiento) setValue('tipo_movimiento', data.datos_generales.tipo_movimiento);
+          if (data.datos_generales.fecha_expedicion) setValue('fecha_expedicion', data.datos_generales.fecha_expedicion);
+        }
+
+        // Vigencia
+        if (data.vigencia) {
+          if (data.vigencia.fecha_desde) setValue('start_date', data.vigencia.fecha_desde);
+          if (data.vigencia.fecha_hasta) setValue('end_date', data.vigencia.fecha_hasta);
+        }
+
+        // Tomador
+        if (data.tomador) {
+          if (data.tomador.nombre) setValue('tomador_nombre', data.tomador.nombre);
+          if (data.tomador.tipo_identificacion) setValue('tomador_tipo_identificacion', data.tomador.tipo_identificacion);
+          if (data.tomador.numero_identificacion) setValue('tomador_numero_identificacion', data.tomador.numero_identificacion);
+        }
+
+        // Asegurado
+        if (data.asegurado) {
+          setAseguradoDiferente(data.asegurado.es_diferente_tomador || false);
+          if (data.asegurado.es_diferente_tomador) {
+            if (data.asegurado.nombre) setValue('asegurado_nombre', data.asegurado.nombre);
+            if (data.asegurado.tipo_identificacion) setValue('asegurado_tipo_identificacion', data.asegurado.tipo_identificacion);
+            if (data.asegurado.numero_identificacion) setValue('asegurado_numero_identificacion', data.asegurado.numero_identificacion);
+          }
+        }
+
+        // Valores
+        if (data.valores) {
+          if (data.valores.valor_asegurado) {
+            setValue('valor_asegurado', data.valores.valor_asegurado);
+            setValorAseguradoDisplay(formatCurrency(data.valores.valor_asegurado));
+          }
+          if (data.valores.prima_neta) {
+            setValue('premium', data.valores.prima_neta);
+            setPremiumDisplay(formatCurrency(data.valores.prima_neta));
+          }
+          if (data.valores.gastos_expedicion) {
+            setValue('gastos_expedicion', data.valores.gastos_expedicion);
+            setGastosDisplay(formatCurrency(data.valores.gastos_expedicion));
+          }
+          if (data.valores.iva) {
+            setValue('iva', data.valores.iva);
+            setIvaDisplay(formatCurrency(data.valores.iva));
+          }
+        }
+
+        // Beneficiarios
+        if (data.beneficiarios && data.beneficiarios.length > 0) {
+          setBeneficiarios(data.beneficiarios);
+          setMostrarBeneficiarios(true);
+        }
+
+        // Notas de extracción
+        if (data.notas_extraccion) {
+          setNotasValue(data.notas_extraccion);
+        }
+
+        // Establecer estado según verificación
+        if (result.needs_verification) {
+          setValue('status', 'verificacion');
+        }
+
+        setAiExtractionResult({
+          success: true,
+          needsVerification: result.needs_verification,
+          verificationFields: result.verification_fields
+        });
+      } else {
+        setAiExtractionResult({
+          success: false,
+          needsVerification: false,
+          error: result.error || 'Error al extraer datos'
+        });
+      }
+    } catch (error) {
+      console.error('Error extracting with AI:', error);
+      setAiExtractionResult({
+        success: false,
+        needsVerification: false,
+        error: 'Error de conexión con el servicio de IA'
+      });
+    } finally {
+      setIsExtractingAI(false);
+    }
+  };
+
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newStartDate = e.target.value;
+    setValue('start_date', newStartDate);
+    if (newStartDate) {
+      const start = new Date(newStartDate);
+      const end = new Date(start);
+      end.setFullYear(end.getFullYear() + 1);
+      setValue('end_date', end.toISOString().split('T')[0]);
+    }
+  };
+
+  const handleValorAseguradoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const numericValue = parseCurrencyValue(e.target.value);
+    setValue('valor_asegurado', numericValue);
+    setValorAseguradoDisplay(formatCurrency(numericValue));
+  };
+
+  const handlePremiumChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const numericValue = parseCurrencyValue(e.target.value);
+    setValue('premium', numericValue);
+    setPremiumDisplay(formatCurrency(numericValue));
+  };
+
+  const handleGastosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const numericValue = parseCurrencyValue(e.target.value);
+    setValue('gastos_expedicion', numericValue);
+    setGastosDisplay(formatCurrency(numericValue));
+  };
+
+  const handleIvaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const numericValue = parseCurrencyValue(e.target.value);
+    setValue('iva', numericValue);
+    setIvaDisplay(formatCurrency(numericValue));
+  };
+
+  const handleAddBeneficiario = () => {
+    setBeneficiarios([...beneficiarios, {
+      nombre: '',
+      tipo_identificacion: 'cedula_ciudadania',
+      numero_identificacion: ''
+    }]);
+  };
+
+  const handleRemoveBeneficiario = (index: number) => {
+    setBeneficiarios(beneficiarios.filter((_, i) => i !== index));
+  };
+
+  const handleBeneficiarioChange = (index: number, field: keyof Beneficiario, value: string) => {
+    const updated = [...beneficiarios];
+    updated[index] = { ...updated[index], [field]: value };
+    setBeneficiarios(updated);
+  };
+
+  const handleFormSubmit = async (data: PolicyFormData) => {
+    const dataWithExtras: PolicyFormData = {
+      ...data,
+      notas: notasValue || undefined,
+      allied_agent_id: clientAlliedAgent?.id || null,
+      allied_agent_pct: clientAlliedAgent ? alliedAgentPctValue : 0,
+      comercial_id: clientData?.comercial_id || null,
+      grupo_empresarial_id: clientData?.grupo_empresarial_id || null,
+      usuario_id: currentUser?.id || null,
+      asegurado_diferente: aseguradoDiferente,
+      beneficiarios: beneficiarios.length > 0 ? beneficiarios : undefined,
+    };
+    await onSubmit(dataWithExtras);
+  };
+
+  const onError = (errors: any) => {
+    console.error('Form validation errors:', errors);
+  };
+
+  const loading = isLoading || isSubmitting;
+  const anexoOptions = Array.from({ length: 100 }, (_, i) => i.toString().padStart(2, '0'));
+  const diasVigencia = calcularDiasVigencia(startDate, endDate);
+
+  // =====================================================
+  // RENDER
+  // =====================================================
+
+  return (
+    <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
+      
+      {/* ============================================= */}
+      {/* SECCIÓN IA: Carga de PDF (Solo si está habilitado) */}
+      {/* ============================================= */}
+      {!isEditing && aiEnabled && !loadingAiStatus && (
+        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 rounded-lg p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-purple-200">
+            <Sparkles className="h-5 w-5 text-purple-600" />
+            <h3 className="font-semibold text-purple-900">Lectura Automática con IA</h3>
+            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Beta</span>
+          </div>
+          
+          <p className="text-sm text-purple-700 mb-4">
+            Sube el PDF de la póliza y la IA extraerá los datos automáticamente.
+          </p>
+
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <Input
+                type="file"
+                accept=".pdf,.docx"
+                onChange={handleFileChange}
+                disabled={isExtractingAI}
+                className="bg-white"
+              />
+            </div>
+            <Button
+              type="button"
+              onClick={handleExtractWithAI}
+              disabled={!selectedFile || isExtractingAI}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {isExtractingAI ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Extrayendo...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Extraer Datos
+                </>
+              )}
+            </Button>
+          </div>
+
+          {selectedFile && (
+            <p className="text-xs text-purple-600 mt-2">
+              Archivo: {selectedFile.name}
+            </p>
+          )}
+
+          {/* Resultado de extracción */}
+          {aiExtractionResult && (
+            <div className="mt-4">
+              {aiExtractionResult.success ? (
+                <Alert className={aiExtractionResult.needsVerification ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}>
+                  {aiExtractionResult.needsVerification ? (
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  )}
+                  <AlertDescription className={aiExtractionResult.needsVerification ? 'text-amber-700' : 'text-green-700'}>
+                    {aiExtractionResult.needsVerification ? (
+                      <>
+                        <strong>Datos extraídos con observaciones.</strong> Verifica los siguientes campos: {aiExtractionResult.verificationFields?.join(', ')}
+                      </>
+                    ) : (
+                      <strong>Datos extraídos correctamente.</strong>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Alert className="border-red-500 bg-red-50">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-700">
+                    {aiExtractionResult.error}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mensaje si IA no está habilitada */}
+      {!isEditing && !aiEnabled && !loadingAiStatus && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-gray-600">
+            <Sparkles className="h-4 w-4" />
+            <span className="text-sm">
+              La lectura automática con IA no está habilitada para tu cuenta. Contacta al administrador para activarla.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================= */}
+      {/* MARCO 1: DATOS GENERALES DE LA PÓLIZA */}
+      {/* ============================================= */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
+          <FileText className="h-5 w-5 text-blue-600" />
+          <h3 className="font-semibold text-gray-900">1. Datos Generales de la Póliza</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Número de Póliza */}
+          <div className="space-y-2">
+            <Label htmlFor="policy_number">Número de Póliza *</Label>
+            <Input
+              id="policy_number"
+              {...register('policy_number')}
+              placeholder="Ej: POL-2024-001"
+              disabled={loading}
+              className="uppercase"
+            />
+            {errors.policy_number && (
+              <p className="text-red-500 text-xs">{errors.policy_number.message}</p>
+            )}
+          </div>
+
+          {/* Anexo */}
+          <div className="space-y-2">
+            <Label>Anexo</Label>
+            <Select
+              value={watch('anexo') || '00'}
+              onValueChange={(value) => setValue('anexo', value)}
+              disabled={loading}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar" />
+              </SelectTrigger>
+              <SelectContent>
+                {anexoOptions.map((num) => (
+                  <SelectItem key={num} value={num}>{num}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Aseguradora */}
+          <div className="space-y-2">
+            <Label>Aseguradora *</Label>
+            {loadingCatalogs ? (
+              <div className="flex items-center gap-2 text-gray-500 text-sm p-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando...
+              </div>
+            ) : tenantCompanies.length === 0 ? (
+              <div className="text-amber-600 text-sm p-2 bg-amber-50 rounded">
+                No tienes compañías activas configuradas.
+              </div>
+            ) : (
+              <Select
+                value={selectedCompanyId}
+                onValueChange={(value) => {
+                  setSelectedCompanyId(value);
+                  setSelectedLineId('');
+                  setSelectedGroupId('');
+                  setAvailableGroups([]);
+                }}
+                disabled={loading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar aseguradora" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tenantCompanies.map((tc) => (
+                    <SelectItem key={tc.company_id} value={tc.company_id}>
+                      <span className="flex items-center gap-2">
+                        {tc.company.name}
+                        {tc.company_code && <span className="text-gray-400">({tc.company_code})</span>}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          {/* Ramo (Línea) */}
+          <div className="space-y-2">
+            <Label>Ramo *</Label>
+            <Select
+              value={selectedLineId}
+              onValueChange={(value) => {
+                setSelectedLineId(value);
+                setSelectedGroupId('');
+                setAvailableGroups([]);
+              }}
+              disabled={loading || !selectedCompanyId || availableLines.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar ramo" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableLines.map((line) => (
+                  <SelectItem key={line.id} value={line.id}>{line.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Tipo de Movimiento */}
+          <div className="space-y-2">
+            <Label>Tipo de Movimiento *</Label>
+            <Select
+              value={watch('tipo_movimiento') || 'expedicion'}
+              onValueChange={(value) => setValue('tipo_movimiento', value)}
+              disabled={loading}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIPO_MOVIMIENTO_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Fecha de Expedición */}
+          <div className="space-y-2">
+            <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
+            <Input
+              id="fecha_expedicion"
+              type="date"
+              {...register('fecha_expedicion')}
+              disabled={loading}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================= */}
+      {/* MARCO 2: VIGENCIA DE LA PÓLIZA */}
+      {/* ============================================= */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
+          <Calendar className="h-5 w-5 text-green-600" />
+          <h3 className="font-semibold text-gray-900">2. Vigencia de la Póliza</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Vigencia Desde */}
+          <div className="space-y-2">
+            <Label htmlFor="start_date">Vigencia Desde *</Label>
+            <Input
+              id="start_date"
+              type="date"
+              {...register('start_date')}
+              onChange={handleStartDateChange}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Vigencia Hasta */}
+          <div className="space-y-2">
+            <Label htmlFor="end_date">Vigencia Hasta *</Label>
+            <Input
+              id="end_date"
+              type="date"
+              {...register('end_date')}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Días de Vigencia (calculado) */}
+          <div className="space-y-2">
+            <Label>Días de Vigencia</Label>
+            <Input
+              value={diasVigencia > 0 ? `${diasVigencia} días` : '-'}
+              disabled
+              className="bg-gray-50"
+            />
+          </div>
+
+          {/* Estado */}
+          <div className="space-y-2">
+            <Label>Estado de la Póliza *</Label>
+            <Select
+              value={watch('status') || 'activa'}
+              onValueChange={(value) => setValue('status', value as PolicyStatus)}
+              disabled={loading || !isEditing}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar" />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!isEditing && (
+              <p className="text-xs text-gray-500">Estado inicial: Activa</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================= */}
+      {/* MARCO 3: INFORMACIÓN DEL TOMADOR */}
+      {/* ============================================= */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
+          <User className="h-5 w-5 text-purple-600" />
+          <h3 className="font-semibold text-gray-900">3. Información del Tomador</h3>
+        </div>
+       {loadingClient ? (
+          <div className="flex items-center gap-2 text-gray-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Cargando datos del tomador...
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Nombre / Razón Social */}
+            <div className="space-y-2">
+              <Label htmlFor="tomador_nombre">Nombre / Razón Social *</Label>
+              <Input
+                id="tomador_nombre"
+                {...register('tomador_nombre')}
+                placeholder="Nombre completo o razón social"
+                disabled={loading}
+              />
+            </div>
+
+            {/* Tipo de Identificación */}
+            <div className="space-y-2">
+              <Label>Tipo de Identificación *</Label>
+              <Select
+                value={watch('tomador_tipo_identificacion') || 'cedula_ciudadania'}
+                onValueChange={(value) => setValue('tomador_tipo_identificacion', value)}
+                disabled={loading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPO_IDENTIFICACION_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Número de Identificación */}
+            <div className="space-y-2">
+              <Label htmlFor="tomador_numero_identificacion">Número de Identificación *</Label>
+              <Input
+                id="tomador_numero_identificacion"
+                {...register('tomador_numero_identificacion')}
+                placeholder="Número de documento"
+                disabled={loading}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ============================================= */}
+      {/* MARCO 4: ASEGURADO Y BENEFICIARIO */}
+      {/* ============================================= */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
+          <Users className="h-5 w-5 text-orange-600" />
+          <h3 className="font-semibold text-gray-900">4. Asegurado y Beneficiario</h3>
+        </div>
+        
+        {/* Checkbox: Asegurado diferente al tomador */}
+        <div className="flex items-center space-x-2 mb-4">
+          <Checkbox
+            id="asegurado_diferente"
+            checked={aseguradoDiferente}
+            onCheckedChange={(checked) => setAseguradoDiferente(checked === true)}
+            disabled={loading}
+          />
+          <Label htmlFor="asegurado_diferente" className="text-sm font-normal cursor-pointer">
+            El asegurado es diferente al tomador
+          </Label>
+        </div>
+
+        {/* Campos de Asegurado (solo si es diferente) */}
+        {aseguradoDiferente && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-orange-50 rounded-lg">
+            <div className="space-y-2">
+              <Label htmlFor="asegurado_nombre">Nombre del Asegurado *</Label>
+              <Input
+                id="asegurado_nombre"
+                {...register('asegurado_nombre')}
+                placeholder="Nombre completo"
+                disabled={loading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo de Identificación *</Label>
+              <Select
+                value={watch('asegurado_tipo_identificacion') || 'cedula_ciudadania'}
+                onValueChange={(value) => setValue('asegurado_tipo_identificacion', value)}
+                disabled={loading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPO_IDENTIFICACION_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="asegurado_numero_identificacion">Número de Identificación *</Label>
+              <Input
+                id="asegurado_numero_identificacion"
+                {...register('asegurado_numero_identificacion')}
+                placeholder="Número de documento"
+                disabled={loading}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Beneficiarios */}
+        <div className="border-t pt-4 mt-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="mostrar_beneficiarios"
+                checked={mostrarBeneficiarios}
+                onCheckedChange={(checked) => setMostrarBeneficiarios(checked === true)}
+                disabled={loading}
+              />
+              <Label htmlFor="mostrar_beneficiarios" className="text-sm font-normal cursor-pointer">
+                Agregar beneficiarios diferentes
+              </Label>
+            </div>
+            {mostrarBeneficiarios && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddBeneficiario}
+                disabled={loading}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Agregar
+              </Button>
+            )}
+          </div>
+
+          {mostrarBeneficiarios && beneficiarios.length > 0 && (
+            <div className="space-y-3">
+              {beneficiarios.map((ben, index) => (
+                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 bg-gray-50 rounded-lg items-end">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nombre</Label>
+                    <Input
+                      value={ben.nombre}
+                      onChange={(e) => handleBeneficiarioChange(index, 'nombre', e.target.value)}
+                      placeholder="Nombre del beneficiario"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tipo ID</Label>
+                    <Select
+                      value={ben.tipo_identificacion}
+                      onValueChange={(value) => handleBeneficiarioChange(index, 'tipo_identificacion', value)}
+                      disabled={loading}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TIPO_IDENTIFICACION_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Número ID</Label>
+                    <Input
+                      value={ben.numero_identificacion}
+                      onChange={(e) => handleBeneficiarioChange(index, 'numero_identificacion', e.target.value)}
+                      placeholder="Número"
+                      disabled={loading}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemoveBeneficiario(index)}
+                    disabled={loading}
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ============================================= */}
+      {/* MARCO 5: VALORES DE LA PÓLIZA */}
+      {/* ============================================= */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
+          <DollarSign className="h-5 w-5 text-emerald-600" />
+          <h3 className="font-semibold text-gray-900">5. Valores de la Póliza</h3>
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          {/* Valor Asegurado */}
+          <div className="space-y-2">
+            <Label htmlFor="valor_asegurado">Valor Asegurado *</Label>
+            <Input
+              id="valor_asegurado"
+              value={valorAseguradoDisplay}
+              onChange={handleValorAseguradoChange}
+              placeholder="$0"
+              disabled={loading}
+            />
+          </div>
+
+          {/* Prima Neta */}
+          <div className="space-y-2">
+            <Label htmlFor="premium">Prima Neta *</Label>
+            <Input
+              id="premium"
+              value={premiumDisplay}
+              onChange={handlePremiumChange}
+              placeholder="$0"
+              disabled={loading}
+            />
+          </div>
+
+          {/* Gastos de Expedición */}
+          <div className="space-y-2">
+            <Label htmlFor="gastos_expedicion">Gastos Expedición</Label>
+            <Input
+              id="gastos_expedicion"
+              value={gastosDisplay}
+              onChange={handleGastosChange}
+              placeholder="$0"
+              disabled={loading}
+            />
+          </div>
+
+          {/* IVA */}
+          <div className="space-y-2">
+            <Label htmlFor="iva">IVA</Label>
+            <Input
+              id="iva"
+              value={ivaDisplay}
+              onChange={handleIvaChange}
+              placeholder="$0"
+              disabled={loading}
+            />
+          </div>
+
+          {/* Total a Pagar */}
+          <div className="space-y-2">
+            <Label>Total a Pagar</Label>
+            <Input
+              value={formatCurrency(watch('total_a_pagar') || 0)}
+              disabled
+              className="bg-emerald-50 font-semibold text-emerald-700"
+            />
+          </div>
+
+          {/* Comisión % */}
+          <div className="space-y-2">
+            <Label htmlFor="commission_pct">Comisión %</Label>
+            <div className="relative">
+              <Input
+                id="commission_pct"
+                type="number"
+                step="0.01"
+                {...register('commission_pct', { valueAsNumber: true })}
+                disabled={loading}
+              />
+              {loadingCommission && (
+                <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-gray-400" />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================= */}
+      {/* MARCO 6: GESTIÓN INTERNA CRM */}
+      {/* ============================================= */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
+          <Settings className="h-5 w-5 text-gray-600" />
+          <h3 className="font-semibold text-gray-900">6. Gestión Interna CRM</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Usuario del Tenant (quien crea) */}
+          <div className="space-y-2">
+            <Label>Usuario</Label>
+            <Input
+              value={currentUser?.full_name || 'Cargando...'}
+              disabled
+              className="bg-gray-100"
+            />
+            <p className="text-xs text-gray-500">Usuario que crea la póliza</p>
+          </div>
+
+          {/* Comercial */}
+          <div className="space-y-2">
+            <Label>Comercial</Label>
+            <Input
+              value={comercialName || 'No asignado en HV'}
+              disabled
+              className="bg-gray-100"
+            />
+            <p className="text-xs text-gray-500">Viene de la HV del tomador</p>
+          </div>
+
+          {/* Aliado */}
+          <div className="space-y-2">
+            <Label>Aliado</Label>
+            {loadingAlliedAgent ? (
+              <div className="flex items-center gap-2 text-gray-500 text-sm p-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando...
+              </div>
+            ) : (
+              <Input
+                value={clientAlliedAgent?.full_name || 'Directo (sin aliado)'}
+                disabled
+                className="bg-gray-100"
+              />
+            )}
+            <p className="text-xs text-gray-500">Viene de la HV del tomador</p>
+          </div>
+
+          {/* Grupo Empresarial */}
+          <div className="space-y-2">
+            <Label>Grupo Empresarial</Label>
+            <Input
+              value={grupoEmpresarialName || 'No asignado en HV'}
+              disabled
+              className="bg-gray-100"
+            />
+            <p className="text-xs text-gray-500">Viene de la HV del tomador</p>
+          </div>
+        </div>
+
+        {/* % Comisión Aliado (si aplica) */}
+        {clientAlliedAgent && (
+          <div className="mt-4 pt-4 border-t">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="allied_agent_pct">% Comisión Aliado</Label>
+                <Input
+                  id="allied_agent_pct"
+                  type="number"
+                  step="0.01"
+                  value={alliedAgentPctValue}
+                  onChange={(e) => setAlliedAgentPctValue(parseFloat(e.target.value) || 0)}
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-500">Porcentaje sobre la comisión de la agencia</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ============================================= */}
+      {/* NOTAS Y COMENTARIOS */}
+      {/* ============================================= */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
+          <MessageSquare className="h-5 w-5 text-gray-600" />
+          <h3 className="font-semibold text-gray-900">Notas y Comentarios</h3>
+        </div>
+        
+        <Textarea
+          placeholder="Observaciones adicionales sobre la póliza..."
+          value={notasValue}
+          onChange={(e) => setNotasValue(e.target.value)}
+          disabled={loading}
+          rows={3}
+        />
+      </div>
+
+      {/* ============================================= */}
+      {/* BOTONES DE ACCIÓN */}
+      {/* ============================================= */}
+      <div className="flex justify-end gap-3 pt-4 border-t">
+        {onCancel && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            <X className="h-4 w-4 mr-2" />
+            Cancelar
+          </Button>
+        )}
+        <Button type="submit" disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4 mr-2" />
+              {isEditing ? 'Actualizar Póliza' : 'Crear Póliza'}
+            </>
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+}
