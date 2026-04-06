@@ -975,21 +975,47 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               <Input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => { const file = e.target.files?.[0]; if (file) { handleFileUpload(file); e.target.value = ''; } }} disabled={uploadingDoc !== null} className="text-sm" />
               {uploadingDoc && (<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Subiendo...</div>)}
             </div>
-            {documents.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-sm text-muted-foreground">{documents.length} documento(s) adjunto(s):</Label>
-                {documents.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between bg-green-50 border border-green-200 p-3 rounded-lg">
-                    <div className="flex items-center gap-2"><FileCheck className="w-4 h-4 text-green-600 flex-shrink-0" /><span className="text-sm text-green-800">{doc.file_name}</span></div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">Cargado</span>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveDocument(doc.id)} className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"><X className="w-4 h-4" /></Button>
-                    </div>
-                  </div>
-                ))}
+        {documents.length > 0 && (
+          <div className="space-y-2">
+            <Label className="text-sm text-muted-foreground">{documents.length} documento(s) adjunto(s):</Label>
+            {documents.map((doc) => (
+              <div key={doc.id} className="flex items-center justify-between bg-green-50 border border-green-200 p-3 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <FileCheck className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  <a
+                    href={doc.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                    title={doc.file_name}
+                  >
+                    {doc.file_name}
+                  </a>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={doc.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded cursor-pointer"
+                  >
+                    Ver
+                  </a>
+                  <a
+                    href={doc.file_url}
+                    download={doc.file_name}
+                    className="text-xs text-green-600 bg-green-100 hover:bg-green-200 px-2 py-0.5 rounded cursor-pointer"
+                  >
+                    Descargar
+                  </a>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveDocument(doc.id)} className="h-7 w-7 p-0 text-red-500 hover:text-red-700">
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-            )}
+            ))}
           </div>
+        )}
 
           {/* BOTONES */}
           <div className="flex justify-end gap-4 pt-4 border-t">
