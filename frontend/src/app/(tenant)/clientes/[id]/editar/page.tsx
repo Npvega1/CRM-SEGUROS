@@ -6,24 +6,10 @@ import { ClientForm } from '@/components/modules/clients/ClientForm';
 import { createClient } from '@/lib/supabase/client';
 import { Loader2 } from 'lucide-react';
 
-interface Client {
-  id: string;
-  full_name: string;
-  doc_type: string;
-  doc_number: string;
-  email: string | null;
-  phone: string | null;
-  address: string | null;
-  segment: string;
-  tenant_id: string;
-  agent_id: string;
-  allied_agent_id: string | null;
-}
-
 export default function EditClientPage() {
   const params = useParams();
   const clientId = params.id as string;
-  const [client, setClient] = useState<Client | null>(null);
+  const [client, setClient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,17 +57,7 @@ export default function EditClientPage() {
   return (
     <div className="w-full py-6">
       <ClientForm
-        initialData={{
-          id: client.id,
-          full_name: client.full_name,
-          doc_type: client.doc_type as any,
-          doc_number: client.doc_number,
-          email: client.email || '',
-          phone: client.phone || '',
-          address: client.address || '',
-          segment: client.segment as any,
-          allied_agent_id: client.allied_agent_id,
-        }}
+        initialData={client}
         tenantId={client.tenant_id}
         agentId={client.agent_id}
       />
