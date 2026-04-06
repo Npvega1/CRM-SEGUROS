@@ -447,7 +447,25 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     } catch (e) { console.error('Error generating download URL:', e); alert('Error al descargar el documento'); }
   };
 
-  const handleRemoveDocument = (docId: string) => {
+  const handleRemoveDocument = async (docId: string) => {
+    const doc = documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    // Si es un documento guardado en BD (no temporal), eliminarlo de Supabase
+    if (!doc.id.startsWith('temp_')) {
+      try {
+        // Eliminar de la tabla client_documents
+        await (supabase as any).from('client_documents').delete().eq('id', docId);
+        // Eliminar el archivo del storage
+        const path = getStoragePath(doc.file_url);
+        await supabase.storage.from('client-documents').remove([path]);
+      } catch (e) {
+        console.error('Error eliminando documento:', e);
+        alert('Error al eliminar el documento');
+        return;
+      }
+    }
+
     setDocuments(prev => prev.filter(d => d.id !== docId));
   };
 
