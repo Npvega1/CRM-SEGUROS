@@ -36,8 +36,6 @@ import {
   Phone,
   FileText,
   AlertTriangle,
-  CreditCard,
-  BarChart3,
   Plus,
   Edit,
   Calendar,
