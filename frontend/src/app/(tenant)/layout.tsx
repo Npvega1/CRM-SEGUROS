@@ -556,12 +556,12 @@ export default function TenantLayout({
           <NotificationBell />
           
           <button 
-            className="avatar-btn" 
+            className="logout-btn" 
             onClick={() => signOut()}
-            title="Cerrar sesión"
-            data-testid="user-avatar"
+            data-testid="logout-button"
           >
-            {getUserInitials()}
+            <LogOut className="w-4 h-4" />
+            <span>Salir</span>
           </button>
         </div>
       </header>
