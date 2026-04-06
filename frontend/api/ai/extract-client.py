@@ -237,7 +237,7 @@ Si no encuentras un dato, usa null. No inventes informacion."""
             image_contents = [ImageContent(image_base64=img) for img in all_images[:5]]
             user_message = UserMessage(
                 text=extraction_prompt,
-                image_content=image_contents
+                file_contents=image_contents
             )
             print(f"[Extract Client] Sending {len(image_contents)} images to Gemini...")
         else:
