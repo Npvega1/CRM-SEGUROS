@@ -697,7 +697,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           {clientType === 'persona_natural' && (
             <>
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><User className="w-4 h-4" /> Seccion 1 - Informacion Personal</h3>
+                <h3 className="font-semibold flex items-center gap-2"><User className="w-4 h-4" /> Informacion Personal</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Primer Apellido *</Label>
@@ -765,7 +765,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><MapPin className="w-4 h-4" /> Seccion 2 - Ubicacion y Contacto</h3>
+                <h3 className="font-semibold flex items-center gap-2"><MapPin className="w-4 h-4" /> Ubicacion y Contacto</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label>Direccion de Residencia</Label>
@@ -813,7 +813,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><Briefcase className="w-4 h-4" /> Seccion 3 - Informacion Laboral y Economica</h3>
+                <h3 className="font-semibold flex items-center gap-2"><Briefcase className="w-4 h-4" /> Informacion Laboral y Economica</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Ocupacion / Profesion / Oficio</Label>
@@ -839,7 +839,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4" /> Seccion 4 - Informacion Financiera (SARLAFT)</h3>
+                <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4" /> Informacion Financiera</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Ingresos Mensuales *</Label>
@@ -883,7 +883,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           {clientType === 'persona_juridica' && (
             <>
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><Building2 className="w-4 h-4" /> Seccion 1 - Informacion General</h3>
+                <h3 className="font-semibold flex items-center gap-2"><Building2 className="w-4 h-4" /> Informacion General</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label>Razon Social / Denominacion Social *</Label>
@@ -924,7 +924,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><MapPin className="w-4 h-4" /> Seccion 2 - Ubicacion y Contacto</h3>
+                <h3 className="font-semibold flex items-center gap-2"><MapPin className="w-4 h-4" /> Ubicacion y Contacto</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label>Direccion Principal *</Label>
@@ -968,7 +968,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><User className="w-4 h-4" /> Seccion 3 - Representante Legal</h3>
+                <h3 className="font-semibold flex items-center gap-2"><User className="w-4 h-4" /> Representación Legal</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Primer Apellido *</Label>
@@ -1029,7 +1029,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4" /> Seccion 4 - Informacion Financiera</h3>
+                <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4" /> Informacion Financiera</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Total Activos *</Label>
