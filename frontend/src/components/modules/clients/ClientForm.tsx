@@ -1016,7 +1016,8 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
             ))}
           </div>
         )}
-
+          </div>
+          
           {/* BOTONES */}
           <div className="flex justify-end gap-4 pt-4 border-t">
             <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>Cancelar</Button>
