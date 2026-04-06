@@ -25,7 +25,7 @@ export default function NewClientPage() {
       try {
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
-        
+
         if (user) {
           setTenantId(user.app_metadata?.tenant_id || null);
           setAgentId(user.id);
@@ -55,7 +55,7 @@ export default function NewClientPage() {
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <header className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <Link href="/clientes">
@@ -76,7 +76,7 @@ export default function NewClientPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-8">
         <ClientForm
           tenantId={tenantId}
           agentId={agentId}
