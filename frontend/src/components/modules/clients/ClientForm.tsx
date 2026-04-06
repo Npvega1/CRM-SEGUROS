@@ -83,41 +83,41 @@ interface ClientFormProps {
 // =====================================================
 
 const TIPO_IDENTIFICACION_NATURAL = [
-  { value: 'CC', label: 'Cédula de Ciudadanía' },
-  { value: 'CE', label: 'Cédula de Extranjería' },
+  { value: 'CC', label: 'Cedula de Ciudadania' },
+  { value: 'CE', label: 'Cedula de Extranjeria' },
   { value: 'PA', label: 'Pasaporte' },
-  { value: 'TE', label: 'Tarjeta de Extranjería' },
+  { value: 'TE', label: 'Tarjeta de Extranjeria' },
   { value: 'RC', label: 'Registro Civil' },
 ];
 
 const TIPO_IDENTIFICACION_JURIDICA = [
-  { value: 'CC', label: 'Cédula de Ciudadanía' },
-  { value: 'CE', label: 'Cédula de Extranjería' },
+  { value: 'CC', label: 'Cedula de Ciudadania' },
+  { value: 'CE', label: 'Cedula de Extranjeria' },
   { value: 'PA', label: 'Pasaporte' },
-  { value: 'TE', label: 'Tarjeta de Extranjería' },
+  { value: 'TE', label: 'Tarjeta de Extranjeria' },
   { value: 'RC', label: 'Registro Civil' },
 ];
 
 const ESTADO_CIVIL_OPTIONS = [
   { value: 'soltero', label: 'Soltero(a)' },
   { value: 'casado', label: 'Casado(a)' },
-  { value: 'union_libre', label: 'Unión Libre' },
+  { value: 'union_libre', label: 'Union Libre' },
   { value: 'separado', label: 'Separado(a)' },
   { value: 'divorciado', label: 'Divorciado(a)' },
   { value: 'viudo', label: 'Viudo(a)' },
 ];
 
 const TIPO_SOLICITUD_OPTIONS = [
-  { value: 'vinculacion', label: 'Vinculación' },
-  { value: 'renovacion', label: 'Renovación' },
-  { value: 'actualizacion', label: 'Actualización' },
+  { value: 'vinculacion', label: 'Vinculacion' },
+  { value: 'renovacion', label: 'Renovacion' },
+  { value: 'actualizacion', label: 'Actualizacion' },
 ];
 
 const TIPO_EMPRESA_OPTIONS = [
-  { value: 'publica', label: 'Pública' },
+  { value: 'publica', label: 'Publica' },
   { value: 'privada', label: 'Privada' },
   { value: 'mixta', label: 'Mixta' },
-  { value: 'sin_animo_lucro', label: 'Sin Ánimo de Lucro' },
+  { value: 'sin_animo_lucro', label: 'Sin Animo de Lucro' },
 ];
 
 const TIPO_EMPLEO_OPTIONS = [
@@ -155,7 +155,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   const formRef = useRef<HTMLFormElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Errores de validación
+  // Errores de validacion
   const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
 
   // Tipo de cliente
@@ -250,7 +250,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     concepto_otros_ingresos: initialData?.concepto_otros_ingresos || '',
   });
 
-  // Form state para Persona Jurídica
+  // Form state para Persona Juridica
   const [formJuridica, setFormJuridica] = useState({
     razon_social: initialData?.full_name || '',
     nit: initialData?.doc_number || '',
@@ -414,10 +414,37 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
       const fileName = `${tenantId}/${Date.now()}_${file.name}`;
       const { data: uploadData, error: uploadError } = await supabase.storage.from('client-documents').upload(fileName, file);
       if (uploadError) { console.error('Upload error:', uploadError); alert('Error al subir el archivo'); return; }
-      const { data: { publicUrl } } = supabase.storage.from('client-documents').getPublicUrl(fileName);
-      const newDoc: UploadedDocument = { id: `temp_${Date.now()}`, name: docKey, file_name: file.name, file_url: publicUrl, file_type: fileExt || 'pdf', uploaded_at: new Date().toISOString(), status: 'cargado' };
+      // Guardamos solo la ruta del archivo, NO la URL publica (el bucket es privado)
+      const newDoc: UploadedDocument = { id: `temp_${Date.now()}`, name: docKey, file_name: file.name, file_url: fileName, file_type: fileExt || 'pdf', uploaded_at: new Date().toISOString(), status: 'cargado' };
       setDocuments(prev => [...prev, newDoc]);
     } catch (e) { console.error('Error uploading file:', e); alert('Error al subir el archivo'); } finally { setUploadingDoc(null); }
+  };
+
+  // Extraer ruta de storage (compatible con URLs publicas viejas y rutas nuevas)
+  const getStoragePath = (fileUrl: string): string => {
+    if (!fileUrl.startsWith('http')) return fileUrl;
+    const marker = '/client-documents/';
+    const idx = fileUrl.indexOf(marker);
+    if (idx !== -1) return decodeURIComponent(fileUrl.substring(idx + marker.length));
+    return fileUrl;
+  };
+
+  const handleViewDocument = async (fileUrl: string) => {
+    try {
+      const path = getStoragePath(fileUrl);
+      const { data, error } = await supabase.storage.from('client-documents').createSignedUrl(path, 300);
+      if (error || !data?.signedUrl) { alert('Error al generar enlace del documento'); return; }
+      window.open(data.signedUrl, '_blank');
+    } catch (e) { console.error('Error generating signed URL:', e); alert('Error al abrir el documento'); }
+  };
+
+  const handleDownloadDocument = async (fileUrl: string, fileName: string) => {
+    try {
+      const path = getStoragePath(fileUrl);
+      const { data, error } = await supabase.storage.from('client-documents').createSignedUrl(path, 300, { download: fileName });
+      if (error || !data?.signedUrl) { alert('Error al generar enlace de descarga'); return; }
+      window.open(data.signedUrl, '_blank');
+    } catch (e) { console.error('Error generating download URL:', e); alert('Error al descargar el documento'); }
   };
 
   const handleRemoveDocument = (docId: string) => {
@@ -429,10 +456,14 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     setIsExtractingAI(true);
     setAiExtractionResult(null);
     try {
+      // Para la IA, necesitamos obtener el archivo via signed URL
       const filesForAI = await Promise.all(
         documents.map(async (doc) => {
           try {
-            const response = await fetch(doc.file_url);
+            const path = getStoragePath(doc.file_url);
+            const { data: signedData } = await supabase.storage.from('client-documents').createSignedUrl(path, 120);
+            if (!signedData?.signedUrl) return null;
+            const response = await fetch(signedData.signedUrl);
             const blob = await response.blob();
             const base64 = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as string); reader.onerror = reject; reader.readAsDataURL(blob); });
             return { name: doc.file_name, file_type: doc.file_type, base64_content: base64 };
@@ -464,12 +495,12 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
       }
     } catch (e) {
       console.error('Error extracting with AI:', e);
-      setAiExtractionResult({ success: false, needsVerification: false, error: 'Error de conexión con el servicio de IA' });
+      setAiExtractionResult({ success: false, needsVerification: false, error: 'Error de conexion con el servicio de IA' });
     } finally { setIsExtractingAI(false); }
   };
 
   // =====================================================
-  // VALIDACIÓN
+  // VALIDACION
   // =====================================================
 
   const validateForm = (): boolean => {
@@ -511,7 +542,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     setFormErrors(errors);
 
     if (Object.keys(errors).length > 0) {
-      // Scroll al inicio del formulario para ver el mensaje de error
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return false;
     }
@@ -589,7 +619,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
         </CardHeader>
         <CardContent className="space-y-6">
 
-          {/* Mensaje de error de validación */}
+          {/* Mensaje de error de validacion */}
           {Object.keys(formErrors).length > 0 && (
             <div className="bg-red-50 border border-red-300 rounded-lg p-3 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
@@ -604,20 +634,20 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="persona_natural"><div className="flex items-center gap-2"><User className="w-4 h-4" /> Persona Natural</div></SelectItem>
-                <SelectItem value="persona_juridica"><div className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Persona Jurídica</div></SelectItem>
+                <SelectItem value="persona_juridica"><div className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Persona Juridica</div></SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* LECTURA AUTOMÁTICA CON IA */}
+          {/* LECTURA AUTOMATICA CON IA */}
           {hasPremiumAccess && (
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-blue-600" />
-                <span className="font-medium text-blue-900">Lectura Automática con IA</span>
+                <span className="font-medium text-blue-900">Lectura Automatica con IA</span>
                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Beta</span>
               </div>
-              <p className="text-sm text-blue-700">Sube los documentos en la sección de Documentos Adjuntos y luego presiona el botón para que la IA extraiga los datos automáticamente.</p>
+              <p className="text-sm text-blue-700">Sube los documentos en la seccion de Documentos Adjuntos y luego presiona el boton para que la IA extraiga los datos automaticamente.</p>
               <Button type="button" onClick={handleExtractWithAI} disabled={isExtractingAI || documents.length === 0} className="bg-blue-600 hover:bg-blue-700">
                 {isExtractingAI ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Extrayendo...</>) : (<><Sparkles className="mr-2 h-4 w-4" />Analizar con IA</>)}
               </Button>
@@ -627,17 +657,19 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     <div className="flex items-start gap-2">
                       {aiExtractionResult.needsVerification ? <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" /> : <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />}
                       <div>
-                        {aiExtractionResult.needsVerification ? (<><p className="font-medium text-yellow-800">Datos extraídos con observaciones</p><p className="text-sm text-yellow-700">Verifica los siguientes campos: {aiExtractionResult.verificationFields?.join(', ')}</p></>) : (<p className="font-medium text-green-800">Datos extraídos correctamente</p>)}
+                        {aiExtractionResult.needsVerification ? (<><p className="font-medium text-yellow-800">Datos extraidos con observaciones</p><p className="text-sm text-yellow-700">Verifica los siguientes campos: {aiExtractionResult.verificationFields?.join(', ')}</p></>) : (<p className="font-medium text-green-800">Datos extraidos correctamente</p>)}
                       </div>
                     </div>
-                  ) : (<p className="text-red-700">{aiExtractionResult.error}</p>)}
+                  ) : (
+                    <p className="text-red-700">{aiExtractionResult.error}</p>
+                  )}
                 </div>
               )}
             </div>
           )}
           {!hasPremiumAccess && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-              <p className="text-sm text-gray-600">La lectura automática con IA no está disponible en tu plan. Actualiza a Pro para usar esta función.</p>
+              <p className="text-sm text-gray-600">La lectura automatica con IA no esta disponible en tu plan. Actualiza a Pro para usar esta funcion.</p>
             </div>
           )}
 
@@ -647,7 +679,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           {clientType === 'persona_natural' && (
             <>
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><User className="w-4 h-4" /> Información Personal</h3>
+                <h3 className="font-semibold flex items-center gap-2"><User className="w-4 h-4" /> Seccion 1 - Informacion Personal</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Primer Apellido *</Label>
@@ -668,46 +700,94 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     <Input value={formNatural.otros_nombres} onChange={(e) => handleNaturalChange('otros_nombres', e.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Tipo de Identificación *</Label>
+                    <Label>Tipo de Identificacion *</Label>
                     <Select value={formNatural.tipo_identificacion} onValueChange={(v) => handleNaturalChange('tipo_identificacion', v)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{TIPO_IDENTIFICACION_NATURAL.map((t) => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Número de Identificación *</Label>
+                    <Label>Numero de Identificacion *</Label>
                     <Input value={formNatural.numero_identificacion} onChange={(e) => handleNaturalChange('numero_identificacion', e.target.value)} className={err('numero_identificacion')} />
                     {formErrors.numero_identificacion && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
-                  <div className="space-y-2"><Label>Lugar de Expedición</Label><Input value={formNatural.lugar_expedicion} onChange={(e) => handleNaturalChange('lugar_expedicion', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Fecha de Expedición</Label><Input type="date" value={formNatural.fecha_expedicion} onChange={(e) => handleNaturalChange('fecha_expedicion', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Fecha de Nacimiento</Label><Input type="date" value={formNatural.fecha_nacimiento} onChange={(e) => handleNaturalChange('fecha_nacimiento', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Lugar de Nacimiento</Label><Input value={formNatural.lugar_nacimiento} onChange={(e) => handleNaturalChange('lugar_nacimiento', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Nacionalidad</Label><Input value={formNatural.nacionalidad} onChange={(e) => handleNaturalChange('nacionalidad', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Sexo</Label><Select value={formNatural.sexo} onValueChange={(v) => handleNaturalChange('sexo', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value="M">Masculino</SelectItem><SelectItem value="F">Femenino</SelectItem></SelectContent></Select></div>
-                  <div className="space-y-2"><Label>Estado Civil</Label><Select value={formNatural.estado_civil} onValueChange={(v) => handleNaturalChange('estado_civil', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{ESTADO_CIVIL_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select></div>
-                  <div className="space-y-2"><Label>Tipo de Solicitud *</Label><Select value={formNatural.tipo_solicitud} onValueChange={(v) => handleNaturalChange('tipo_solicitud', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TIPO_SOLICITUD_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select></div>
+                  <div className="space-y-2">
+                    <Label>Lugar de Expedicion</Label>
+                    <Input value={formNatural.lugar_expedicion} onChange={(e) => handleNaturalChange('lugar_expedicion', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Fecha de Expedicion</Label>
+                    <Input type="date" value={formNatural.fecha_expedicion} onChange={(e) => handleNaturalChange('fecha_expedicion', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Fecha de Nacimiento</Label>
+                    <Input type="date" value={formNatural.fecha_nacimiento} onChange={(e) => handleNaturalChange('fecha_nacimiento', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Lugar de Nacimiento</Label>
+                    <Input value={formNatural.lugar_nacimiento} onChange={(e) => handleNaturalChange('lugar_nacimiento', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nacionalidad</Label>
+                    <Input value={formNatural.nacionalidad} onChange={(e) => handleNaturalChange('nacionalidad', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Sexo</Label>
+                    <Select value={formNatural.sexo} onValueChange={(v) => handleNaturalChange('sexo', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value="M">Masculino</SelectItem><SelectItem value="F">Femenino</SelectItem></SelectContent></Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Estado Civil</Label>
+                    <Select value={formNatural.estado_civil} onValueChange={(v) => handleNaturalChange('estado_civil', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{ESTADO_CIVIL_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Tipo de Solicitud *</Label>
+                    <Select value={formNatural.tipo_solicitud} onValueChange={(v) => handleNaturalChange('tipo_solicitud', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TIPO_SOLICITUD_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select>
+                  </div>
                 </div>
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><MapPin className="w-4 h-4" /> Ubicación y Contacto</h3>
+                <h3 className="font-semibold flex items-center gap-2"><MapPin className="w-4 h-4" /> Seccion 2 - Ubicacion y Contacto</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="space-y-2 md:col-span-2"><Label>Dirección de Residencia</Label><Input value={formNatural.direccion_residencia} onChange={(e) => handleNaturalChange('direccion_residencia', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Municipio</Label><Input value={formNatural.municipio_residencia} onChange={(e) => handleNaturalChange('municipio_residencia', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Departamento</Label><Input value={formNatural.departamento_residencia} onChange={(e) => handleNaturalChange('departamento_residencia', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>País</Label><Input value={formNatural.pais_residencia} onChange={(e) => handleNaturalChange('pais_residencia', e.target.value)} /></div>
-                  <div className="space-y-2 md:col-span-2"><Label>Dirección Laboral (opcional)</Label><Input value={formNatural.direccion_laboral} onChange={(e) => handleNaturalChange('direccion_laboral', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Municipio Laboral</Label><Input value={formNatural.municipio_laboral} onChange={(e) => handleNaturalChange('municipio_laboral', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Departamento Laboral</Label><Input value={formNatural.departamento_laboral} onChange={(e) => handleNaturalChange('departamento_laboral', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Teléfono Fijo</Label><Input value={formNatural.telefono_fijo} onChange={(e) => handleNaturalChange('telefono_fijo', e.target.value)} /></div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Direccion de Residencia</Label>
+                    <Input value={formNatural.direccion_residencia} onChange={(e) => handleNaturalChange('direccion_residencia', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Municipio</Label>
+                    <Input value={formNatural.municipio_residencia} onChange={(e) => handleNaturalChange('municipio_residencia', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Departamento</Label>
+                    <Input value={formNatural.departamento_residencia} onChange={(e) => handleNaturalChange('departamento_residencia', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Pais</Label>
+                    <Input value={formNatural.pais_residencia} onChange={(e) => handleNaturalChange('pais_residencia', e.target.value)} />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Direccion Laboral (opcional)</Label>
+                    <Input value={formNatural.direccion_laboral} onChange={(e) => handleNaturalChange('direccion_laboral', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Municipio Laboral</Label>
+                    <Input value={formNatural.municipio_laboral} onChange={(e) => handleNaturalChange('municipio_laboral', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Departamento Laboral</Label>
+                    <Input value={formNatural.departamento_laboral} onChange={(e) => handleNaturalChange('departamento_laboral', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Telefono Fijo</Label>
+                    <Input value={formNatural.telefono_fijo} onChange={(e) => handleNaturalChange('telefono_fijo', e.target.value)} />
+                  </div>
                   <div className="space-y-2">
                     <Label>Celular *</Label>
                     <Input value={formNatural.celular} onChange={(e) => handleNaturalChange('celular', e.target.value)} className={err('celular')} />
                     {formErrors.celular && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
                   <div className="space-y-2 md:col-span-2">
-                    <Label>Correo Electrónico *</Label>
+                    <Label>Correo Electronico *</Label>
                     <Input type="email" value={formNatural.correo_electronico} onChange={(e) => handleNaturalChange('correo_electronico', e.target.value)} className={err('correo_electronico')} />
                     {formErrors.correo_electronico && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
@@ -715,18 +795,33 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><Briefcase className="w-4 h-4" /> Información Laboral y Económica</h3>
+                <h3 className="font-semibold flex items-center gap-2"><Briefcase className="w-4 h-4" /> Seccion 3 - Informacion Laboral y Economica</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="space-y-2"><Label>Ocupación / Profesión / Oficio</Label><Input value={formNatural.ocupacion} onChange={(e) => handleNaturalChange('ocupacion', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Nombre de la Empresa</Label><Input value={formNatural.nombre_empresa} onChange={(e) => handleNaturalChange('nombre_empresa', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Cargo</Label><Input value={formNatural.cargo} onChange={(e) => handleNaturalChange('cargo', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Actividad Económica (CIIU)</Label><Input value={formNatural.actividad_economica_ciiu} onChange={(e) => handleNaturalChange('actividad_economica_ciiu', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Tipo de Empleo</Label><Select value={formNatural.tipo_empleo} onValueChange={(v) => handleNaturalChange('tipo_empleo', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{TIPO_EMPLEO_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select></div>
+                  <div className="space-y-2">
+                    <Label>Ocupacion / Profesion / Oficio</Label>
+                    <Input value={formNatural.ocupacion} onChange={(e) => handleNaturalChange('ocupacion', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nombre de la Empresa</Label>
+                    <Input value={formNatural.nombre_empresa} onChange={(e) => handleNaturalChange('nombre_empresa', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cargo</Label>
+                    <Input value={formNatural.cargo} onChange={(e) => handleNaturalChange('cargo', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Actividad Economica (CIIU)</Label>
+                    <Input value={formNatural.actividad_economica_ciiu} onChange={(e) => handleNaturalChange('actividad_economica_ciiu', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Tipo de Empleo</Label>
+                    <Select value={formNatural.tipo_empleo} onValueChange={(v) => handleNaturalChange('tipo_empleo', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{TIPO_EMPLEO_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select>
+                  </div>
                 </div>
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4" /> Información Financiera (SARLAFT)</h3>
+                <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4" /> Seccion 4 - Informacion Financiera (SARLAFT)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Ingresos Mensuales *</Label>
@@ -747,24 +842,33 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     <Label>Total Pasivos *</Label>
                     <Input value={currencyDisplays.total_pasivos} onChange={(e) => handleCurrencyChange('total_pasivos', e.target.value)} className={err('total_pasivos')} />
                   </div>
-                  <div className="space-y-2"><Label>Total Patrimonio (calculado)</Label><Input value={formatCurrency(patrimonioNatural)} disabled className="bg-gray-100" /></div>
-                  <div className="space-y-2"><Label>Otros Ingresos Mensuales</Label><Input value={currencyDisplays.otros_ingresos} onChange={(e) => handleCurrencyChange('otros_ingresos', e.target.value)} /></div>
-                  <div className="space-y-2 md:col-span-2"><Label>Concepto de Otros Ingresos</Label><Input value={formNatural.concepto_otros_ingresos} onChange={(e) => handleNaturalChange('concepto_otros_ingresos', e.target.value)} placeholder="Ej: Arrendamientos, dividendos..." /></div>
+                  <div className="space-y-2">
+                    <Label>Total Patrimonio (calculado)</Label>
+                    <Input value={formatCurrency(patrimonioNatural)} disabled className="bg-gray-100" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Otros Ingresos Mensuales</Label>
+                    <Input value={currencyDisplays.otros_ingresos} onChange={(e) => handleCurrencyChange('otros_ingresos', e.target.value)} />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Concepto de Otros Ingresos</Label>
+                    <Input value={formNatural.concepto_otros_ingresos} onChange={(e) => handleNaturalChange('concepto_otros_ingresos', e.target.value)} placeholder="Ej: Arrendamientos, dividendos..." />
+                  </div>
                 </div>
               </div>
             </>
           )}
 
           {/* ============================================= */}
-          {/* PERSONA JURÍDICA */}
+          {/* PERSONA JURIDICA */}
           {/* ============================================= */}
           {clientType === 'persona_juridica' && (
             <>
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><Building2 className="w-4 h-4" /> Información General</h3>
+                <h3 className="font-semibold flex items-center gap-2"><Building2 className="w-4 h-4" /> Seccion 1 - Informacion General</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
-                    <Label>Razón Social / Denominación Social *</Label>
+                    <Label>Razon Social / Denominacion Social *</Label>
                     <Input value={formJuridica.razon_social} onChange={(e) => handleJuridicaChange('razon_social', e.target.value)} className={err('razon_social')} />
                     {formErrors.razon_social && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
@@ -774,23 +878,38 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     {formErrors.nit && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label>Dígito de Verificación *</Label>
+                    <Label>Digito de Verificacion *</Label>
                     <Input value={formJuridica.digito_verificacion} onChange={(e) => handleJuridicaChange('digito_verificacion', e.target.value)} maxLength={1} className={err('digito_verificacion')} />
                     {formErrors.digito_verificacion && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
-                  <div className="space-y-2"><Label>Tipo de Empresa *</Label><Select value={formJuridica.tipo_empresa} onValueChange={(v) => handleJuridicaChange('tipo_empresa', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{TIPO_EMPRESA_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select></div>
-                  <div className="space-y-2"><Label>Actividad Económica CIIU Principal</Label><Input value={formJuridica.actividad_economica_ciiu_principal} onChange={(e) => handleJuridicaChange('actividad_economica_ciiu_principal', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Actividad Económica CIIU Secundaria</Label><Input value={formJuridica.actividad_economica_ciiu_secundaria} onChange={(e) => handleJuridicaChange('actividad_economica_ciiu_secundaria', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Número de Empleados</Label><Input type="number" value={formJuridica.numero_empleados} onChange={(e) => handleJuridicaChange('numero_empleados', e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Tipo de Solicitud *</Label><Select value={formJuridica.tipo_solicitud} onValueChange={(v) => handleJuridicaChange('tipo_solicitud', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TIPO_SOLICITUD_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select></div>
+                  <div className="space-y-2">
+                    <Label>Tipo de Empresa *</Label>
+                    <Select value={formJuridica.tipo_empresa} onValueChange={(v) => handleJuridicaChange('tipo_empresa', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{TIPO_EMPRESA_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Actividad Economica CIIU Principal</Label>
+                    <Input value={formJuridica.actividad_economica_ciiu_principal} onChange={(e) => handleJuridicaChange('actividad_economica_ciiu_principal', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Actividad Economica CIIU Secundaria</Label>
+                    <Input value={formJuridica.actividad_economica_ciiu_secundaria} onChange={(e) => handleJuridicaChange('actividad_economica_ciiu_secundaria', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Numero de Empleados</Label>
+                    <Input type="number" value={formJuridica.numero_empleados} onChange={(e) => handleJuridicaChange('numero_empleados', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Tipo de Solicitud *</Label>
+                    <Select value={formJuridica.tipo_solicitud} onValueChange={(v) => handleJuridicaChange('tipo_solicitud', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TIPO_SOLICITUD_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select>
+                  </div>
                 </div>
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><MapPin className="w-4 h-4" /> Ubicación y Contacto</h3>
+                <h3 className="font-semibold flex items-center gap-2"><MapPin className="w-4 h-4" /> Seccion 2 - Ubicacion y Contacto</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
-                    <Label>Dirección Principal *</Label>
+                    <Label>Direccion Principal *</Label>
                     <Input value={formJuridica.direccion_principal} onChange={(e) => handleJuridicaChange('direccion_principal', e.target.value)} className={err('direccion_principal')} />
                     {formErrors.direccion_principal && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
@@ -804,10 +923,16 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     <Input value={formJuridica.departamento} onChange={(e) => handleJuridicaChange('departamento', e.target.value)} className={err('departamento')} />
                     {formErrors.departamento && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
-                  <div className="space-y-2"><Label>País *</Label><Input value={formJuridica.pais} onChange={(e) => handleJuridicaChange('pais', e.target.value)} /></div>
-                  <div className="space-y-2 md:col-span-2"><Label>Dirección Sucursal o Agencia (opcional)</Label><Input value={formJuridica.direccion_sucursal} onChange={(e) => handleJuridicaChange('direccion_sucursal', e.target.value)} /></div>
                   <div className="space-y-2">
-                    <Label>Teléfono *</Label>
+                    <Label>Pais *</Label>
+                    <Input value={formJuridica.pais} onChange={(e) => handleJuridicaChange('pais', e.target.value)} />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Direccion Sucursal o Agencia (opcional)</Label>
+                    <Input value={formJuridica.direccion_sucursal} onChange={(e) => handleJuridicaChange('direccion_sucursal', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Telefono *</Label>
                     <Input value={formJuridica.telefono} onChange={(e) => handleJuridicaChange('telefono', e.target.value)} className={err('telefono')} />
                     {formErrors.telefono && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
@@ -817,7 +942,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     {formErrors.celular && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
                   <div className="space-y-2 md:col-span-2">
-                    <Label>Correo Electrónico *</Label>
+                    <Label>Correo Electronico *</Label>
                     <Input type="email" value={formJuridica.correo_electronico} onChange={(e) => handleJuridicaChange('correo_electronico', e.target.value)} className={err('correo_electronico')} />
                     {formErrors.correo_electronico && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
@@ -825,32 +950,38 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><User className="w-4 h-4" /> Representante Legal</h3>
+                <h3 className="font-semibold flex items-center gap-2"><User className="w-4 h-4" /> Seccion 3 - Representante Legal</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Primer Apellido *</Label>
                     <Input value={formJuridica.rep_primer_apellido} onChange={(e) => handleJuridicaChange('rep_primer_apellido', e.target.value)} className={err('rep_primer_apellido')} />
                     {formErrors.rep_primer_apellido && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
-                  <div className="space-y-2"><Label>Segundo Apellido</Label><Input value={formJuridica.rep_segundo_apellido} onChange={(e) => handleJuridicaChange('rep_segundo_apellido', e.target.value)} /></div>
+                  <div className="space-y-2">
+                    <Label>Segundo Apellido</Label>
+                    <Input value={formJuridica.rep_segundo_apellido} onChange={(e) => handleJuridicaChange('rep_segundo_apellido', e.target.value)} />
+                  </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label>Nombre(s) *</Label>
                     <Input value={formJuridica.rep_nombres} onChange={(e) => handleJuridicaChange('rep_nombres', e.target.value)} className={err('rep_nombres')} />
                     {formErrors.rep_nombres && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
-                  <div className="space-y-2"><Label>Tipo de Identificación *</Label><Select value={formJuridica.rep_tipo_identificacion} onValueChange={(v) => handleJuridicaChange('rep_tipo_identificacion', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TIPO_IDENTIFICACION_JURIDICA.map((t) => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent></Select></div>
                   <div className="space-y-2">
-                    <Label>Número de Identificación *</Label>
+                    <Label>Tipo de Identificacion *</Label>
+                    <Select value={formJuridica.rep_tipo_identificacion} onValueChange={(v) => handleJuridicaChange('rep_tipo_identificacion', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TIPO_IDENTIFICACION_JURIDICA.map((t) => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent></Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Numero de Identificacion *</Label>
                     <Input value={formJuridica.rep_numero_identificacion} onChange={(e) => handleJuridicaChange('rep_numero_identificacion', e.target.value)} className={err('rep_numero_identificacion')} />
                     {formErrors.rep_numero_identificacion && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label>Lugar de Expedición *</Label>
+                    <Label>Lugar de Expedicion *</Label>
                     <Input value={formJuridica.rep_lugar_expedicion} onChange={(e) => handleJuridicaChange('rep_lugar_expedicion', e.target.value)} className={err('rep_lugar_expedicion')} />
                     {formErrors.rep_lugar_expedicion && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label>Fecha de Expedición *</Label>
+                    <Label>Fecha de Expedicion *</Label>
                     <Input type="date" value={formJuridica.rep_fecha_expedicion} onChange={(e) => handleJuridicaChange('rep_fecha_expedicion', e.target.value)} className={err('rep_fecha_expedicion')} />
                     {formErrors.rep_fecha_expedicion && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
@@ -864,14 +995,23 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     <Input value={formJuridica.rep_lugar_nacimiento} onChange={(e) => handleJuridicaChange('rep_lugar_nacimiento', e.target.value)} className={err('rep_lugar_nacimiento')} />
                     {formErrors.rep_lugar_nacimiento && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
-                  <div className="space-y-2"><Label>Sexo</Label><Select value={formJuridica.rep_sexo} onValueChange={(v) => handleJuridicaChange('rep_sexo', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value="M">Masculino</SelectItem><SelectItem value="F">Femenino</SelectItem></SelectContent></Select></div>
-                  <div className="space-y-2"><Label>Estado Civil</Label><Select value={formJuridica.rep_estado_civil} onValueChange={(v) => handleJuridicaChange('rep_estado_civil', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{ESTADO_CIVIL_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select></div>
-                  <div className="space-y-2"><Label>Nacionalidad</Label><Input value={formJuridica.rep_nacionalidad} onChange={(e) => handleJuridicaChange('rep_nacionalidad', e.target.value)} /></div>
+                  <div className="space-y-2">
+                    <Label>Sexo</Label>
+                    <Select value={formJuridica.rep_sexo} onValueChange={(v) => handleJuridicaChange('rep_sexo', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value="M">Masculino</SelectItem><SelectItem value="F">Femenino</SelectItem></SelectContent></Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Estado Civil</Label>
+                    <Select value={formJuridica.rep_estado_civil} onValueChange={(v) => handleJuridicaChange('rep_estado_civil', v)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{ESTADO_CIVIL_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent></Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nacionalidad</Label>
+                    <Input value={formJuridica.rep_nacionalidad} onChange={(e) => handleJuridicaChange('rep_nacionalidad', e.target.value)} />
+                  </div>
                 </div>
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4" /> Información Financiera</h3>
+                <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4" /> Seccion 4 - Informacion Financiera</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Total Activos *</Label>
@@ -882,7 +1022,10 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     <Label>Total Pasivos *</Label>
                     <Input value={currencyDisplays.jur_total_pasivos} onChange={(e) => handleCurrencyChange('total_pasivos', e.target.value, true)} className={err('jur_total_pasivos')} />
                   </div>
-                  <div className="space-y-2"><Label>Total Patrimonio *</Label><Input value={currencyDisplays.jur_total_patrimonio} onChange={(e) => handleCurrencyChange('total_patrimonio', e.target.value, true)} /></div>
+                  <div className="space-y-2">
+                    <Label>Total Patrimonio *</Label>
+                    <Input value={currencyDisplays.jur_total_patrimonio} onChange={(e) => handleCurrencyChange('total_patrimonio', e.target.value, true)} />
+                  </div>
                   <div className="space-y-2">
                     <Label>Ingresos Mensuales *</Label>
                     <Input value={currencyDisplays.jur_ingresos_mensuales} onChange={(e) => handleCurrencyChange('ingresos_mensuales', e.target.value, true)} className={err('jur_ingresos_mensuales')} />
@@ -893,7 +1036,10 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     <Input value={currencyDisplays.jur_egresos_mensuales} onChange={(e) => handleCurrencyChange('egresos_mensuales', e.target.value, true)} className={err('jur_egresos_mensuales')} />
                     {formErrors.jur_egresos_mensuales && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
-                  <div className="space-y-2"><Label>Otros Ingresos Mensuales</Label><Input value={currencyDisplays.jur_otros_ingresos} onChange={(e) => handleCurrencyChange('otros_ingresos', e.target.value, true)} /></div>
+                  <div className="space-y-2">
+                    <Label>Otros Ingresos Mensuales</Label>
+                    <Input value={currencyDisplays.jur_otros_ingresos} onChange={(e) => handleCurrencyChange('otros_ingresos', e.target.value, true)} />
+                  </div>
                 </div>
               </div>
             </>
@@ -908,15 +1054,20 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               <div className="space-y-2">
                 <Label>Usuario Tenant</Label>
                 <Input value={currentUser?.full_name || 'Cargando...'} disabled className="bg-gray-100" />
-                <p className="text-xs text-muted-foreground">Se asigna automáticamente</p>
+                <p className="text-xs text-muted-foreground">Se asigna automaticamente</p>
               </div>
+
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">Aliado / Referido por{!canEditAlliedField && !loadingPermissions && <Lock className="w-3 h-3 text-muted-foreground" />}</Label>
-                {loadingPermissions || loadingAllies ? (<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>
-                ) : !canEditAlliedField ? (<Input value={selectedAllyName || 'Directo (sin aliado)'} disabled className="bg-gray-100" />
+                {loadingPermissions || loadingAllies ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>
+                ) : !canEditAlliedField ? (
+                  <Input value={selectedAllyName || 'Directo (sin aliado)'} disabled className="bg-gray-100" />
                 ) : (
                   <Popover open={allyOpen} onOpenChange={setAllyOpen}>
-                    <PopoverTrigger asChild><Button variant="outline" role="combobox" className="w-full justify-between">{selectedAllyName || 'Directo (sin aliado)'}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between">{selectedAllyName || 'Directo (sin aliado)'}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
+                    </PopoverTrigger>
                     <PopoverContent className="w-full p-0" align="start">
                       <div className="flex items-center border-b px-3"><Search className="mr-2 h-4 w-4 shrink-0 opacity-50" /><input placeholder="Buscar aliado..." value={allySearch} onChange={(e) => setAllySearch(e.target.value)} className="flex h-10 w-full bg-transparent py-3 text-sm outline-none" /></div>
                       <div className="max-h-60 overflow-auto p-1">
@@ -927,13 +1078,18 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                   </Popover>
                 )}
               </div>
+
               <div className="space-y-2">
                 <Label>Comercial Asignado</Label>
-                {loadingComerciales ? (<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>
-                ) : comerciales.length === 0 ? (<p className="text-sm text-muted-foreground">No hay usuarios comerciales configurados.</p>
+                {loadingComerciales ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>
+                ) : comerciales.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No hay usuarios comerciales configurados.</p>
                 ) : (
                   <Popover open={comercialOpen} onOpenChange={setComercialOpen}>
-                    <PopoverTrigger asChild><Button variant="outline" role="combobox" className="w-full justify-between">{selectedComercialName || 'Sin comercial asignado'}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between">{selectedComercialName || 'Sin comercial asignado'}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
+                    </PopoverTrigger>
                     <PopoverContent className="w-full p-0" align="start">
                       <div className="flex items-center border-b px-3"><Search className="mr-2 h-4 w-4 shrink-0 opacity-50" /><input placeholder="Buscar comercial..." value={comercialSearch} onChange={(e) => setComercialSearch(e.target.value)} className="flex h-10 w-full bg-transparent py-3 text-sm outline-none" /></div>
                       <div className="max-h-60 overflow-auto p-1">
@@ -944,13 +1100,18 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                   </Popover>
                 )}
               </div>
+
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">Grupo Empresarial <Building2 className="w-3 h-3 text-muted-foreground" /></Label>
-                {loadingGrupos ? (<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>
-                ) : gruposEmpresariales.length === 0 ? (<p className="text-sm text-muted-foreground">No hay grupos empresariales creados.</p>
+                {loadingGrupos ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>
+                ) : gruposEmpresariales.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No hay grupos empresariales creados.</p>
                 ) : (
                   <Popover open={grupoOpen} onOpenChange={setGrupoOpen}>
-                    <PopoverTrigger asChild><Button variant="outline" role="combobox" className="w-full justify-between">{selectedGrupoName || 'Sin grupo empresarial'}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between">{selectedGrupoName || 'Sin grupo empresarial'}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
+                    </PopoverTrigger>
                     <PopoverContent className="w-full p-0" align="start">
                       <div className="flex items-center border-b px-3"><Search className="mr-2 h-4 w-4 shrink-0 opacity-50" /><input placeholder="Buscar grupo..." value={grupoSearch} onChange={(e) => setGrupoSearch(e.target.value)} className="flex h-10 w-full bg-transparent py-3 text-sm outline-none" /></div>
                       <div className="max-h-60 overflow-auto p-1">
@@ -960,7 +1121,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     </PopoverContent>
                   </Popover>
                 )}
-                <p className="text-xs text-muted-foreground">Agrupa clientes del mismo grupo económico</p>
+                <p className="text-xs text-muted-foreground">Agrupa clientes del mismo grupo economico</p>
               </div>
             </div>
           </div>
@@ -970,54 +1131,51 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           {/* ============================================= */}
           <div className="border rounded-lg p-4 space-y-4">
             <h3 className="font-semibold flex items-center gap-2"><FileText className="w-4 h-4" /> Documentos Adjuntos</h3>
-            <p className="text-sm text-muted-foreground">Adjunta los documentos necesarios del cliente (Cédula, RUT, extractos, etc.). Puedes subir varios archivos.</p>
+            <p className="text-sm text-muted-foreground">Adjunta los documentos necesarios del cliente (Cedula, RUT, extractos, etc.). Puedes subir varios archivos.</p>
             <div className="flex items-center gap-3">
               <Input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => { const file = e.target.files?.[0]; if (file) { handleFileUpload(file); e.target.value = ''; } }} disabled={uploadingDoc !== null} className="text-sm" />
               {uploadingDoc && (<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Subiendo...</div>)}
             </div>
-        {documents.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">{documents.length} documento(s) adjunto(s):</Label>
-            {documents.map((doc) => (
-              <div key={doc.id} className="flex items-center justify-between bg-green-50 border border-green-200 p-3 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <FileCheck className="w-4 h-4 text-green-600 flex-shrink-0" />
-                  <a
-                    href={doc.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                    title={doc.file_name}
-                  >
-                    {doc.file_name}
-                  </a>
-                </div>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={doc.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded cursor-pointer"
-                  >
-                    Ver
-                  </a>
-                  <a
-                    href={doc.file_url}
-                    download={doc.file_name}
-                    className="text-xs text-green-600 bg-green-100 hover:bg-green-200 px-2 py-0.5 rounded cursor-pointer"
-                  >
-                    Descargar
-                  </a>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveDocument(doc.id)} className="h-7 w-7 p-0 text-red-500 hover:text-red-700">
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
+            {documents.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">{documents.length} documento(s) adjunto(s):</Label>
+                {documents.map((doc) => (
+                  <div key={doc.id} className="flex items-center justify-between bg-green-50 border border-green-200 p-3 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <FileCheck className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <span
+                        onClick={() => handleViewDocument(doc.file_url)}
+                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                        title={doc.file_name}
+                      >
+                        {doc.file_name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleViewDocument(doc.file_url)}
+                        className="text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded cursor-pointer"
+                      >
+                        Ver
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
+                        className="text-xs text-green-600 bg-green-100 hover:bg-green-200 px-2 py-0.5 rounded cursor-pointer"
+                      >
+                        Descargar
+                      </button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveDocument(doc.id)} className="h-7 w-7 p-0 text-red-500 hover:text-red-700">
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-          </div>
-          
+
           {/* BOTONES */}
           <div className="flex justify-end gap-4 pt-4 border-t">
             <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>Cancelar</Button>
