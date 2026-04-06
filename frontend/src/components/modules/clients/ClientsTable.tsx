@@ -39,7 +39,7 @@ import {
 } from 'lucide-react';
 
 interface ClientsTableProps {
-  clients: (Client & { policies_count?: number })[];
+  clients: (Client & { policies_count?: number; status?: string })[];
   total: number;
   page: number;
   pageSize: number;
@@ -104,7 +104,6 @@ export function ClientsTable({
             <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
           )}
         </div>
-
         <Select value={segmentFilter || 'all'} onValueChange={(value) => onSegmentFilter(value === 'all' ? undefined : value)}>
           <SelectTrigger className="w-[200px]">
             <SelectValue />
@@ -184,6 +183,17 @@ export function ClientsTable({
                   </TableCell>
                   <TableCell className="py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
+                      <span
+                        title={client.status === 'verificado' ? 'Verificado' : 'En verificación'}
+                        className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold leading-none ${
+                          client.status === 'verificado'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                        data-testid={`client-status-${client.id}`}
+                      >
+                        {client.status === 'verificado' ? 'V' : 'P'}
+                      </span>
                       <Link href={`/clientes/${client.id}`}>
                         <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`view-client-${client.id}`}>
                           <Eye className="w-3.5 h-3.5" />
