@@ -183,14 +183,6 @@ export default function TenantLayout({
   const activeGroupData = navGroups.find(g => g.id === activeGroup);
   const activeGroupItems = activeGroupData?.items.filter(item => canShowItem(item)) || [];
 
-  // Obtener iniciales del usuario
-  const getUserInitials = () => {
-    if (userFullName) {
-      return userFullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    }
-    return tenantName?.slice(0, 2).toUpperCase() || 'US';
-  };
-
   // Renderizar item del submenu
   const renderSubmenuItem = (item: NavItem, isMobile: boolean = false) => {
     const isActive = isActiveRoute(item.href);
@@ -356,23 +348,24 @@ export default function TenantLayout({
         .notif-btn:hover {
           background: #dce8ff;
         }
-        .avatar-btn {
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          background: var(--primary, #2563eb);
-          color: white;
+        .logout-btn {
           display: flex;
           align-items: center;
-          justify-content: center;
-          font-size: 11.5px;
-          font-weight: 600;
-          cursor: pointer;
+          gap: 6px;
+          padding: 6px 12px;
+          border-radius: 8px;
+          background: #f1f4fb;
           border: none;
-          transition: opacity 0.15s;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 500;
+          color: #64748b;
+          transition: all 0.15s;
+          font-family: inherit;
         }
-        .avatar-btn:hover {
-          opacity: 0.9;
+        .logout-btn:hover {
+          background: #fee2e2;
+          color: #dc2626;
         }
 
         /* SUBMENU */
