@@ -1,6 +1,6 @@
 """
 Vercel Serverless Function: Extract Client Data
-Extrae datos de clientes (persona natural o juridica) desde documentos SARLAFT usando IA
+Extrae datos de clientes desde documentos SARLAFT usando IA (soporta PDFs escaneados)
 """
 
 from http.server import BaseHTTPRequestHandler
@@ -9,12 +9,33 @@ import os
 import base64
 import asyncio
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 import fitz  # PyMuPDF
 
 
+def pdf_pages_to_base64_images(binary_data: bytes, max_pages: int = 5) -> list:
+    """Convierte paginas de un PDF a imagenes base64 (para PDFs escaneados)"""
+    images = []
+    try:
+        doc = fitz.open(stream=binary_data, filetype="pdf")
+        for i, page in enumerate(doc):
+            if i >= max_pages:
+                break
+            # Renderizar pagina como imagen (zoom 2x para mejor calidad OCR)
+            mat = fitz.Matrix(2, 2)
+            pix = page.get_pixmap(matrix=mat)
+            img_bytes = pix.tobytes("png")
+            img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+            images.append(img_base64)
+            print(f"[Extract Client] Page {i+1} converted to image ({len(img_bytes)} bytes)")
+        doc.close()
+    except Exception as e:
+        print(f"[Extract Client] Error converting PDF to images: {e}")
+    return images
+
+
 def extract_text_from_pdf(binary_data: bytes) -> str:
-    """Extrae texto de un PDF usando PyMuPDF"""
+    """Intenta extraer texto de un PDF"""
     try:
         doc = fitz.open(stream=binary_data, filetype="pdf")
         text_parts = []
@@ -23,7 +44,7 @@ def extract_text_from_pdf(binary_data: bytes) -> str:
         doc.close()
         return "\n".join(text_parts)
     except Exception as e:
-        print(f"Error extracting PDF text: {e}")
+        print(f"[Extract Client] Error extracting PDF text: {e}")
         return ""
 
 
@@ -39,8 +60,10 @@ async def process_extraction(body: dict) -> dict:
 
     print(f"[Extract Client] Processing {client_type}, files: {len(files)}")
 
-    # Extraer texto de todos los archivos
+    # Intentar extraer texto primero, si no hay texto usar imagenes
     all_text = ""
+    all_images = []
+
     for file_data in files:
         try:
             base64_content = file_data.get('base64_content', '')
@@ -52,39 +75,48 @@ async def process_extraction(body: dict) -> dict:
             file_name = file_data.get('name', 'documento')
 
             if file_type == 'pdf':
+                # Intentar extraer texto
                 text = extract_text_from_pdf(binary_data)
+                if text.strip() and len(text.strip()) > 50:
+                    all_text += f"\n\n=== DOCUMENTO: {file_name} ===\n{text[:8000]}\n"
+                    print(f"[Extract Client] Extracted {len(text)} chars from {file_name}")
+                else:
+                    # PDF escaneado: convertir a imagenes
+                    print(f"[Extract Client] No text in {file_name}, converting to images...")
+                    images = pdf_pages_to_base64_images(binary_data)
+                    all_images.extend(images)
+                    print(f"[Extract Client] Got {len(images)} page images from {file_name}")
+            elif file_type in ['jpg', 'jpeg', 'png', 'webp']:
+                # Imagen directa
+                all_images.append(base64_content)
+                print(f"[Extract Client] Added image: {file_name}")
             else:
+                print(f"[Extract Client] Unsupported file type: {file_type}")
                 continue
 
-            if text.strip():
-                all_text += f"\n\n=== DOCUMENTO: {file_name} ===\n{text[:8000]}\n"
-                print(f"[Extract Client] Extracted {len(text)} chars from {file_name}")
         except Exception as e:
             print(f"[Extract Client] Error processing file: {e}")
             continue
 
-    if not all_text.strip():
+    if not all_text.strip() and not all_images:
         return {
             "success": False,
-            "error": "No se pudo extraer texto de los documentos. Verifique que no sean imagenes escaneadas."
+            "error": "No se pudo procesar los documentos. Verifique que los archivos sean PDF o imagenes validas."
         }
 
     # Limitar texto total
     all_text = all_text[:25000]
 
-    # Prompt segun tipo de cliente
+    # Construir prompt segun tipo de cliente
     if client_type == 'persona_natural':
-        extraction_prompt = f"""Eres un experto en seguros colombiano. Analiza estos documentos SARLAFT y extrae TODOS los datos de la PERSONA NATURAL.
-
-DOCUMENTOS:
-{all_text}
+        extraction_prompt = """Eres un experto en seguros colombiano. Analiza este documento SARLAFT y extrae TODOS los datos de la PERSONA NATURAL.
 
 EXTRAE la siguiente informacion. Si un campo no esta disponible, dejalo como null.
 Si un campo tiene informacion ambigua, marcalo en "campos_verificar".
 
 RESPONDE SOLO CON JSON VALIDO:
-{{
-    "informacion_personal": {{
+{
+    "informacion_personal": {
         "primer_apellido": "string o null",
         "segundo_apellido": "string o null",
         "primer_nombre": "string o null",
@@ -99,8 +131,8 @@ RESPONDE SOLO CON JSON VALIDO:
         "sexo": "M|F o null",
         "estado_civil": "soltero|casado|union_libre|separado|divorciado|viudo o null",
         "tipo_solicitud": "vinculacion|renovacion|actualizacion o null"
-    }},
-    "ubicacion_contacto": {{
+    },
+    "ubicacion_contacto": {
         "direccion_residencia": "string o null",
         "municipio_residencia": "string o null",
         "departamento_residencia": "string o null",
@@ -111,38 +143,35 @@ RESPONDE SOLO CON JSON VALIDO:
         "telefono_fijo": "string o null",
         "celular": "string o null",
         "correo_electronico": "string o null"
-    }},
-    "informacion_laboral": {{
+    },
+    "informacion_laboral": {
         "ocupacion": "string o null",
         "nombre_empresa": "string o null",
         "cargo": "string o null",
         "actividad_economica_ciiu": "string o null",
         "tipo_empleo": "empleado|independiente|pensionado o null"
-    }},
-    "informacion_financiera": {{
+    },
+    "informacion_financiera": {
         "ingresos_mensuales": "number o null",
         "egresos_mensuales": "number o null",
         "total_activos": "number o null",
         "total_pasivos": "number o null",
         "otros_ingresos": "number o null",
         "concepto_otros_ingresos": "string o null"
-    }},
+    },
     "campos_verificar": ["lista de campos que requieren verificacion manual"],
     "confianza_extraccion": "alta|media|baja",
     "notas_extraccion": "string con observaciones sobre la extraccion"
-}}"""
+}"""
     else:
-        extraction_prompt = f"""Eres un experto en seguros colombiano. Analiza estos documentos SARLAFT y extrae TODOS los datos de la PERSONA JURIDICA.
-
-DOCUMENTOS:
-{all_text}
+        extraction_prompt = """Eres un experto en seguros colombiano. Analiza este documento SARLAFT y extrae TODOS los datos de la PERSONA JURIDICA.
 
 EXTRAE la siguiente informacion. Si un campo no esta disponible, dejalo como null.
 Si un campo tiene informacion ambigua, marcalo en "campos_verificar".
 
 RESPONDE SOLO CON JSON VALIDO:
-{{
-    "informacion_general": {{
+{
+    "informacion_general": {
         "razon_social": "string o null",
         "nit": "string o null",
         "digito_verificacion": "string o null",
@@ -151,8 +180,8 @@ RESPONDE SOLO CON JSON VALIDO:
         "actividad_economica_ciiu_secundaria": "string o null",
         "numero_empleados": "number o null",
         "tipo_solicitud": "vinculacion|renovacion|actualizacion o null"
-    }},
-    "ubicacion_contacto": {{
+    },
+    "ubicacion_contacto": {
         "direccion_principal": "string o null",
         "municipio": "string o null",
         "departamento": "string o null",
@@ -161,8 +190,8 @@ RESPONDE SOLO CON JSON VALIDO:
         "telefono": "string o null",
         "celular": "string o null",
         "correo_electronico": "string o null"
-    }},
-    "representante_legal": {{
+    },
+    "representante_legal": {
         "primer_apellido": "string o null",
         "segundo_apellido": "string o null",
         "nombres": "string o null",
@@ -175,32 +204,47 @@ RESPONDE SOLO CON JSON VALIDO:
         "sexo": "M|F o null",
         "estado_civil": "soltero|casado|union_libre|separado|divorciado|viudo o null",
         "nacionalidad": "string o null"
-    }},
-    "informacion_financiera": {{
+    },
+    "informacion_financiera": {
         "total_activos": "number o null",
         "total_pasivos": "number o null",
         "total_patrimonio": "number o null",
         "ingresos_mensuales": "number o null",
         "egresos_mensuales": "number o null",
         "otros_ingresos": "number o null"
-    }},
+    },
     "campos_verificar": ["lista de campos que requieren verificacion manual"],
     "confianza_extraccion": "alta|media|baja",
     "notas_extraccion": "string con observaciones sobre la extraccion"
-}}"""
+}"""
+
+    # Agregar texto extraido al prompt si existe
+    if all_text.strip():
+        extraction_prompt += f"\n\nTEXTO EXTRAIDO DE LOS DOCUMENTOS:\n{all_text}"
 
     try:
         chat = LlmChat(
             api_key=api_key,
             session_id=f"extract-client-{body.get('tenantId', 'unknown')}",
             system_message="""Eres un experto en seguros colombiano especializado en analisis de documentos SARLAFT.
-Tu tarea es extraer informacion estructurada de documentos de clientes (cedulas, RUT, formularios SARLAFT, certificados de camara de comercio, etc.).
+Tu tarea es extraer informacion estructurada de formularios SARLAFT de clientes.
 Siempre responde SOLO con JSON valido, sin texto adicional ni markdown.
 Si no encuentras un dato, usa null. No inventes informacion."""
         ).with_model("gemini", "gemini-2.5-flash")
 
-        print("[Extract Client] Calling Gemini API...")
-        response_text = await chat.send_message(UserMessage(text=extraction_prompt))
+        # Construir mensaje con imagenes si hay PDFs escaneados
+        if all_images:
+            image_contents = [ImageContent(image_base64=img) for img in all_images[:5]]
+            user_message = UserMessage(
+                text=extraction_prompt,
+                image_content=image_contents
+            )
+            print(f"[Extract Client] Sending {len(image_contents)} images to Gemini...")
+        else:
+            user_message = UserMessage(text=extraction_prompt)
+            print("[Extract Client] Sending text-only to Gemini...")
+
+        response_text = await chat.send_message(user_message)
         print(f"[Extract Client] Response length: {len(response_text)}")
 
         # Parsear respuesta JSON
