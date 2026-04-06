@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -226,7 +225,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
 
   // Form state para Persona Natural
   const [formNatural, setFormNatural] = useState({
-    // Información Personal
     primer_apellido: initialData?.primer_apellido || '',
     segundo_apellido: initialData?.segundo_apellido || '',
     primer_nombre: initialData?.primer_nombre || '',
@@ -241,7 +239,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     sexo: initialData?.sexo || '',
     estado_civil: initialData?.estado_civil || '',
     tipo_solicitud: initialData?.tipo_solicitud || 'vinculacion',
-    // Ubicación y Contacto
     direccion_residencia: initialData?.address || '',
     municipio_residencia: initialData?.municipio_residencia || '',
     departamento_residencia: initialData?.departamento_residencia || '',
@@ -252,13 +249,11 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     telefono_fijo: initialData?.telefono_fijo || '',
     celular: initialData?.phone || '',
     correo_electronico: initialData?.email || '',
-    // Información Laboral
     ocupacion: initialData?.ocupacion || '',
     nombre_empresa: initialData?.nombre_empresa || '',
     cargo: initialData?.cargo || '',
     actividad_economica_ciiu: initialData?.actividad_economica_ciiu || '',
     tipo_empleo: initialData?.tipo_empleo || '',
-    // Información Financiera
     ingresos_mensuales: initialData?.ingresos_mensuales || 0,
     egresos_mensuales: initialData?.egresos_mensuales || 0,
     total_activos: initialData?.total_activos || 0,
@@ -269,7 +264,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
 
   // Form state para Persona Jurídica
   const [formJuridica, setFormJuridica] = useState({
-    // Información General
     razon_social: initialData?.full_name || '',
     nit: initialData?.doc_number || '',
     digito_verificacion: initialData?.digito_verificacion || '',
@@ -278,7 +272,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     actividad_economica_ciiu_secundaria: initialData?.actividad_economica_ciiu_secundaria || '',
     numero_empleados: initialData?.numero_empleados || '',
     tipo_solicitud: initialData?.tipo_solicitud || 'vinculacion',
-    // Ubicación y Contacto
     direccion_principal: initialData?.address || '',
     municipio: initialData?.municipio || '',
     departamento: initialData?.departamento || '',
@@ -287,7 +280,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     telefono: initialData?.phone || '',
     celular: initialData?.celular || '',
     correo_electronico: initialData?.email || '',
-    // Representante Legal
     rep_primer_apellido: initialData?.rep_primer_apellido || '',
     rep_segundo_apellido: initialData?.rep_segundo_apellido || '',
     rep_nombres: initialData?.rep_nombres || '',
@@ -300,7 +292,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     rep_sexo: initialData?.rep_sexo || '',
     rep_estado_civil: initialData?.rep_estado_civil || '',
     rep_nacionalidad: initialData?.rep_nacionalidad || 'Colombiana',
-    // Información Financiera
     total_activos: initialData?.total_activos || 0,
     total_pasivos: initialData?.total_pasivos || 0,
     total_patrimonio: initialData?.total_patrimonio || 0,
@@ -324,14 +315,12 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     jur_otros_ingresos: formatCurrency(formJuridica.otros_ingresos),
   });
 
-  // Calcular patrimonio automáticamente para Persona Natural
   const patrimonioNatural = formNatural.total_activos - formNatural.total_pasivos;
 
   // =====================================================
   // EFFECTS
   // =====================================================
 
-  // Cargar usuario actual
   useEffect(() => {
     async function loadCurrentUser() {
       try {
@@ -356,7 +345,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     loadCurrentUser();
   }, [supabase]);
 
-  // Cargar aliados
   useEffect(() => {
     async function loadAlliedAgents() {
       try {
@@ -366,7 +354,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           .eq('tenant_id', tenantId)
           .eq('status', 'active')
           .order('full_name');
-
         if (!error && data) {
           setAlliedAgents(data);
         }
@@ -379,7 +366,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     loadAlliedAgents();
   }, [tenantId, supabase]);
 
-  // Cargar comerciales
   useEffect(() => {
     async function loadComerciales() {
       try {
@@ -390,7 +376,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           .eq('role', 'comercial')
           .eq('is_active', true)
           .order('full_name');
-
         if (!error && data) {
           setComerciales(data);
         }
@@ -403,7 +388,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     loadComerciales();
   }, [tenantId, supabase]);
 
-  // Cargar grupos empresariales
   useEffect(() => {
     async function loadGruposEmpresariales() {
       try {
@@ -413,7 +397,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           .eq('tenant_id', tenantId)
           .eq('is_active', true)
           .order('nombre');
-
         if (!error && data) {
           setGruposEmpresariales(data);
         }
@@ -426,7 +409,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     loadGruposEmpresariales();
   }, [tenantId, supabase]);
 
-  // Cargar documentos existentes si está editando
   useEffect(() => {
     async function loadDocuments() {
       if (!initialData?.id) return;
@@ -436,7 +418,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           .select('*')
           .eq('client_id', initialData.id)
           .order('created_at', { ascending: false });
-
         if (!error && data) {
           setDocuments(data.map((doc: any) => ({
             id: doc.id,
@@ -478,29 +459,23 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     }
   };
 
-  // Upload document
   const handleFileUpload = async (docKey: string, file: File) => {
     if (!file) return;
-
     setUploadingDoc(docKey);
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${tenantId}/${Date.now()}_${docKey}.${fileExt}`;
-
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('client-documents')
         .upload(fileName, file);
-
       if (uploadError) {
         console.error('Upload error:', uploadError);
         alert('Error al subir el archivo');
         return;
       }
-
       const { data: { publicUrl } } = supabase.storage
         .from('client-documents')
         .getPublicUrl(fileName);
-
       const newDoc: UploadedDocument = {
         id: `temp_${Date.now()}`,
         name: docKey,
@@ -510,7 +485,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
         uploaded_at: new Date().toISOString(),
         status: 'cargado'
       };
-
       setDocuments(prev => [...prev.filter(d => d.name !== docKey), newDoc]);
     } catch (err) {
       console.error('Error uploading file:', err);
@@ -524,18 +498,14 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     setDocuments(prev => prev.filter(d => d.id !== docId));
   };
 
-  // Extract with AI
   const handleExtractWithAI = async () => {
     if (documents.length === 0) {
       alert('Por favor, carga al menos un documento para analizar');
       return;
     }
-
     setIsExtractingAI(true);
     setAiExtractionResult(null);
-
     try {
-      // Prepare files for AI
       const filesForAI = await Promise.all(
         documents.map(async (doc) => {
           try {
@@ -547,7 +517,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               reader.onerror = reject;
               reader.readAsDataURL(blob);
             });
-
             return {
               name: doc.file_name,
               file_type: doc.file_type,
@@ -559,9 +528,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           }
         })
       );
-
       const validFiles = filesForAI.filter(f => f !== null);
-
       if (validFiles.length === 0) {
         setAiExtractionResult({
           success: false,
@@ -570,7 +537,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
         });
         return;
       }
-
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       const response = await fetch(`${backendUrl}/api/ai/extract-client`, {
         method: 'POST',
@@ -581,11 +547,8 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           files: validFiles
         })
       });
-
       const result = await response.json();
-
       if (result.success && result.data) {
-        // Fill form with extracted data
         if (clientType === 'persona_natural') {
           const data = result.data;
           if (data.informacion_personal) {
@@ -647,7 +610,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
             }
           }
         } else {
-          // Persona Jurídica
           const data = result.data;
           if (data.informacion_general) {
             const ig = data.informacion_general;
@@ -705,7 +667,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
             if (inf.otros_ingresos) handleCurrencyChange('otros_ingresos', String(inf.otros_ingresos), true);
           }
         }
-
         setAiExtractionResult({
           success: true,
           needsVerification: result.needs_verification,
@@ -730,11 +691,9 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     }
   };
 
-  // Submit form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-
     try {
       let clientData: any = {
         tenant_id: tenantId,
@@ -745,14 +704,11 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
         grupo_empresarial_id: selectedGrupoId || null,
         created_by: currentUser?.id || agentId,
       };
-
-      // Determinar estado según plan y uso de IA
       if (hasPremiumAccess && aiExtractionResult?.success) {
         clientData.status = 'en_verificacion';
       } else {
         clientData.status = 'verificado';
       }
-
       if (clientType === 'persona_natural') {
         const fullName = `${formNatural.primer_nombre} ${formNatural.otros_nombres} ${formNatural.primer_apellido} ${formNatural.segundo_apellido}`.replace(/\s+/g, ' ').trim();
         clientData = {
@@ -763,7 +719,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           email: formNatural.correo_electronico || null,
           phone: formNatural.celular || null,
           address: formNatural.direccion_residencia || null,
-          // Campos adicionales persona natural
           primer_apellido: formNatural.primer_apellido,
           segundo_apellido: formNatural.segundo_apellido,
           primer_nombre: formNatural.primer_nombre,
@@ -797,7 +752,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           concepto_otros_ingresos: formNatural.concepto_otros_ingresos,
         };
       } else {
-        // Persona Jurídica
         clientData = {
           ...clientData,
           full_name: formJuridica.razon_social,
@@ -806,7 +760,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           email: formJuridica.correo_electronico || null,
           phone: formJuridica.telefono || null,
           address: formJuridica.direccion_principal || null,
-          // Campos adicionales persona jurídica
           razon_social: formJuridica.razon_social,
           nit: formJuridica.nit,
           digito_verificacion: formJuridica.digito_verificacion,
@@ -820,7 +773,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           pais: formJuridica.pais,
           direccion_sucursal: formJuridica.direccion_sucursal,
           celular: formJuridica.celular,
-          // Representante Legal
           rep_primer_apellido: formJuridica.rep_primer_apellido,
           rep_segundo_apellido: formJuridica.rep_segundo_apellido,
           rep_nombres: formJuridica.rep_nombres,
@@ -833,7 +785,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           rep_sexo: formJuridica.rep_sexo,
           rep_estado_civil: formJuridica.rep_estado_civil,
           rep_nacionalidad: formJuridica.rep_nacionalidad,
-          // Financiero
           total_activos: formJuridica.total_activos,
           total_pasivos: formJuridica.total_pasivos,
           total_patrimonio: formJuridica.total_patrimonio,
@@ -844,13 +795,11 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
       }
 
       let clientId = initialData?.id;
-
       if (isEditing && clientId) {
         const { error } = await (supabase as any)
           .from('clients')
           .update(clientData)
           .eq('id', clientId);
-
         if (error) throw error;
       } else {
         const { data: newClient, error } = await (supabase as any)
@@ -858,12 +807,10 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           .insert(clientData)
           .select()
           .single();
-
         if (error) throw error;
         clientId = newClient.id;
       }
 
-      // Save documents
       for (const doc of documents) {
         if (doc.id.startsWith('temp_')) {
           await (supabase as any)
@@ -893,27 +840,21 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   const filteredAllies = alliedAgents.filter((ally) =>
     ally.full_name.toLowerCase().includes(allySearch.toLowerCase())
   );
-
   const filteredComerciales = comerciales.filter((comercial) =>
     comercial.full_name.toLowerCase().includes(comercialSearch.toLowerCase())
   );
-
   const filteredGrupos = gruposEmpresariales.filter((grupo) =>
     grupo.nombre.toLowerCase().includes(grupoSearch.toLowerCase())
   );
-
   const selectedAllyName = selectedAllyId
     ? alliedAgents.find((a) => a.id === selectedAllyId)?.full_name
     : null;
-
   const selectedComercialName = selectedComercialId
     ? comerciales.find((c) => c.id === selectedComercialId)?.full_name
     : null;
-
   const selectedGrupoName = selectedGrupoId
     ? gruposEmpresariales.find((g) => g.id === selectedGrupoId)?.nombre
     : null;
-
   const documentsList = clientType === 'persona_natural' ? DOCUMENTOS_PERSONA_NATURAL : DOCUMENTOS_PERSONA_JURIDICA;
 
   // =====================================================
@@ -921,7 +862,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   // =====================================================
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6 w-full max-w-6xl mx-auto">
       <Card>
         <CardHeader>
           <CardTitle>{isEditing ? 'Editar Cliente' : 'Nuevo Cliente'}</CardTitle>
@@ -957,349 +898,78 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           </div>
 
           {/* ============================================= */}
-          {/* SECCIÓN: PROPIEDAD CRM (Común a ambos tipos) */}
+          {/* LECTURA AUTOMÁTICA CON IA (Al inicio) */}
           {/* ============================================= */}
-          <div className="border rounded-lg p-4 space-y-4 bg-slate-50">
-            <h3 className="font-semibold flex items-center gap-2">
-              <Briefcase className="w-4 h-4" />
-              {clientType === 'persona_natural' ? 'Sección 5' : 'Sección 5'} – Propiedad CRM
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Usuario Tenant (Auto) */}
-              <div className="space-y-2">
-                <Label>Usuario Tenant</Label>
-                <Input
-                  value={currentUser?.full_name || 'Cargando...'}
-                  disabled
-                  className="bg-gray-100"
-                />
-                <p className="text-xs text-muted-foreground">Se asigna automáticamente</p>
-              </div>
-
-              {/* Aliado */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  Aliado / Referido por
-                  {!canEditAlliedField && !loadingPermissions && <Lock className="w-3 h-3 text-muted-foreground" />}
-                </Label>
-                {loadingPermissions || loadingAllies ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Cargando...
-                  </div>
-                ) : !canEditAlliedField ? (
-                  <Input value={selectedAllyName || 'Directo (sin aliado)'} disabled className="bg-gray-100" />
-                ) : (
-                  <Popover open={allyOpen} onOpenChange={setAllyOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" className="w-full justify-between">
-                        {selectedAllyName || 'Directo (sin aliado)'}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0" align="start">
-                      <div className="flex items-center border-b px-3">
-                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                        <input
-                          placeholder="Buscar aliado..."
-                          value={allySearch}
-                          onChange={(e) => setAllySearch(e.target.value)}
-                          className="flex h-10 w-full bg-transparent py-3 text-sm outline-none"
-                        />
-                      </div>
-                      <div className="max-h-60 overflow-auto p-1">
-                        <div
-                          className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                          onClick={() => {
-                            setSelectedAllyId(null);
-                            setAllyOpen(false);
-                            setAllySearch('');
-                          }}
-                        >
-                          <Check className={cn("mr-2 h-4 w-4", !selectedAllyId ? "opacity-100" : "opacity-0")} />
-                          Directo (sin aliado)
-                        </div>
-                        {filteredAllies.map((ally) => (
-                          <div
-                            key={ally.id}
-                            className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                            onClick={() => {
-                              setSelectedAllyId(ally.id);
-                              setAllyOpen(false);
-                              setAllySearch('');
-                            }}
-                          >
-                            <Check className={cn("mr-2 h-4 w-4", selectedAllyId === ally.id ? "opacity-100" : "opacity-0")} />
-                            {ally.full_name}
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                )}
-              </div>
-
-              {/* Comercial */}
-              <div className="space-y-2">
-                <Label>Comercial Asignado</Label>
-                {loadingComerciales ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Cargando...
-                  </div>
-                ) : comerciales.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No hay usuarios comerciales configurados.</p>
-                ) : (
-                  <Popover open={comercialOpen} onOpenChange={setComercialOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" className="w-full justify-between">
-                        {selectedComercialName || 'Sin comercial asignado'}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0" align="start">
-                      <div className="flex items-center border-b px-3">
-                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                        <input
-                          placeholder="Buscar comercial..."
-                          value={comercialSearch}
-                          onChange={(e) => setComercialSearch(e.target.value)}
-                          className="flex h-10 w-full bg-transparent py-3 text-sm outline-none"
-                        />
-                      </div>
-                      <div className="max-h-60 overflow-auto p-1">
-                        <div
-                          className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                          onClick={() => {
-                            setSelectedComercialId(null);
-                            setComercialOpen(false);
-                            setComercialSearch('');
-                          }}
-                        >
-                          <Check className={cn("mr-2 h-4 w-4", !selectedComercialId ? "opacity-100" : "opacity-0")} />
-                          Sin comercial asignado
-                        </div>
-                        {filteredComerciales.map((comercial) => (
-                          <div
-                            key={comercial.id}
-                            className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                            onClick={() => {
-                              setSelectedComercialId(comercial.id);
-                              setComercialOpen(false);
-                              setComercialSearch('');
-                            }}
-                          >
-                            <Check className={cn("mr-2 h-4 w-4", selectedComercialId === comercial.id ? "opacity-100" : "opacity-0")} />
-                            {comercial.full_name}
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                )}
-              </div>
-
-              {/* Grupo Empresarial */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  Grupo Empresarial
-                  <Building2 className="w-3 h-3 text-muted-foreground" />
-                </Label>
-                {loadingGrupos ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Cargando...
-                  </div>
-                ) : gruposEmpresariales.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No hay grupos empresariales creados.</p>
-                ) : (
-                  <Popover open={grupoOpen} onOpenChange={setGrupoOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" className="w-full justify-between">
-                        {selectedGrupoName || 'Sin grupo empresarial'}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0" align="start">
-                      <div className="flex items-center border-b px-3">
-                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                        <input
-                          placeholder="Buscar grupo..."
-                          value={grupoSearch}
-                          onChange={(e) => setGrupoSearch(e.target.value)}
-                          className="flex h-10 w-full bg-transparent py-3 text-sm outline-none"
-                        />
-                      </div>
-                      <div className="max-h-60 overflow-auto p-1">
-                        <div
-                          className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                          onClick={() => {
-                            setSelectedGrupoId(null);
-                            setGrupoOpen(false);
-                            setGrupoSearch('');
-                          }}
-                        >
-                          <Check className={cn("mr-2 h-4 w-4", !selectedGrupoId ? "opacity-100" : "opacity-0")} />
-                          Sin grupo empresarial
-                        </div>
-                        {filteredGrupos.map((grupo) => (
-                          <div
-                            key={grupo.id}
-                            className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                            onClick={() => {
-                              setSelectedGrupoId(grupo.id);
-                              setGrupoOpen(false);
-                              setGrupoSearch('');
-                            }}
-                          >
-                            <Check className={cn("mr-2 h-4 w-4", selectedGrupoId === grupo.id ? "opacity-100" : "opacity-0")} />
-                            {grupo.nombre}
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                )}
-                <p className="text-xs text-muted-foreground">Agrupa clientes del mismo grupo económico</p>
-              </div>
-            </div>
-          </div>
-
-          {/* ============================================= */}
-          {/* SECCIÓN: DOCUMENTOS (Común a ambos tipos) */}
-          {/* ============================================= */}
-          <div className="border rounded-lg p-4 space-y-4">
-            <h3 className="font-semibold flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              {clientType === 'persona_natural' ? 'Sección 6' : 'Sección 6'} – Documentos Adjuntos
-            </h3>
-
-            {/* AI Extraction - Solo Pro */}
-            {hasPremiumAccess && (
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-blue-600" />
-                    <span className="font-medium text-blue-900">Lectura Automática con IA</span>
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Beta</span>
-                  </div>
+          {hasPremiumAccess && (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-blue-600" />
+                  <span className="font-medium text-blue-900">Lectura Automática con IA</span>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Beta</span>
                 </div>
-                <p className="text-sm text-blue-700">
-                  Sube los documentos y la IA extraerá los datos automáticamente.
-                </p>
-                <Button
-                  type="button"
-                  onClick={handleExtractWithAI}
-                  disabled={isExtractingAI || documents.length === 0}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {isExtractingAI ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Extrayendo...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      Analizar con IA
-                    </>
-                  )}
-                </Button>
-
-                {aiExtractionResult && (
-                  <div className={cn(
-                    "p-3 rounded-lg",
-                    aiExtractionResult.success ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"
-                  )}>
-                    {aiExtractionResult.success ? (
-                      <div className="flex items-start gap-2">
-                        {aiExtractionResult.needsVerification ? (
-                          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
-                        ) : (
-                          <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                        )}
-                        <div>
-                          {aiExtractionResult.needsVerification ? (
-                            <>
-                              <p className="font-medium text-yellow-800">Datos extraídos con observaciones</p>
-                              <p className="text-sm text-yellow-700">
-                                Verifica los siguientes campos: {aiExtractionResult.verificationFields?.join(', ')}
-                              </p>
-                            </>
-                          ) : (
-                            <p className="font-medium text-green-800">Datos extraídos correctamente</p>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-red-700">{aiExtractionResult.error}</p>
-                    )}
-                  </div>
+              </div>
+              <p className="text-sm text-blue-700">
+                Sube los documentos en la Sección 6 y luego presiona el botón para que la IA extraiga los datos automáticamente.
+              </p>
+              <Button
+                type="button"
+                onClick={handleExtractWithAI}
+                disabled={isExtractingAI || documents.length === 0}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isExtractingAI ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Extrayendo...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Analizar con IA
+                  </>
                 )}
-              </div>
-            )}
-
-            {!hasPremiumAccess && (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <p className="text-sm text-gray-600">
-                  La lectura automática con IA no está disponible en tu plan. Actualiza a Pro para usar esta función.
-                </p>
-              </div>
-            )}
-
-            {/* Document Upload Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {documentsList.map((docType) => {
-                const uploadedDoc = documents.find(d => d.name === docType.key);
-                return (
-                  <div key={docType.key} className="border rounded-lg p-3 space-y-2">
-                    <Label className="text-sm">{docType.label}</Label>
-                    {uploadedDoc ? (
-                      <div className="flex items-center justify-between bg-green-50 p-2 rounded">
-                        <div className="flex items-center gap-2">
-                          <FileCheck className="w-4 h-4 text-green-600" />
-                          <span className="text-sm text-green-700 truncate max-w-[150px]">
-                            {uploadedDoc.file_name}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
-                            Cargado
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveDocument(uploadedDoc.id)}
-                            className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="file"
-                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleFileUpload(docType.key, file);
-                          }}
-                          disabled={uploadingDoc === docType.key}
-                          className="text-sm"
-                        />
-                        {uploadingDoc === docType.key && (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+              </Button>
+              {aiExtractionResult && (
+                <div className={cn(
+                  "p-3 rounded-lg",
+                  aiExtractionResult.success ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"
+                )}>
+                  {aiExtractionResult.success ? (
+                    <div className="flex items-start gap-2">
+                      {aiExtractionResult.needsVerification ? (
+                        <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                      ) : (
+                        <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                      )}
+                      <div>
+                        {aiExtractionResult.needsVerification ? (
+                          <>
+                            <p className="font-medium text-yellow-800">Datos extraídos con observaciones</p>
+                            <p className="text-sm text-yellow-700">
+                              Verifica los siguientes campos: {aiExtractionResult.verificationFields?.join(', ')}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="font-medium text-green-800">Datos extraídos correctamente</p>
                         )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    </div>
+                  ) : (
+                    <p className="text-red-700">{aiExtractionResult.error}</p>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
+          )}
+
+          {!hasPremiumAccess && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <p className="text-sm text-gray-600">
+                La lectura automática con IA no está disponible en tu plan. Actualiza a Pro para usar esta función.
+              </p>
+            </div>
+          )}
 
           {/* ============================================= */}
           {/* FORMULARIO PERSONA NATURAL */}
@@ -1315,40 +985,23 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Primer Apellido *</Label>
-                    <Input
-                      value={formNatural.primer_apellido}
-                      onChange={(e) => handleNaturalChange('primer_apellido', e.target.value)}
-                      required
-                    />
+                    <Input value={formNatural.primer_apellido} onChange={(e) => handleNaturalChange('primer_apellido', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Segundo Apellido</Label>
-                    <Input
-                      value={formNatural.segundo_apellido}
-                      onChange={(e) => handleNaturalChange('segundo_apellido', e.target.value)}
-                    />
+                    <Input value={formNatural.segundo_apellido} onChange={(e) => handleNaturalChange('segundo_apellido', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Primer Nombre *</Label>
-                    <Input
-                      value={formNatural.primer_nombre}
-                      onChange={(e) => handleNaturalChange('primer_nombre', e.target.value)}
-                      required
-                    />
+                    <Input value={formNatural.primer_nombre} onChange={(e) => handleNaturalChange('primer_nombre', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Otros Nombres</Label>
-                    <Input
-                      value={formNatural.otros_nombres}
-                      onChange={(e) => handleNaturalChange('otros_nombres', e.target.value)}
-                    />
+                    <Input value={formNatural.otros_nombres} onChange={(e) => handleNaturalChange('otros_nombres', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Tipo de Identificación *</Label>
-                    <Select
-                      value={formNatural.tipo_identificacion}
-                      onValueChange={(value) => handleNaturalChange('tipo_identificacion', value)}
-                    >
+                    <Select value={formNatural.tipo_identificacion} onValueChange={(value) => handleNaturalChange('tipo_identificacion', value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {TIPO_IDENTIFICACION_NATURAL.map((tipo) => (
@@ -1359,55 +1012,31 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                   </div>
                   <div className="space-y-2">
                     <Label>Número de Identificación *</Label>
-                    <Input
-                      value={formNatural.numero_identificacion}
-                      onChange={(e) => handleNaturalChange('numero_identificacion', e.target.value)}
-                      required
-                    />
+                    <Input value={formNatural.numero_identificacion} onChange={(e) => handleNaturalChange('numero_identificacion', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Lugar de Expedición</Label>
-                    <Input
-                      value={formNatural.lugar_expedicion}
-                      onChange={(e) => handleNaturalChange('lugar_expedicion', e.target.value)}
-                    />
+                    <Input value={formNatural.lugar_expedicion} onChange={(e) => handleNaturalChange('lugar_expedicion', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Fecha de Expedición</Label>
-                    <Input
-                      type="date"
-                      value={formNatural.fecha_expedicion}
-                      onChange={(e) => handleNaturalChange('fecha_expedicion', e.target.value)}
-                    />
+                    <Input type="date" value={formNatural.fecha_expedicion} onChange={(e) => handleNaturalChange('fecha_expedicion', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Fecha de Nacimiento</Label>
-                    <Input
-                      type="date"
-                      value={formNatural.fecha_nacimiento}
-                      onChange={(e) => handleNaturalChange('fecha_nacimiento', e.target.value)}
-                    />
+                    <Input type="date" value={formNatural.fecha_nacimiento} onChange={(e) => handleNaturalChange('fecha_nacimiento', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Lugar de Nacimiento</Label>
-                    <Input
-                      value={formNatural.lugar_nacimiento}
-                      onChange={(e) => handleNaturalChange('lugar_nacimiento', e.target.value)}
-                    />
+                    <Input value={formNatural.lugar_nacimiento} onChange={(e) => handleNaturalChange('lugar_nacimiento', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Nacionalidad</Label>
-                    <Input
-                      value={formNatural.nacionalidad}
-                      onChange={(e) => handleNaturalChange('nacionalidad', e.target.value)}
-                    />
+                    <Input value={formNatural.nacionalidad} onChange={(e) => handleNaturalChange('nacionalidad', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Sexo</Label>
-                    <Select
-                      value={formNatural.sexo}
-                      onValueChange={(value) => handleNaturalChange('sexo', value)}
-                    >
+                    <Select value={formNatural.sexo} onValueChange={(value) => handleNaturalChange('sexo', value)}>
                       <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="M">Masculino</SelectItem>
@@ -1417,10 +1046,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                   </div>
                   <div className="space-y-2">
                     <Label>Estado Civil</Label>
-                    <Select
-                      value={formNatural.estado_civil}
-                      onValueChange={(value) => handleNaturalChange('estado_civil', value)}
-                    >
+                    <Select value={formNatural.estado_civil} onValueChange={(value) => handleNaturalChange('estado_civil', value)}>
                       <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                       <SelectContent>
                         {ESTADO_CIVIL_OPTIONS.map((opt) => (
@@ -1431,10 +1057,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                   </div>
                   <div className="space-y-2">
                     <Label>Tipo de Solicitud *</Label>
-                    <Select
-                      value={formNatural.tipo_solicitud}
-                      onValueChange={(value) => handleNaturalChange('tipo_solicitud', value)}
-                    >
+                    <Select value={formNatural.tipo_solicitud} onValueChange={(value) => handleNaturalChange('tipo_solicitud', value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {TIPO_SOLICITUD_OPTIONS.map((opt) => (
@@ -1455,76 +1078,43 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label>Dirección de Residencia</Label>
-                    <Input
-                      value={formNatural.direccion_residencia}
-                      onChange={(e) => handleNaturalChange('direccion_residencia', e.target.value)}
-                    />
+                    <Input value={formNatural.direccion_residencia} onChange={(e) => handleNaturalChange('direccion_residencia', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Municipio</Label>
-                    <Input
-                      value={formNatural.municipio_residencia}
-                      onChange={(e) => handleNaturalChange('municipio_residencia', e.target.value)}
-                    />
+                    <Input value={formNatural.municipio_residencia} onChange={(e) => handleNaturalChange('municipio_residencia', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Departamento</Label>
-                    <Input
-                      value={formNatural.departamento_residencia}
-                      onChange={(e) => handleNaturalChange('departamento_residencia', e.target.value)}
-                    />
+                    <Input value={formNatural.departamento_residencia} onChange={(e) => handleNaturalChange('departamento_residencia', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>País</Label>
-                    <Input
-                      value={formNatural.pais_residencia}
-                      onChange={(e) => handleNaturalChange('pais_residencia', e.target.value)}
-                    />
+                    <Input value={formNatural.pais_residencia} onChange={(e) => handleNaturalChange('pais_residencia', e.target.value)} />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label>Dirección Laboral (opcional)</Label>
-                    <Input
-                      value={formNatural.direccion_laboral}
-                      onChange={(e) => handleNaturalChange('direccion_laboral', e.target.value)}
-                    />
+                    <Input value={formNatural.direccion_laboral} onChange={(e) => handleNaturalChange('direccion_laboral', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Municipio Laboral</Label>
-                    <Input
-                      value={formNatural.municipio_laboral}
-                      onChange={(e) => handleNaturalChange('municipio_laboral', e.target.value)}
-                    />
+                    <Input value={formNatural.municipio_laboral} onChange={(e) => handleNaturalChange('municipio_laboral', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Departamento Laboral</Label>
-                    <Input
-                      value={formNatural.departamento_laboral}
-                      onChange={(e) => handleNaturalChange('departamento_laboral', e.target.value)}
-                    />
+                    <Input value={formNatural.departamento_laboral} onChange={(e) => handleNaturalChange('departamento_laboral', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Teléfono Fijo</Label>
-                    <Input
-                      value={formNatural.telefono_fijo}
-                      onChange={(e) => handleNaturalChange('telefono_fijo', e.target.value)}
-                    />
+                    <Input value={formNatural.telefono_fijo} onChange={(e) => handleNaturalChange('telefono_fijo', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Celular *</Label>
-                    <Input
-                      value={formNatural.celular}
-                      onChange={(e) => handleNaturalChange('celular', e.target.value)}
-                      required
-                    />
+                    <Input value={formNatural.celular} onChange={(e) => handleNaturalChange('celular', e.target.value)} required />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label>Correo Electrónico *</Label>
-                    <Input
-                      type="email"
-                      value={formNatural.correo_electronico}
-                      onChange={(e) => handleNaturalChange('correo_electronico', e.target.value)}
-                      required
-                    />
+                    <Input type="email" value={formNatural.correo_electronico} onChange={(e) => handleNaturalChange('correo_electronico', e.target.value)} required />
                   </div>
                 </div>
               </div>
@@ -1538,38 +1128,23 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Ocupación / Profesión / Oficio</Label>
-                    <Input
-                      value={formNatural.ocupacion}
-                      onChange={(e) => handleNaturalChange('ocupacion', e.target.value)}
-                    />
+                    <Input value={formNatural.ocupacion} onChange={(e) => handleNaturalChange('ocupacion', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Nombre de la Empresa</Label>
-                    <Input
-                      value={formNatural.nombre_empresa}
-                      onChange={(e) => handleNaturalChange('nombre_empresa', e.target.value)}
-                    />
+                    <Input value={formNatural.nombre_empresa} onChange={(e) => handleNaturalChange('nombre_empresa', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Cargo</Label>
-                    <Input
-                      value={formNatural.cargo}
-                      onChange={(e) => handleNaturalChange('cargo', e.target.value)}
-                    />
+                    <Input value={formNatural.cargo} onChange={(e) => handleNaturalChange('cargo', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Actividad Económica (CIIU)</Label>
-                    <Input
-                      value={formNatural.actividad_economica_ciiu}
-                      onChange={(e) => handleNaturalChange('actividad_economica_ciiu', e.target.value)}
-                    />
+                    <Input value={formNatural.actividad_economica_ciiu} onChange={(e) => handleNaturalChange('actividad_economica_ciiu', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Tipo de Empleo</Label>
-                    <Select
-                      value={formNatural.tipo_empleo}
-                      onValueChange={(value) => handleNaturalChange('tipo_empleo', value)}
-                    >
+                    <Select value={formNatural.tipo_empleo} onValueChange={(value) => handleNaturalChange('tipo_empleo', value)}>
                       <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                       <SelectContent>
                         {TIPO_EMPLEO_OPTIONS.map((opt) => (
@@ -1590,58 +1165,31 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Ingresos Mensuales *</Label>
-                    <Input
-                      value={currencyDisplays.ingresos_mensuales}
-                      onChange={(e) => handleCurrencyChange('ingresos_mensuales', e.target.value)}
-                      required
-                    />
+                    <Input value={currencyDisplays.ingresos_mensuales} onChange={(e) => handleCurrencyChange('ingresos_mensuales', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Egresos Mensuales *</Label>
-                    <Input
-                      value={currencyDisplays.egresos_mensuales}
-                      onChange={(e) => handleCurrencyChange('egresos_mensuales', e.target.value)}
-                      required
-                    />
+                    <Input value={currencyDisplays.egresos_mensuales} onChange={(e) => handleCurrencyChange('egresos_mensuales', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Total Activos *</Label>
-                    <Input
-                      value={currencyDisplays.total_activos}
-                      onChange={(e) => handleCurrencyChange('total_activos', e.target.value)}
-                      required
-                    />
+                    <Input value={currencyDisplays.total_activos} onChange={(e) => handleCurrencyChange('total_activos', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Total Pasivos *</Label>
-                    <Input
-                      value={currencyDisplays.total_pasivos}
-                      onChange={(e) => handleCurrencyChange('total_pasivos', e.target.value)}
-                      required
-                    />
+                    <Input value={currencyDisplays.total_pasivos} onChange={(e) => handleCurrencyChange('total_pasivos', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Total Patrimonio (calculado)</Label>
-                    <Input
-                      value={formatCurrency(patrimonioNatural)}
-                      disabled
-                      className="bg-gray-100"
-                    />
+                    <Input value={formatCurrency(patrimonioNatural)} disabled className="bg-gray-100" />
                   </div>
                   <div className="space-y-2">
                     <Label>Otros Ingresos Mensuales</Label>
-                    <Input
-                      value={currencyDisplays.otros_ingresos}
-                      onChange={(e) => handleCurrencyChange('otros_ingresos', e.target.value)}
-                    />
+                    <Input value={currencyDisplays.otros_ingresos} onChange={(e) => handleCurrencyChange('otros_ingresos', e.target.value)} />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label>Concepto de Otros Ingresos</Label>
-                    <Input
-                      value={formNatural.concepto_otros_ingresos}
-                      onChange={(e) => handleNaturalChange('concepto_otros_ingresos', e.target.value)}
-                      placeholder="Ej: Arrendamientos, dividendos..."
-                    />
+                    <Input value={formNatural.concepto_otros_ingresos} onChange={(e) => handleNaturalChange('concepto_otros_ingresos', e.target.value)} placeholder="Ej: Arrendamientos, dividendos..." />
                   </div>
                 </div>
               </div>
@@ -1662,35 +1210,19 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label>Razón Social / Denominación Social *</Label>
-                    <Input
-                      value={formJuridica.razon_social}
-                      onChange={(e) => handleJuridicaChange('razon_social', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.razon_social} onChange={(e) => handleJuridicaChange('razon_social', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>NIT *</Label>
-                    <Input
-                      value={formJuridica.nit}
-                      onChange={(e) => handleJuridicaChange('nit', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.nit} onChange={(e) => handleJuridicaChange('nit', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Dígito de Verificación *</Label>
-                    <Input
-                      value={formJuridica.digito_verificacion}
-                      onChange={(e) => handleJuridicaChange('digito_verificacion', e.target.value)}
-                      maxLength={1}
-                      required
-                    />
+                    <Input value={formJuridica.digito_verificacion} onChange={(e) => handleJuridicaChange('digito_verificacion', e.target.value)} maxLength={1} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Tipo de Empresa *</Label>
-                    <Select
-                      value={formJuridica.tipo_empresa}
-                      onValueChange={(value) => handleJuridicaChange('tipo_empresa', value)}
-                    >
+                    <Select value={formJuridica.tipo_empresa} onValueChange={(value) => handleJuridicaChange('tipo_empresa', value)}>
                       <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                       <SelectContent>
                         {TIPO_EMPRESA_OPTIONS.map((opt) => (
@@ -1701,32 +1233,19 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                   </div>
                   <div className="space-y-2">
                     <Label>Actividad Económica CIIU Principal</Label>
-                    <Input
-                      value={formJuridica.actividad_economica_ciiu_principal}
-                      onChange={(e) => handleJuridicaChange('actividad_economica_ciiu_principal', e.target.value)}
-                    />
+                    <Input value={formJuridica.actividad_economica_ciiu_principal} onChange={(e) => handleJuridicaChange('actividad_economica_ciiu_principal', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Actividad Económica CIIU Secundaria</Label>
-                    <Input
-                      value={formJuridica.actividad_economica_ciiu_secundaria}
-                      onChange={(e) => handleJuridicaChange('actividad_economica_ciiu_secundaria', e.target.value)}
-                    />
+                    <Input value={formJuridica.actividad_economica_ciiu_secundaria} onChange={(e) => handleJuridicaChange('actividad_economica_ciiu_secundaria', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Número de Empleados</Label>
-                    <Input
-                      type="number"
-                      value={formJuridica.numero_empleados}
-                      onChange={(e) => handleJuridicaChange('numero_empleados', e.target.value)}
-                    />
+                    <Input type="number" value={formJuridica.numero_empleados} onChange={(e) => handleJuridicaChange('numero_empleados', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Tipo de Solicitud *</Label>
-                    <Select
-                      value={formJuridica.tipo_solicitud}
-                      onValueChange={(value) => handleJuridicaChange('tipo_solicitud', value)}
-                    >
+                    <Select value={formJuridica.tipo_solicitud} onValueChange={(value) => handleJuridicaChange('tipo_solicitud', value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {TIPO_SOLICITUD_OPTIONS.map((opt) => (
@@ -1747,67 +1266,35 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label>Dirección Principal *</Label>
-                    <Input
-                      value={formJuridica.direccion_principal}
-                      onChange={(e) => handleJuridicaChange('direccion_principal', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.direccion_principal} onChange={(e) => handleJuridicaChange('direccion_principal', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Municipio *</Label>
-                    <Input
-                      value={formJuridica.municipio}
-                      onChange={(e) => handleJuridicaChange('municipio', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.municipio} onChange={(e) => handleJuridicaChange('municipio', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Departamento *</Label>
-                    <Input
-                      value={formJuridica.departamento}
-                      onChange={(e) => handleJuridicaChange('departamento', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.departamento} onChange={(e) => handleJuridicaChange('departamento', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>País *</Label>
-                    <Input
-                      value={formJuridica.pais}
-                      onChange={(e) => handleJuridicaChange('pais', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.pais} onChange={(e) => handleJuridicaChange('pais', e.target.value)} required />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label>Dirección Sucursal o Agencia (opcional)</Label>
-                    <Input
-                      value={formJuridica.direccion_sucursal}
-                      onChange={(e) => handleJuridicaChange('direccion_sucursal', e.target.value)}
-                    />
+                    <Input value={formJuridica.direccion_sucursal} onChange={(e) => handleJuridicaChange('direccion_sucursal', e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label>Teléfono *</Label>
-                    <Input
-                      value={formJuridica.telefono}
-                      onChange={(e) => handleJuridicaChange('telefono', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.telefono} onChange={(e) => handleJuridicaChange('telefono', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Celular *</Label>
-                    <Input
-                      value={formJuridica.celular}
-                      onChange={(e) => handleJuridicaChange('celular', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.celular} onChange={(e) => handleJuridicaChange('celular', e.target.value)} required />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label>Correo Electrónico *</Label>
-                    <Input
-                      type="email"
-                      value={formJuridica.correo_electronico}
-                      onChange={(e) => handleJuridicaChange('correo_electronico', e.target.value)}
-                      required
-                    />
+                    <Input type="email" value={formJuridica.correo_electronico} onChange={(e) => handleJuridicaChange('correo_electronico', e.target.value)} required />
                   </div>
                 </div>
               </div>
@@ -1821,33 +1308,19 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Primer Apellido *</Label>
-                    <Input
-                      value={formJuridica.rep_primer_apellido}
-                      onChange={(e) => handleJuridicaChange('rep_primer_apellido', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.rep_primer_apellido} onChange={(e) => handleJuridicaChange('rep_primer_apellido', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Segundo Apellido</Label>
-                    <Input
-                      value={formJuridica.rep_segundo_apellido}
-                      onChange={(e) => handleJuridicaChange('rep_segundo_apellido', e.target.value)}
-                    />
+                    <Input value={formJuridica.rep_segundo_apellido} onChange={(e) => handleJuridicaChange('rep_segundo_apellido', e.target.value)} />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label>Nombre(s) *</Label>
-                    <Input
-                      value={formJuridica.rep_nombres}
-                      onChange={(e) => handleJuridicaChange('rep_nombres', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.rep_nombres} onChange={(e) => handleJuridicaChange('rep_nombres', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Tipo de Identificación *</Label>
-                    <Select
-                      value={formJuridica.rep_tipo_identificacion}
-                      onValueChange={(value) => handleJuridicaChange('rep_tipo_identificacion', value)}
-                    >
+                    <Select value={formJuridica.rep_tipo_identificacion} onValueChange={(value) => handleJuridicaChange('rep_tipo_identificacion', value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {TIPO_IDENTIFICACION_JURIDICA.map((tipo) => (
@@ -1858,52 +1331,27 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                   </div>
                   <div className="space-y-2">
                     <Label>Número de Identificación *</Label>
-                    <Input
-                      value={formJuridica.rep_numero_identificacion}
-                      onChange={(e) => handleJuridicaChange('rep_numero_identificacion', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.rep_numero_identificacion} onChange={(e) => handleJuridicaChange('rep_numero_identificacion', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Lugar de Expedición *</Label>
-                    <Input
-                      value={formJuridica.rep_lugar_expedicion}
-                      onChange={(e) => handleJuridicaChange('rep_lugar_expedicion', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.rep_lugar_expedicion} onChange={(e) => handleJuridicaChange('rep_lugar_expedicion', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Fecha de Expedición *</Label>
-                    <Input
-                      type="date"
-                      value={formJuridica.rep_fecha_expedicion}
-                      onChange={(e) => handleJuridicaChange('rep_fecha_expedicion', e.target.value)}
-                      required
-                    />
+                    <Input type="date" value={formJuridica.rep_fecha_expedicion} onChange={(e) => handleJuridicaChange('rep_fecha_expedicion', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Fecha de Nacimiento *</Label>
-                    <Input
-                      type="date"
-                      value={formJuridica.rep_fecha_nacimiento}
-                      onChange={(e) => handleJuridicaChange('rep_fecha_nacimiento', e.target.value)}
-                      required
-                    />
+                    <Input type="date" value={formJuridica.rep_fecha_nacimiento} onChange={(e) => handleJuridicaChange('rep_fecha_nacimiento', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Lugar de Nacimiento *</Label>
-                    <Input
-                      value={formJuridica.rep_lugar_nacimiento}
-                      onChange={(e) => handleJuridicaChange('rep_lugar_nacimiento', e.target.value)}
-                      required
-                    />
+                    <Input value={formJuridica.rep_lugar_nacimiento} onChange={(e) => handleJuridicaChange('rep_lugar_nacimiento', e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Sexo</Label>
-                    <Select
-                      value={formJuridica.rep_sexo}
-                      onValueChange={(value) => handleJuridicaChange('rep_sexo', value)}
-                    >
+                    <Select value={formJuridica.rep_sexo} onValueChange={(value) => handleJuridicaChange('rep_sexo', value)}>
                       <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="M">Masculino</SelectItem>
@@ -1913,10 +1361,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                   </div>
                   <div className="space-y-2">
                     <Label>Estado Civil</Label>
-                    <Select
-                      value={formJuridica.rep_estado_civil}
-                      onValueChange={(value) => handleJuridicaChange('rep_estado_civil', value)}
-                    >
+                    <Select value={formJuridica.rep_estado_civil} onValueChange={(value) => handleJuridicaChange('rep_estado_civil', value)}>
                       <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                       <SelectContent>
                         {ESTADO_CIVIL_OPTIONS.map((opt) => (
@@ -1927,10 +1372,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                   </div>
                   <div className="space-y-2">
                     <Label>Nacionalidad</Label>
-                    <Input
-                      value={formJuridica.rep_nacionalidad}
-                      onChange={(e) => handleJuridicaChange('rep_nacionalidad', e.target.value)}
-                    />
+                    <Input value={formJuridica.rep_nacionalidad} onChange={(e) => handleJuridicaChange('rep_nacionalidad', e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -1944,50 +1386,27 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Total Activos *</Label>
-                    <Input
-                      value={currencyDisplays.jur_total_activos}
-                      onChange={(e) => handleCurrencyChange('total_activos', e.target.value, true)}
-                      required
-                    />
+                    <Input value={currencyDisplays.jur_total_activos} onChange={(e) => handleCurrencyChange('total_activos', e.target.value, true)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Total Pasivos *</Label>
-                    <Input
-                      value={currencyDisplays.jur_total_pasivos}
-                      onChange={(e) => handleCurrencyChange('total_pasivos', e.target.value, true)}
-                      required
-                    />
+                    <Input value={currencyDisplays.jur_total_pasivos} onChange={(e) => handleCurrencyChange('total_pasivos', e.target.value, true)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Total Patrimonio *</Label>
-                    <Input
-                      value={currencyDisplays.jur_total_patrimonio}
-                      onChange={(e) => handleCurrencyChange('total_patrimonio', e.target.value, true)}
-                      required
-                    />
+                    <Input value={currencyDisplays.jur_total_patrimonio} onChange={(e) => handleCurrencyChange('total_patrimonio', e.target.value, true)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Ingresos Mensuales *</Label>
-                    <Input
-                      value={currencyDisplays.jur_ingresos_mensuales}
-                      onChange={(e) => handleCurrencyChange('ingresos_mensuales', e.target.value, true)}
-                      required
-                    />
+                    <Input value={currencyDisplays.jur_ingresos_mensuales} onChange={(e) => handleCurrencyChange('ingresos_mensuales', e.target.value, true)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Egresos Mensuales *</Label>
-                    <Input
-                      value={currencyDisplays.jur_egresos_mensuales}
-                      onChange={(e) => handleCurrencyChange('egresos_mensuales', e.target.value, true)}
-                      required
-                    />
+                    <Input value={currencyDisplays.jur_egresos_mensuales} onChange={(e) => handleCurrencyChange('egresos_mensuales', e.target.value, true)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Otros Ingresos Mensuales</Label>
-                    <Input
-                      value={currencyDisplays.jur_otros_ingresos}
-                      onChange={(e) => handleCurrencyChange('otros_ingresos', e.target.value, true)}
-                    />
+                    <Input value={currencyDisplays.jur_otros_ingresos} onChange={(e) => handleCurrencyChange('otros_ingresos', e.target.value, true)} />
                   </div>
                 </div>
               </div>
@@ -1995,15 +1414,193 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
           )}
 
           {/* ============================================= */}
+          {/* SECCIÓN 5: PROPIEDAD CRM (Común a ambos) */}
+          {/* ============================================= */}
+          <div className="border rounded-lg p-4 space-y-4 bg-slate-50">
+            <h3 className="font-semibold flex items-center gap-2">
+              <Briefcase className="w-4 h-4" />
+              Sección 5 – Propiedad CRM
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Usuario Tenant</Label>
+                <Input value={currentUser?.full_name || 'Cargando...'} disabled className="bg-gray-100" />
+                <p className="text-xs text-muted-foreground">Se asigna automáticamente</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  Aliado / Referido por
+                  {!canEditAlliedField && !loadingPermissions && <Lock className="w-3 h-3 text-muted-foreground" />}
+                </Label>
+                {loadingPermissions || loadingAllies ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Cargando...
+                  </div>
+                ) : !canEditAlliedField ? (
+                  <Input value={selectedAllyName || 'Directo (sin aliado)'} disabled className="bg-gray-100" />
+                ) : (
+                  <Popover open={allyOpen} onOpenChange={setAllyOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between">
+                        {selectedAllyName || 'Directo (sin aliado)'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                        <input placeholder="Buscar aliado..." value={allySearch} onChange={(e) => setAllySearch(e.target.value)} className="flex h-10 w-full bg-transparent py-3 text-sm outline-none" />
+                      </div>
+                      <div className="max-h-60 overflow-auto p-1">
+                        <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent" onClick={() => { setSelectedAllyId(null); setAllyOpen(false); setAllySearch(''); }}>
+                          <Check className={cn("mr-2 h-4 w-4", !selectedAllyId ? "opacity-100" : "opacity-0")} />
+                          Directo (sin aliado)
+                        </div>
+                        {filteredAllies.map((ally) => (
+                          <div key={ally.id} className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent" onClick={() => { setSelectedAllyId(ally.id); setAllyOpen(false); setAllySearch(''); }}>
+                            <Check className={cn("mr-2 h-4 w-4", selectedAllyId === ally.id ? "opacity-100" : "opacity-0")} />
+                            {ally.full_name}
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Comercial Asignado</Label>
+                {loadingComerciales ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Cargando...
+                  </div>
+                ) : comerciales.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No hay usuarios comerciales configurados.</p>
+                ) : (
+                  <Popover open={comercialOpen} onOpenChange={setComercialOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between">
+                        {selectedComercialName || 'Sin comercial asignado'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                        <input placeholder="Buscar comercial..." value={comercialSearch} onChange={(e) => setComercialSearch(e.target.value)} className="flex h-10 w-full bg-transparent py-3 text-sm outline-none" />
+                      </div>
+                      <div className="max-h-60 overflow-auto p-1">
+                        <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent" onClick={() => { setSelectedComercialId(null); setComercialOpen(false); setComercialSearch(''); }}>
+                          <Check className={cn("mr-2 h-4 w-4", !selectedComercialId ? "opacity-100" : "opacity-0")} />
+                          Sin comercial asignado
+                        </div>
+                        {filteredComerciales.map((comercial) => (
+                          <div key={comercial.id} className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent" onClick={() => { setSelectedComercialId(comercial.id); setComercialOpen(false); setComercialSearch(''); }}>
+                            <Check className={cn("mr-2 h-4 w-4", selectedComercialId === comercial.id ? "opacity-100" : "opacity-0")} />
+                            {comercial.full_name}
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  Grupo Empresarial
+                  <Building2 className="w-3 h-3 text-muted-foreground" />
+                </Label>
+                {loadingGrupos ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Cargando...
+                  </div>
+                ) : gruposEmpresariales.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No hay grupos empresariales creados.</p>
+                ) : (
+                  <Popover open={grupoOpen} onOpenChange={setGrupoOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between">
+                        {selectedGrupoName || 'Sin grupo empresarial'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                        <input placeholder="Buscar grupo..." value={grupoSearch} onChange={(e) => setGrupoSearch(e.target.value)} className="flex h-10 w-full bg-transparent py-3 text-sm outline-none" />
+                      </div>
+                      <div className="max-h-60 overflow-auto p-1">
+                        <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent" onClick={() => { setSelectedGrupoId(null); setGrupoOpen(false); setGrupoSearch(''); }}>
+                          <Check className={cn("mr-2 h-4 w-4", !selectedGrupoId ? "opacity-100" : "opacity-0")} />
+                          Sin grupo empresarial
+                        </div>
+                        {filteredGrupos.map((grupo) => (
+                          <div key={grupo.id} className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent" onClick={() => { setSelectedGrupoId(grupo.id); setGrupoOpen(false); setGrupoSearch(''); }}>
+                            <Check className={cn("mr-2 h-4 w-4", selectedGrupoId === grupo.id ? "opacity-100" : "opacity-0")} />
+                            {grupo.nombre}
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+                <p className="text-xs text-muted-foreground">Agrupa clientes del mismo grupo económico</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ============================================= */}
+          {/* SECCIÓN 6: DOCUMENTOS (Sin IA, ya está arriba) */}
+          {/* ============================================= */}
+          <div className="border rounded-lg p-4 space-y-4">
+            <h3 className="font-semibold flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Sección 6 – Documentos Adjuntos
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {documentsList.map((docType) => {
+                const uploadedDoc = documents.find(d => d.name === docType.key);
+                return (
+                  <div key={docType.key} className="border rounded-lg p-3 space-y-2">
+                    <Label className="text-sm">{docType.label}</Label>
+                    {uploadedDoc ? (
+                      <div className="flex items-center justify-between bg-green-50 p-2 rounded">
+                        <div className="flex items-center gap-2">
+                          <FileCheck className="w-4 h-4 text-green-600" />
+                          <span className="text-sm text-green-700 truncate max-w-[150px]">{uploadedDoc.file_name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">Cargado</span>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveDocument(uploadedDoc.id)} className="h-6 w-6 p-0 text-red-500 hover:text-red-700">
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFileUpload(docType.key, file);
+                          }}
+                          disabled={uploadingDoc === docType.key}
+                          className="text-sm"
+                        />
+                        {uploadingDoc === docType.key && <Loader2 className="w-4 h-4 animate-spin" />}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ============================================= */}
           {/* BOTONES DE ACCIÓN */}
           {/* ============================================= */}
           <div className="flex justify-end gap-4 pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.back()}
-              disabled={isSubmitting}
-            >
+            <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>
               Cancelar
             </Button>
             <Button type="submit" disabled={isSubmitting}>
