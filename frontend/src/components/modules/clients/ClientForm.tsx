@@ -645,9 +645,21 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
             </div>
           )}
 
-          {/* Selector de Tipo de Cliente */}
+        {/* Selector de Tipo de Cliente */}
           <div className="space-y-2">
-            <Label>Tipo de Cliente *</Label>
+            <div className="flex items-center justify-between">
+              <Label>Tipo de Cliente *</Label>
+              {initialData?.updated_at && (
+                <span className="text-xs text-muted-foreground">
+                  Ultima actualizacion: {new Date(initialData.updated_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+              {!initialData?.updated_at && initialData?.created_at && (
+                <span className="text-xs text-muted-foreground">
+                  Creado: {new Date(initialData.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
             <Select value={clientType} onValueChange={(value: 'persona_natural' | 'persona_juridica') => { setClientType(value); setFormErrors({}); }} disabled={isEditing}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
