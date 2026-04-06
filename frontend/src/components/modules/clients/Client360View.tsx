@@ -163,7 +163,7 @@ export function Client360View({ client }: Client360ViewProps) {
 
       {/* Tabs de contenido */}
       <Tabs defaultValue="polizas" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="polizas" className="gap-2">
             <FileText className="w-4 h-4" />
             <span className="hidden sm:inline">Pólizas</span>
@@ -171,14 +171,6 @@ export function Client360View({ client }: Client360ViewProps) {
           <TabsTrigger value="siniestros" className="gap-2">
             <AlertTriangle className="w-4 h-4" />
             <span className="hidden sm:inline">Siniestros</span>
-          </TabsTrigger>
-          <TabsTrigger value="cuotas" className="gap-2">
-            <CreditCard className="w-4 h-4" />
-            <span className="hidden sm:inline">Cuotas</span>
-          </TabsTrigger>
-          <TabsTrigger value="comparativos" className="gap-2">
-            <BarChart3 className="w-4 h-4" />
-            <span className="hidden sm:inline">Comparativos</span>
           </TabsTrigger>
         </TabsList>
 
@@ -248,7 +240,7 @@ export function Client360View({ client }: Client360ViewProps) {
           </Card>
         </TabsContent>
 
-        {/* Tab: Siniestros (ahora con link a M03) */}
+        {/* Tab: Siniestros */}
         <TabsContent value="siniestros">
           <Card>
             <CardHeader>
@@ -266,48 +258,6 @@ export function Client360View({ client }: Client360ViewProps) {
                     Ver Siniestros
                   </Button>
                 </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab: Cuotas (Stub M05) */}
-        <TabsContent value="cuotas">
-          <Card>
-            <CardHeader>
-              <CardTitle>Cuotas y Pagos</CardTitle>
-              <CardDescription>
-                Estado de cuotas y pagos pendientes
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8">
-                <CreditCard className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground">Módulo de Facturación (M05)</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Esta funcionalidad estará disponible próximamente
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab: Comparativos (Stub M09) */}
-        <TabsContent value="comparativos">
-          <Card>
-            <CardHeader>
-              <CardTitle>Comparativos con IA</CardTitle>
-              <CardDescription>
-                Análisis y comparativas de pólizas
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8">
-                <BarChart3 className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground">Módulo de Comparativos IA (M09)</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Esta funcionalidad estará disponible próximamente
-                </p>
               </div>
             </CardContent>
           </Card>
