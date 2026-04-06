@@ -26,14 +26,9 @@ import {
   ChevronsUpDown,
   Search,
   Lock,
-  Users,
   Briefcase,
   Building2,
-  Upload,
   FileText,
-  Trash2,
-  Sparkles,
-  CheckCircle,
   AlertTriangle,
   User,
   MapPin,
@@ -150,7 +145,6 @@ const parseCurrencyValue = (value: string): number => {
 
 export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) {
   const router = useRouter();
-  const { tenantPlan } = useTenant();
   const supabase = createClient();
   const formRef = useRef<HTMLFormElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -162,15 +156,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   const [clientType, setClientType] = useState<'persona_natural' | 'persona_juridica'>(
     initialData?.segment || 'persona_natural'
   );
-
-  // IA
-  const [isExtractingAI, setIsExtractingAI] = useState(false);
-  const [aiExtractionResult, setAiExtractionResult] = useState<{
-    success: boolean;
-    needsVerification: boolean;
-    verificationFields?: string[];
-    error?: string;
-  } | null>(null);
 
   // Documentos
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
@@ -209,7 +194,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   const clientHasAllied = Boolean(initialData?.allied_agent_id);
   const isAdmin = userRole === 'admin' || userRole === 'superadmin';
   const canEditAlliedField = isAdmin || !isEditing || !clientHasAllied || canModifyAllied;
-  const hasPremiumAccess = tenantPlan === 'premium' || tenantPlan === 'trial';
 
   // Form state para Persona Natural
   const [formNatural, setFormNatural] = useState({
@@ -306,7 +290,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
 
   // Helper para clase de error
   const err = (field: string) => formErrors[field] ? 'border-red-500 focus-visible:ring-red-500' : '';
-  const errSelect = (field: string) => formErrors[field] ? 'border-red-500' : '';
 
   // =====================================================
   // EFFECTS
@@ -414,13 +397,11 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
       const fileName = `${tenantId}/${Date.now()}_${file.name}`;
       const { data: uploadData, error: uploadError } = await supabase.storage.from('client-documents').upload(fileName, file);
       if (uploadError) { console.error('Upload error:', uploadError); alert('Error al subir el archivo'); return; }
-      // Guardamos solo la ruta del archivo, NO la URL publica (el bucket es privado)
       const newDoc: UploadedDocument = { id: `temp_${Date.now()}`, name: docKey, file_name: file.name, file_url: fileName, file_type: fileExt || 'pdf', uploaded_at: new Date().toISOString(), status: 'cargado' };
       setDocuments(prev => [...prev, newDoc]);
     } catch (e) { console.error('Error uploading file:', e); alert('Error al subir el archivo'); } finally { setUploadingDoc(null); }
   };
 
-  // Extraer ruta de storage (compatible con URLs publicas viejas y rutas nuevas)
   const getStoragePath = (fileUrl: string): string => {
     if (!fileUrl.startsWith('http')) return fileUrl;
     const marker = '/client-documents/';
@@ -451,12 +432,9 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     const doc = documents.find(d => d.id === docId);
     if (!doc) return;
 
-    // Si es un documento guardado en BD (no temporal), eliminarlo de Supabase
     if (!doc.id.startsWith('temp_')) {
       try {
-        // Eliminar de la tabla client_documents
         await (supabase as any).from('client_documents').delete().eq('id', docId);
-        // Eliminar el archivo del storage
         const path = getStoragePath(doc.file_url);
         await supabase.storage.from('client-documents').remove([path]);
       } catch (e) {
@@ -467,54 +445,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
     }
 
     setDocuments(prev => prev.filter(d => d.id !== docId));
-  };
-
-  const handleExtractWithAI = async () => {
-    if (documents.length === 0) { alert('Por favor, carga al menos un documento para analizar'); return; }
-    setIsExtractingAI(true);
-    setAiExtractionResult(null);
-    try {
-      // Para la IA, necesitamos obtener el archivo via signed URL
-      const filesForAI = await Promise.all(
-        documents.map(async (doc) => {
-          try {
-            const path = getStoragePath(doc.file_url);
-            const { data: signedData } = await supabase.storage.from('client-documents').createSignedUrl(path, 120);
-            if (!signedData?.signedUrl) return null;
-            const response = await fetch(signedData.signedUrl);
-            const blob = await response.blob();
-            const base64 = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as string); reader.onerror = reject; reader.readAsDataURL(blob); });
-            return { name: doc.file_name, file_type: doc.file_type, base64_content: base64 };
-          } catch (e) { console.error(`Error reading file ${doc.file_name}:`, e); return null; }
-        })
-      );
-      const validFiles = filesForAI.filter(f => f !== null);
-      if (validFiles.length === 0) { setAiExtractionResult({ success: false, needsVerification: false, error: 'No se pudieron leer los archivos' }); return; }
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-      const response = await fetch(`${backendUrl}/api/ai/extract-client`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tenantId, client_type: clientType, files: validFiles }) });
-      const result = await response.json();
-      if (result.success && result.data) {
-        if (clientType === 'persona_natural') {
-          const data = result.data;
-          if (data.informacion_personal) { const ip = data.informacion_personal; setFormNatural(prev => ({ ...prev, primer_apellido: ip.primer_apellido || prev.primer_apellido, segundo_apellido: ip.segundo_apellido || prev.segundo_apellido, primer_nombre: ip.primer_nombre || prev.primer_nombre, otros_nombres: ip.otros_nombres || prev.otros_nombres, tipo_identificacion: ip.tipo_identificacion || prev.tipo_identificacion, numero_identificacion: ip.numero_identificacion || prev.numero_identificacion, lugar_expedicion: ip.lugar_expedicion || prev.lugar_expedicion, fecha_expedicion: ip.fecha_expedicion || prev.fecha_expedicion, fecha_nacimiento: ip.fecha_nacimiento || prev.fecha_nacimiento, lugar_nacimiento: ip.lugar_nacimiento || prev.lugar_nacimiento, nacionalidad: ip.nacionalidad || prev.nacionalidad, sexo: ip.sexo || prev.sexo, estado_civil: ip.estado_civil || prev.estado_civil, tipo_solicitud: ip.tipo_solicitud || prev.tipo_solicitud })); }
-          if (data.ubicacion_contacto) { const uc = data.ubicacion_contacto; setFormNatural(prev => ({ ...prev, direccion_residencia: uc.direccion_residencia || prev.direccion_residencia, municipio_residencia: uc.municipio_residencia || prev.municipio_residencia, departamento_residencia: uc.departamento_residencia || prev.departamento_residencia, pais_residencia: uc.pais_residencia || prev.pais_residencia, direccion_laboral: uc.direccion_laboral || prev.direccion_laboral, municipio_laboral: uc.municipio_laboral || prev.municipio_laboral, departamento_laboral: uc.departamento_laboral || prev.departamento_laboral, telefono_fijo: uc.telefono_fijo || prev.telefono_fijo, celular: uc.celular || prev.celular, correo_electronico: uc.correo_electronico || prev.correo_electronico })); }
-          if (data.informacion_laboral) { const il = data.informacion_laboral; setFormNatural(prev => ({ ...prev, ocupacion: il.ocupacion || prev.ocupacion, nombre_empresa: il.nombre_empresa || prev.nombre_empresa, cargo: il.cargo || prev.cargo, actividad_economica_ciiu: il.actividad_economica_ciiu || prev.actividad_economica_ciiu, tipo_empleo: il.tipo_empleo || prev.tipo_empleo })); }
-          if (data.informacion_financiera) { const inf = data.informacion_financiera; if (inf.ingresos_mensuales) handleCurrencyChange('ingresos_mensuales', String(inf.ingresos_mensuales)); if (inf.egresos_mensuales) handleCurrencyChange('egresos_mensuales', String(inf.egresos_mensuales)); if (inf.total_activos) handleCurrencyChange('total_activos', String(inf.total_activos)); if (inf.total_pasivos) handleCurrencyChange('total_pasivos', String(inf.total_pasivos)); if (inf.otros_ingresos) handleCurrencyChange('otros_ingresos', String(inf.otros_ingresos)); if (inf.concepto_otros_ingresos) setFormNatural(prev => ({ ...prev, concepto_otros_ingresos: inf.concepto_otros_ingresos })); }
-        } else {
-          const data = result.data;
-          if (data.informacion_general) { const ig = data.informacion_general; setFormJuridica(prev => ({ ...prev, razon_social: ig.razon_social || prev.razon_social, nit: ig.nit || prev.nit, digito_verificacion: ig.digito_verificacion || prev.digito_verificacion, tipo_empresa: ig.tipo_empresa || prev.tipo_empresa, actividad_economica_ciiu_principal: ig.actividad_economica_ciiu_principal || prev.actividad_economica_ciiu_principal, actividad_economica_ciiu_secundaria: ig.actividad_economica_ciiu_secundaria || prev.actividad_economica_ciiu_secundaria, numero_empleados: ig.numero_empleados || prev.numero_empleados, tipo_solicitud: ig.tipo_solicitud || prev.tipo_solicitud })); }
-          if (data.ubicacion_contacto) { const uc = data.ubicacion_contacto; setFormJuridica(prev => ({ ...prev, direccion_principal: uc.direccion_principal || prev.direccion_principal, municipio: uc.municipio || prev.municipio, departamento: uc.departamento || prev.departamento, pais: uc.pais || prev.pais, direccion_sucursal: uc.direccion_sucursal || prev.direccion_sucursal, telefono: uc.telefono || prev.telefono, celular: uc.celular || prev.celular, correo_electronico: uc.correo_electronico || prev.correo_electronico })); }
-          if (data.representante_legal) { const rl = data.representante_legal; setFormJuridica(prev => ({ ...prev, rep_primer_apellido: rl.primer_apellido || prev.rep_primer_apellido, rep_segundo_apellido: rl.segundo_apellido || prev.rep_segundo_apellido, rep_nombres: rl.nombres || prev.rep_nombres, rep_tipo_identificacion: rl.tipo_identificacion || prev.rep_tipo_identificacion, rep_numero_identificacion: rl.numero_identificacion || prev.rep_numero_identificacion, rep_lugar_expedicion: rl.lugar_expedicion || prev.rep_lugar_expedicion, rep_fecha_expedicion: rl.fecha_expedicion || prev.rep_fecha_expedicion, rep_fecha_nacimiento: rl.fecha_nacimiento || prev.rep_fecha_nacimiento, rep_lugar_nacimiento: rl.lugar_nacimiento || prev.rep_lugar_nacimiento, rep_sexo: rl.sexo || prev.rep_sexo, rep_estado_civil: rl.estado_civil || prev.rep_estado_civil, rep_nacionalidad: rl.nacionalidad || prev.rep_nacionalidad })); }
-          if (data.informacion_financiera) { const inf = data.informacion_financiera; if (inf.total_activos) handleCurrencyChange('total_activos', String(inf.total_activos), true); if (inf.total_pasivos) handleCurrencyChange('total_pasivos', String(inf.total_pasivos), true); if (inf.total_patrimonio) handleCurrencyChange('total_patrimonio', String(inf.total_patrimonio), true); if (inf.ingresos_mensuales) handleCurrencyChange('ingresos_mensuales', String(inf.ingresos_mensuales), true); if (inf.egresos_mensuales) handleCurrencyChange('egresos_mensuales', String(inf.egresos_mensuales), true); if (inf.otros_ingresos) handleCurrencyChange('otros_ingresos', String(inf.otros_ingresos), true); }
-        }
-        setAiExtractionResult({ success: true, needsVerification: result.needs_verification, verificationFields: result.verification_fields });
-      } else {
-        setAiExtractionResult({ success: false, needsVerification: false, error: result.error || 'Error al extraer datos' });
-      }
-    } catch (e) {
-      console.error('Error extracting with AI:', e);
-      setAiExtractionResult({ success: false, needsVerification: false, error: 'Error de conexion con el servicio de IA' });
-    } finally { setIsExtractingAI(false); }
   };
 
   // =====================================================
@@ -583,8 +513,8 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
         comercial_id: selectedComercialId || null,
         grupo_empresarial_id: selectedGrupoId || null,
         created_by: currentUser?.id || agentId,
+        status: 'verificado',
       };
-      if (hasPremiumAccess && aiExtractionResult?.success) { clientData.status = 'en_verificacion'; } else { clientData.status = 'verificado'; }
 
       if (clientType === 'persona_natural') {
         const fullName = `${formNatural.primer_nombre} ${formNatural.otros_nombres} ${formNatural.primer_apellido} ${formNatural.segundo_apellido}`.replace(/\s+/g, ' ').trim();
@@ -645,7 +575,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
             </div>
           )}
 
-        {/* Selector de Tipo de Cliente */}
+          {/* Selector de Tipo de Cliente */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Tipo de Cliente *</Label>
@@ -668,40 +598,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </SelectContent>
             </Select>
           </div>
-
-          {/* LECTURA AUTOMATICA CON IA */}
-          {hasPremiumAccess && (
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-blue-600" />
-                <span className="font-medium text-blue-900">Lectura Automatica con IA</span>
-                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Beta</span>
-              </div>
-              <p className="text-sm text-blue-700">Sube los documentos en la seccion de Documentos Adjuntos y luego presiona el boton para que la IA extraiga los datos automaticamente.</p>
-              <Button type="button" onClick={handleExtractWithAI} disabled={isExtractingAI || documents.length === 0} className="bg-blue-600 hover:bg-blue-700">
-                {isExtractingAI ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Extrayendo...</>) : (<><Sparkles className="mr-2 h-4 w-4" />Analizar con IA</>)}
-              </Button>
-              {aiExtractionResult && (
-                <div className={cn("p-3 rounded-lg", aiExtractionResult.success ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200")}>
-                  {aiExtractionResult.success ? (
-                    <div className="flex items-start gap-2">
-                      {aiExtractionResult.needsVerification ? <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" /> : <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />}
-                      <div>
-                        {aiExtractionResult.needsVerification ? (<><p className="font-medium text-yellow-800">Datos extraidos con observaciones</p><p className="text-sm text-yellow-700">Verifica los siguientes campos: {aiExtractionResult.verificationFields?.join(', ')}</p></>) : (<p className="font-medium text-green-800">Datos extraidos correctamente</p>)}
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-red-700">{aiExtractionResult.error}</p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          {!hasPremiumAccess && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-              <p className="text-sm text-gray-600">La lectura automatica con IA no esta disponible en tu plan. Actualiza a Pro para usar esta funcion.</p>
-            </div>
-          )}
 
           {/* ============================================= */}
           {/* PERSONA NATURAL */}
@@ -851,7 +747,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4" /> Informacion Financiera</h3>
+                <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4" /> Informacion Financiera (SARLAFT)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Ingresos Mensuales *</Label>
@@ -980,7 +876,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2"><User className="w-4 h-4" /> Representación Legal</h3>
+                <h3 className="font-semibold flex items-center gap-2"><User className="w-4 h-4" /> Representante Legal</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Primer Apellido *</Label>
