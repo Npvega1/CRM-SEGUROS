@@ -23,7 +23,6 @@ interface Client {
 export default function EditClientPage() {
   const params = useParams();
   const clientId = params.id as string;
-
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +31,6 @@ export default function EditClientPage() {
     async function loadClient() {
       try {
         const supabase = createClient();
-        
         const { data, error: fetchError } = await (supabase as any)
           .from('clients')
           .select('*')
@@ -40,7 +38,6 @@ export default function EditClientPage() {
           .single();
 
         if (fetchError) throw fetchError;
-        
         setClient(data);
       } catch (err) {
         console.error('Error loading client:', err);
@@ -72,7 +69,7 @@ export default function EditClientPage() {
   }
 
   return (
-    <div className="container max-w-2xl py-6">
+    <div className="w-full py-6">
       <ClientForm
         initialData={{
           id: client.id,
