@@ -245,7 +245,7 @@ export function ClaimDocuments({
 
       {/* Preview modal */}
       <Dialog open={!!previewDoc} onOpenChange={() => { setPreviewDoc(null); setPreviewUrl(null); }}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-[90vw] w-full max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <span className="truncate pr-4">{previewDoc?.file_name}</span>
@@ -268,7 +268,7 @@ export function ClaimDocuments({
               ) : previewDoc?.file_type.includes('pdf') ? (
                 <iframe
                   src={previewUrl}
-                  className="w-full h-[60vh] rounded border"
+                  className="w-full h-[75vh] rounded border"
                   title={previewDoc.file_name}
                 />
               ) : (
