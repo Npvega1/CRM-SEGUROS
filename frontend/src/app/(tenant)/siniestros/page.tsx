@@ -591,7 +591,7 @@ export default function ClaimsPage() {
 
       {/* Modal Nuevo Siniestro */}
       <Dialog open={showNewClaimModal} onOpenChange={setShowNewClaimModal}>
-        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[425px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nuevo Siniestro</DialogTitle>
             <DialogDescription>
@@ -668,7 +668,7 @@ export default function ClaimsPage() {
               <Textarea
                 id="description"
                 placeholder="Describe detalladamente lo ocurrido..."
-                rows={4}
+                rows={3}
                 value={newClaimData.description}
                 onChange={(e) => setNewClaimData(prev => ({ ...prev, description: e.target.value }))}
                 data-testid="description-input"
