@@ -458,6 +458,8 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
       if (!formNatural.primer_apellido.trim()) errors.primer_apellido = true;
       if (!formNatural.primer_nombre.trim()) errors.primer_nombre = true;
       if (!formNatural.numero_identificacion.trim()) errors.numero_identificacion = true;
+      if (!formNatural.fecha_nacimiento) errors.fecha_nacimiento = true;
+      if (!formNatural.direccion_residencia.trim()) errors.direccion_residencia = true;
       if (!formNatural.celular.trim()) errors.celular = true;
       if (!formNatural.correo_electronico.trim()) errors.correo_electronico = true;
       if (formNatural.ingresos_mensuales <= 0) errors.ingresos_mensuales = true;
@@ -650,8 +652,9 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     <Input type="date" value={formNatural.fecha_nacimiento} onChange={(e) => handleNaturalChange('fecha_nacimiento', e.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Lugar de Nacimiento</Label>
-                    <Input value={formNatural.lugar_nacimiento} onChange={(e) => handleNaturalChange('lugar_nacimiento', e.target.value)} />
+                    <Label>Fecha de Nacimiento *</Label>
+                    <Input type="date" value={formNatural.fecha_nacimiento} onChange={(e) => handleNaturalChange('fecha_nacimiento', e.target.value)} className={err('fecha_nacimiento')} />
+                    {formErrors.fecha_nacimiento && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>Nacionalidad</Label>
@@ -676,8 +679,9 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                 <h3 className="font-semibold flex items-center gap-2"><MapPin className="w-4 h-4" /> Ubicacion y Contacto</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2 md:col-span-2">
-                    <Label>Direccion de Residencia</Label>
-                    <Input value={formNatural.direccion_residencia} onChange={(e) => handleNaturalChange('direccion_residencia', e.target.value)} />
+                    <Label>Direccion de Residencia *</Label>
+                    <Input value={formNatural.direccion_residencia} onChange={(e) => handleNaturalChange('direccion_residencia', e.target.value)} className={err('direccion_residencia')} />
+                    {formErrors.direccion_residencia && <p className="text-xs text-red-500">Campo obligatorio</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>Municipio</Label>
