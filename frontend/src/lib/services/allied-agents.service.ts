@@ -66,21 +66,37 @@ export async function createAlliedAgent(
   if (error) throw error;
   return data as AlliedAgent;
 }
-
 export async function updateAlliedAgent(
   id: string,
   input: UpdateAlliedAgentInput
 ): Promise<AlliedAgent> {
   const supabase = getBrowserClient();
+  
+  // Limpiar campos undefined y convertir string vacío a null
+  const cleanInput: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined) continue;
+    if (value === '') {
+      cleanInput[key] = null;
+    } else {
+      cleanInput[key] = value;
+    }
+  }
+
   const { data, error } = await (supabase
     .from('allied_agents') as any)
-    .update(input)
+    .update(cleanInput)
     .eq('id', id)
-    .select()
-    .single();
+    .select('*');
 
   if (error) throw error;
-  return data as AlliedAgent;
+  
+  // Devolver el primer resultado
+  const results = data as AlliedAgent[];
+  if (!results || results.length === 0) {
+    throw new Error('No se encontró el aliado');
+  }
+  return results[0];
 }
 
 export async function deleteAlliedAgent(id: string): Promise<void> {
