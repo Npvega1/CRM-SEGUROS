@@ -196,11 +196,11 @@ export interface ClaimExpediente {
  * Flujo: Reportado → Docs. Completos → En Proceso → Finalizado
  */
 export const VALID_CLAIM_STATUS_TRANSITIONS: Record<ClaimStatus, ClaimStatus[]> = {
-  reported: ['docs_complete', 'closed'],
-  investigating: ['docs_complete', 'closed'],
-  docs_complete: ['processing', 'reported', 'closed'],
+  reported: ['docs_complete', 'resolved', 'closed'],
+  investigating: ['docs_complete', 'resolved', 'closed'],
+  docs_complete: ['processing', 'resolved', 'closed'],
   processing: ['resolved', 'closed'],
-  resolved: ['closed'],
+  resolved: [],
   closed: []
 };
 
