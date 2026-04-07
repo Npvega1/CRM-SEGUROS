@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PolicyForm, type PolicyFormData } from '@/components/modules/policies/PolicyForm';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Shield, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -20,6 +21,7 @@ export default function EditarPolizaPage() {
   const [policy, setPolicy] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // =====================================================
   // Cargar poliza existente
@@ -54,6 +56,7 @@ export default function EditarPolizaPage() {
   const handleSubmit = async (data: PolicyFormData) => {
     if (!policyId || !tenantId) return;
     setSaving(true);
+    setError(null);
 
     try {
       const updatePayload: Record<string, any> = {
@@ -116,7 +119,7 @@ export default function EditarPolizaPage() {
       router.push(`/polizas/${policyId}`);
     } catch (err: any) {
       console.error('Error updating policy:', err);
-      toast.error(err.message || 'Error al actualizar la póliza');
+      setError(err.message || 'Error al actualizar la póliza');
     } finally {
       setSaving(false);
     }
@@ -135,7 +138,7 @@ export default function EditarPolizaPage() {
 
   if (!policy) {
     return (
-      <div className="container mx-auto py-6 px-4 max-w-6xl">
+      <div className="max-w-6xl mx-auto py-6 px-4">
         <div className="text-center py-12">
           <p className="text-muted-foreground">Póliza no encontrada</p>
           <Link href="/polizas">
@@ -153,20 +156,54 @@ export default function EditarPolizaPage() {
   // RENDER
   // =====================================================
   return (
-    <div className="container mx-auto py-6 px-4 max-w-6xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Editar Póliza</h1>
-        <p className="text-muted-foreground">
-          {policy.policy_number} - {policy.insurer}
-        </p>
+    <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
+      {/* Header - mismo estilo que Crear Póliza */}
+      <div className="flex items-center gap-4">
+        <Link href={`/polizas/${policyId}`}>
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Shield className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Editar Póliza</h1>
+            <p className="text-sm text-muted-foreground">
+              {policy.policy_number} - {policy.insurance_company?.name || policy.insurer}
+            </p>
+          </div>
+        </div>
       </div>
 
-      <PolicyForm
-        policy={policy}
-        onSubmit={handleSubmit}
-        onCancel={() => router.push(`/polizas/${policyId}`)}
-        isLoading={saving}
-      />
+      {error && (
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          <span className="text-sm">{error}</span>
+        </div>
+      )}
+
+      {/* Formulario dentro de Card - mismo estilo que Crear Póliza */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Datos de la Póliza
+          </CardTitle>
+          <CardDescription>
+            Editando póliza de: {policy.client?.full_name || 'Cliente'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PolicyForm
+            policy={policy}
+            onSubmit={handleSubmit}
+            onCancel={() => router.push(`/polizas/${policyId}`)}
+            isLoading={saving}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }
