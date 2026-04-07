@@ -8,7 +8,6 @@ import { LoadingScreen } from '@/components/ui/spinner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ClientsTable } from '@/components/modules/clients/ClientsTable';
-import { CSVImporter } from '@/components/modules/clients/CSVImporter';
 import type { Client } from '@/lib/validations/clients';
 import { createClient } from '@/lib/supabase/client';
 import { 
@@ -157,12 +156,6 @@ export default function ClientsPage() {
     setPage(newPage);
   };
 
-  const handleImportSuccess = () => {
-    setPage(1);
-    setSearchQuery('');
-    setSegmentFilter(undefined);
-  };
-
   if (isLoadingTenant) {
     return <LoadingScreen message="Cargando..." />;
   }
@@ -267,8 +260,6 @@ export default function ClientsPage() {
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                {isAdmin && <CSVImporter onSuccess={handleImportSuccess} />}
-                
                 {showCreateButton && (
                   <Link href="/clientes/nuevo">
                     <Button data-testid="new-client-button">
