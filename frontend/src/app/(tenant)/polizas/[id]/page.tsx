@@ -57,7 +57,8 @@ export default function DetallePolizaPage() {
 
   const [policy, setPolicy] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [statusLoading, setStatusLoading] = useState(false);
+  const [hasRemision, setHasRemision] = useState(false);
+  const [hasRecaudo, setHasRecaudo] = useState(false);
 
   // =====================================================
   // Cargar poliza con relaciones
@@ -94,44 +95,41 @@ export default function DetallePolizaPage() {
   }, [policyId, tenantId]);
 
   // =====================================================
-  // Cambiar estado de la poliza
+  // Cargar estado de producción (Remisión y Cartera)
   // =====================================================
-  const handleStatusChange = async (newStatus: PolicyStatus, note?: string) => {
-    if (!policyId || !tenantId) return;
-    setStatusLoading(true);
+  useEffect(() => {
+    async function loadProductionStatus() {
+      if (!policyId || !tenantId) return;
+      try {
+        // Verificar si existe remisión
+        const { data: remisionData } = await (supabase as any)
+          .from('remisiones')
+          .select('id')
+          .eq('policy_id', policyId)
+          .eq('tenant_id', tenantId)
+          .limit(1);
+        setHasRemision(remisionData && remisionData.length > 0);
 
-    try {
-      const { error } = await (supabase as any)
-        .from('policies')
-        .update({
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', policyId)
-        .eq('tenant_id', tenantId);
-
-      if (error) throw error;
-
-      // Registrar en historial
-      await (supabase as any)
-        .from('policy_history')
-        .insert({
-          policy_id: policyId,
-          old_status: policy.status,
-          new_status: newStatus,
-          note: note || null,
-          changed_at: new Date().toISOString()
-        });
-
-      toast.success(`Estado cambiado a ${POLICY_STATUS_LABELS[newStatus]}`);
-      await loadPolicy();
-    } catch (err: any) {
-      console.error('Error changing status:', err);
-      toast.error(err.message || 'Error al cambiar estado');
-    } finally {
-      setStatusLoading(false);
+        // Verificar si fue recaudada (saldo_pendiente <= 0)
+        const { data: carteraData } = await (supabase as any)
+          .from('cartera')
+          .select('id, saldo_pendiente')
+          .eq('policy_id', policyId)
+          .eq('tenant_id', tenantId)
+          .limit(1);
+        if (carteraData && carteraData.length > 0) {
+          setHasRecaudo(carteraData[0].saldo_pendiente <= 0);
+        } else {
+          setHasRecaudo(false);
+        }
+      } catch (err) {
+        console.error('Error loading production status:', err);
+      }
     }
-  };
+    if (policy) {
+      loadProductionStatus();
+    }
+  }, [policy, policyId, tenantId]);
 
   // =====================================================
   // Eliminar poliza
@@ -260,9 +258,8 @@ export default function DetallePolizaPage() {
       <Card className="mb-6">
         <CardContent className="pt-6">
           <PolicyStatusStepper
-            currentStatus={policy.status as PolicyStatus}
-            onStatusChange={handleStatusChange}
-            isLoading={statusLoading}
+            hasRemision={hasRemision}
+            hasRecaudo={hasRecaudo}
           />
         </CardContent>
       </Card>
