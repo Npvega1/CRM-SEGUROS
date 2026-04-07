@@ -2,7 +2,7 @@
 
 // =====================================================
 // COMPONENTE: PolicyStatusStepper
-// Stepper visual de 3 pasos: Activa → Remisión → Recaudada
+// Stepper visual compacto: Activa → Remisión → Recaudada
 // =====================================================
 
 import { Check, ChevronRight } from 'lucide-react';
@@ -24,22 +24,22 @@ export function PolicyStatusStepper({
   ];
 
   return (
-    <div className="flex items-center gap-3 flex-wrap">
+    <div className="flex items-center gap-2 flex-wrap">
       {steps.map((step, index) => (
-        <div key={step.label} className="flex items-center gap-3">
+        <div key={step.label} className="flex items-center gap-2">
           <div
             className={cn(
-              'flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 text-sm font-semibold',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold',
               step.completed
                 ? 'bg-green-50 text-green-700 border-green-400'
                 : 'bg-gray-50 text-gray-400 border-gray-200'
             )}
           >
-            {step.completed && <Check className="h-4 w-4" />}
+            {step.completed && <Check className="h-3 w-3" />}
             {step.label}
           </div>
           {index < steps.length - 1 && (
-            <ChevronRight className="h-5 w-5 text-gray-300 flex-shrink-0" />
+            <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />
           )}
         </div>
       ))}
