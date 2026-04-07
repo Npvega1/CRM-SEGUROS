@@ -207,10 +207,10 @@ export function Client360View({ client }: Client360ViewProps) {
   // =====================================================
   // STATS - HISTÓRICO (Fila 2, filtrado por año)
   // =====================================================
-  const availableYears = [...new Set([
+  const availableYears = Array.from(new Set([
     ...policies.map(p => p.start_date ? new Date(p.start_date).getFullYear() : null),
     ...claims.map(c => c.created_at ? new Date(c.created_at).getFullYear() : null),
-  ])].filter((y): y is number => y !== null).sort((a, b) => b - a);
+  ])).filter((y): y is number => y !== null).sort((a, b) => b - a);
 
   const selectedYearNum = parseInt(selectedYear);
   const historicalPolicies = policies.filter(p =>
