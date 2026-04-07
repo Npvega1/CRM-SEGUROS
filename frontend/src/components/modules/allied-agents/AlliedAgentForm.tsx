@@ -8,6 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import {
   createAlliedAgent,
@@ -15,6 +22,7 @@ import {
 } from '@/lib/services/allied-agents.service';
 import { getBrowserClient } from '@/lib/supabase/client';
 import type { AlliedAgent, CreateAlliedAgentInput, UpdateAlliedAgentInput } from '@/types/allied-agents';
+import { IDENTIFICATION_TYPES } from '@/types/allied-agents';
 
 interface AlliedAgentFormProps {
   agent?: AlliedAgent | null;
@@ -30,14 +38,17 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
 
   const [formData, setFormData] = useState({
     full_name: agent?.full_name || '',
+    identification_type: agent?.identification_type || 'cc',
     identification: agent?.identification || '',
+    birth_date: agent?.birth_date || '',
     phone: agent?.phone || '',
     email: agent?.email || '',
     address: agent?.address || '',
+    city: agent?.city || '',
     commission_percentage: agent?.commission_percentage || 60,
+    commercial_user_id: agent?.commercial_user_id || '',
   });
 
-  // Obtener el tenant del usuario actual
   useEffect(() => {
     const loadTenantInfo = async () => {
       const supabase = getBrowserClient();
@@ -47,7 +58,6 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
       if (userTenantId) {
         setTenantId(userTenantId);
         
-        // Obtener el slug del tenant
         const { data: tenantData } = await supabase
           .from('tenants')
           .select('slug')
@@ -83,20 +93,20 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
       }
 
       if (isEditing && agent?.id) {
-        // Actualizar aliado existente
         const updateData: UpdateAlliedAgentInput = {
           full_name: formData.full_name,
+          identification_type: formData.identification_type,
           identification: formData.identification,
+          birth_date: formData.birth_date || null,
           phone: formData.phone,
-          address: formData.address,
+          address: formData.address || null,
+          city: formData.city || null,
           commission_percentage: Number(formData.commission_percentage),
+          commercial_user_id: formData.commercial_user_id || null,
         };
         await updateAlliedAgent(agent.id, updateData);
         toast.success('Aliado actualizado exitosamente');
       } else {
-        // Crear nuevo aliado
-        
-        // 1. Primero invitar al usuario via API
         const inviteResponse = await fetch('/api/allied-agents/invite', {
           method: 'POST',
           headers: {
@@ -115,14 +125,17 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
           throw new Error(inviteResult.error || 'Error al enviar invitación');
         }
 
-        // 2. Crear el registro del aliado con el auth_user_id
         const createData: CreateAlliedAgentInput = {
           full_name: formData.full_name,
+          identification_type: formData.identification_type,
           identification: formData.identification,
+          birth_date: formData.birth_date || null,
           phone: formData.phone,
           email: formData.email,
           address: formData.address || null,
+          city: formData.city || null,
           commission_percentage: Number(formData.commission_percentage),
+          commercial_user_id: formData.commercial_user_id || null,
           is_active: true,
           auth_user_id: inviteResult.userId,
         };
@@ -162,7 +175,8 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
+        {/* Nombre Completo */}
+        <div className="space-y-1">
           <Label htmlFor="full_name">Nombre Completo *</Label>
           <Input
             id="full_name"
@@ -173,29 +187,8 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="identification">Identificación *</Label>
-          <Input
-            id="identification"
-            name="identification"
-            value={formData.identification}
-            onChange={handleChange}
-            required
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="phone">Teléfono *</Label>
-          <Input
-            id="phone"
-            name="phone"
-            value={formData.phone}
-            onChange={handleChange}
-            required
-          />
-        </div>
-
-        <div className="space-y-2">
+        {/* Correo Electrónico */}
+        <div className="space-y-1">
           <Label htmlFor="email">Correo Electrónico *</Label>
           <Input
             id="email"
@@ -208,23 +201,89 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
           />
           {!isEditing && (
             <p className="text-xs text-muted-foreground">
-              Se enviará un email de invitación a esta dirección
+              Se enviará un email de invitación
             </p>
           )}
         </div>
 
-        <div className="space-y-2 md:col-span-2">
+        {/* Tipo de Identificación */}
+        <div className="space-y-1">
+          <Label>Tipo de Identificación *</Label>
+          <Select
+            value={formData.identification_type}
+            onValueChange={(v) => setFormData(prev => ({ ...prev, identification_type: v }))}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {IDENTIFICATION_TYPES.map(t => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Número de Identificación */}
+        <div className="space-y-1">
+          <Label htmlFor="identification">Número de Identificación *</Label>
+          <Input
+            id="identification"
+            name="identification"
+            value={formData.identification}
+            onChange={handleChange}
+            required
+          />
+        </div>
+
+        {/* Fecha de Nacimiento */}
+        <div className="space-y-1">
+          <Label htmlFor="birth_date">Fecha de Nacimiento</Label>
+          <Input
+            id="birth_date"
+            name="birth_date"
+            type="date"
+            value={formData.birth_date}
+            onChange={handleChange}
+          />
+        </div>
+
+        {/* Teléfono */}
+        <div className="space-y-1">
+          <Label htmlFor="phone">Teléfono *</Label>
+          <Input
+            id="phone"
+            name="phone"
+            value={formData.phone}
+            onChange={handleChange}
+            required
+          />
+        </div>
+
+        {/* Dirección */}
+        <div className="space-y-1">
           <Label htmlFor="address">Dirección</Label>
-          <Textarea
+          <Input
             id="address"
             name="address"
             value={formData.address}
             onChange={handleChange}
-            rows={2}
           />
         </div>
 
-        <div className="space-y-2">
+        {/* Ciudad */}
+        <div className="space-y-1">
+          <Label htmlFor="city">Ciudad</Label>
+          <Input
+            id="city"
+            name="city"
+            value={formData.city}
+            onChange={handleChange}
+          />
+        </div>
+
+        {/* % Comisión */}
+        <div className="space-y-1">
           <Label htmlFor="commission_percentage">% Comisión Aliado</Label>
           <div className="flex items-center gap-2">
             <Input
@@ -240,9 +299,17 @@ export function AlliedAgentForm({ agent, onSuccess, onCancel }: AlliedAgentFormP
               / {100 - Number(formData.commission_percentage)}% Agencia
             </span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Porcentaje de la comisión que recibe el aliado
-          </p>
+        </div>
+
+        {/* Comercial */}
+        <div className="space-y-1">
+          <Label>Comercial</Label>
+          <Input
+            value="No disponible aún"
+            disabled
+            className="bg-gray-100"
+          />
+          <p className="text-xs text-muted-foreground">Próximamente</p>
         </div>
       </div>
 
