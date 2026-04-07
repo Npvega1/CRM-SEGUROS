@@ -338,7 +338,21 @@ export function PolicyForm({
         if (data) {
           setClientData(data);
           setValue('tomador_nombre', data.full_name || '');
-          setValue('tomador_tipo_identificacion', data.doc_type || 'cedula_ciudadania');
+          // Mapear doc_type de clientes al formato del enum de pólizas
+          const docTypeMap: Record<string, string> = {
+            'CC': 'cedula_ciudadania',
+            'cc': 'cedula_ciudadania',
+            'cedula': 'cedula_ciudadania',
+            'cedula_ciudadania': 'cedula_ciudadania',
+            'NIT': 'nit',
+            'nit': 'nit',
+            'CE': 'cedula_extranjeria',
+            'ce': 'cedula_extranjeria',
+            'cedula_extranjeria': 'cedula_extranjeria',
+            'pasaporte': 'pasaporte',
+            'nit_extranjero': 'nit_extranjero',
+          };
+          setValue('tomador_tipo_identificacion', docTypeMap[data.doc_type] || 'cedula_ciudadania');
           setValue('tomador_numero_identificacion', data.doc_number || '');
           if (data.comercial_id) {
             const { data: comercialData } = await (supabase as any)
@@ -794,23 +808,30 @@ export function PolicyForm({
 
           <div className="space-y-2">
             <Label>Tipo de Movimiento *</Label>
-            <Select
-              defaultValue={(policy as any)?.tipo_movimiento || 'expedicion'}
-              onValueChange={(value) => setValue('tipo_movimiento', value)}
-              disabled={loading}
-            >
-              <SelectTrigger data-testid="tipo-movimiento-select">
-                <SelectValue placeholder="Seleccionar" />
-              </SelectTrigger>
-              <SelectContent>
-                {TIPO_MOVIMIENTO_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isEditing ? (
+              <Select
+                defaultValue={(policy as any)?.tipo_movimiento || 'expedicion'}
+                onValueChange={(value) => setValue('tipo_movimiento', value)}
+                disabled={loading}
+              >
+                <SelectTrigger data-testid="tipo-movimiento-select">
+                  <SelectValue placeholder="Seleccionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPO_MOVIMIENTO_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value="Expedición"
+                disabled
+                className="bg-gray-50"
+                data-testid="tipo-movimiento-fixed"
+              />
+            )}
           </div>
-        </div>
-      </div>
 
       {/* ============================================= */}
       {/* SECCION 2: VIGENCIA */}
