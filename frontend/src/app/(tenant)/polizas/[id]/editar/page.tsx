@@ -135,7 +135,7 @@ export default function EditarPolizaPage() {
 
   if (!policy) {
     return (
-      <div className="container mx-auto py-6 px-4">
+      <div className="container mx-auto py-6 px-4 max-w-6xl">
         <div className="text-center py-12">
           <p className="text-muted-foreground">Póliza no encontrada</p>
           <Link href="/polizas">
@@ -153,7 +153,7 @@ export default function EditarPolizaPage() {
   // RENDER
   // =====================================================
   return (
-    <div className="container mx-auto py-6 px-4">
+    <div className="container mx-auto py-6 px-4 max-w-6xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Editar Póliza</h1>
         <p className="text-muted-foreground">
