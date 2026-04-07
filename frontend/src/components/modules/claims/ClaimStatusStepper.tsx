@@ -2,14 +2,14 @@
 
 // =====================================================
 // COMPONENTE: ClaimStatusStepper
-// Barra visual de progreso entre los 6 estados
+// Barra visual de progreso - 4 pasos
 // =====================================================
 
 import { Check } from 'lucide-react';
 import {
   type ClaimStatus,
   CLAIM_STATUS_ORDER,
-  CLAIM_STATUS_LABELS,
+  CLAIM_STEPPER_LABELS,
   CLAIM_STATUS_STEPPER_COLORS,
   getStatusIndex
 } from '@/lib/validations/claims';
@@ -68,7 +68,7 @@ export function ClaimStatusStepper({ currentStatus, className = '' }: ClaimStatu
                   ${!isCompleted && !isCurrent ? 'text-gray-400' : ''}
                 `}
               >
-                {CLAIM_STATUS_LABELS[status]}
+                {CLAIM_STEPPER_LABELS[status] || status}
               </span>
             </div>
           );
