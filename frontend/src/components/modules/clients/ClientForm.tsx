@@ -54,7 +54,7 @@ interface Comercial {
 
 interface GrupoEmpresarial {
   id: string;
-  nombre: string;
+  name: string;
 }
 
 interface UploadedDocument {
@@ -180,7 +180,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   const [loadingGrupos, setLoadingGrupos] = useState(true);
   const [grupoOpen, setGrupoOpen] = useState(false);
   const [grupoSearch, setGrupoSearch] = useState('');
-  const [selectedGrupoId, setSelectedGrupoId] = useState<string | null>(initialData?.grupo_empresarial_id || null);
+  const [selectedGrupoId, setSelectedGrupoId] = useState<string | null>(initialData?.business_group_id || null);
 
   // Usuario actual
   const [currentUser, setCurrentUser] = useState<{ id: string; full_name: string } | null>(null);
@@ -342,7 +342,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   useEffect(() => {
     async function loadGruposEmpresariales() {
       try {
-        const { data, error } = await (supabase as any).from('grupos_empresariales').select('id, nombre').eq('tenant_id', tenantId).eq('is_active', true).order('nombre');
+        const { data, error } = await (supabase as any).from('business_groups').select('id, name').eq('tenant_id', tenantId).eq('is_active', true).order('name');
         if (!error && data) setGruposEmpresariales(data);
       } catch (e) { console.error('Error loading grupos empresariales:', e); } finally { setLoadingGrupos(false); }
     }
@@ -513,7 +513,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
         segment: clientType,
         allied_agent_id: canEditAlliedField ? (selectedAllyId || null) : (initialData?.allied_agent_id || null),
         comercial_id: selectedComercialId || null,
-        grupo_empresarial_id: selectedGrupoId || null,
+        business_group_id: selectedGrupoId || null,
         created_by: currentUser?.id || agentId,
         status: 'verificado',
       };
@@ -552,10 +552,10 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
   // Filter functions
   const filteredAllies = alliedAgents.filter((a) => a.full_name.toLowerCase().includes(allySearch.toLowerCase()));
   const filteredComerciales = comerciales.filter((c) => c.full_name.toLowerCase().includes(comercialSearch.toLowerCase()));
-  const filteredGrupos = gruposEmpresariales.filter((g) => g.nombre.toLowerCase().includes(grupoSearch.toLowerCase()));
+  const filteredGrupos = gruposEmpresariales.filter((g) => g.name.toLowerCase().includes(grupoSearch.toLowerCase()));
   const selectedAllyName = selectedAllyId ? alliedAgents.find((a) => a.id === selectedAllyId)?.full_name : null;
   const selectedComercialName = selectedComercialId ? comerciales.find((c) => c.id === selectedComercialId)?.full_name : null;
-  const selectedGrupoName = selectedGrupoId ? gruposEmpresariales.find((g) => g.id === selectedGrupoId)?.nombre : null;
+  const selectedGrupoName = selectedGrupoId ? gruposEmpresariales.find((g) => g.id === selectedGrupoId)?.name : null;
 
   // =====================================================
   // RENDER
@@ -1042,7 +1042,7 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                       <div className="flex items-center border-b px-3"><Search className="mr-2 h-4 w-4 shrink-0 opacity-50" /><input placeholder="Buscar grupo..." value={grupoSearch} onChange={(e) => setGrupoSearch(e.target.value)} className="flex h-10 w-full bg-transparent py-3 text-sm outline-none" /></div>
                       <div className="max-h-60 overflow-auto p-1">
                         <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent" onClick={() => { setSelectedGrupoId(null); setGrupoOpen(false); setGrupoSearch(''); }}><Check className={cn("mr-2 h-4 w-4", !selectedGrupoId ? "opacity-100" : "opacity-0")} /> Sin grupo empresarial</div>
-                        {filteredGrupos.map((g) => (<div key={g.id} className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent" onClick={() => { setSelectedGrupoId(g.id); setGrupoOpen(false); setGrupoSearch(''); }}><Check className={cn("mr-2 h-4 w-4", selectedGrupoId === g.id ? "opacity-100" : "opacity-0")} /> {g.nombre}</div>))}
+                        {filteredGrupos.map((g) => (<div key={g.id} className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent" onClick={() => { setSelectedGrupoId(g.id); setGrupoOpen(false); setGrupoSearch(''); }}><Check className={cn("mr-2 h-4 w-4", selectedGrupoId === g.id ? "opacity-100" : "opacity-0")} /> {g.name}</div>))}
                       </div>
                     </PopoverContent>
                   </Popover>
