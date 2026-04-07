@@ -84,14 +84,11 @@ export default function ClaimDetailPage() {
         return;
       }
 
-      // Cargar historial
+      // Cargar historial (sin JOIN a users para evitar error de FK/RLS)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: historyData } = await (supabase as any)
         .from('claims_history')
-        .select(`
-          *,
-          users(full_name)
-        `)
+        .select('*')
         .eq('claim_id', claimId)
         .order('changed_at', { ascending: false });
 
@@ -115,7 +112,7 @@ export default function ClaimDetailPage() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         history: (historyData || []).map((h: any) => ({
           ...h,
-          changed_by_name: h.users?.full_name || null
+          changed_by_name: null
         })) as ClaimExpediente['history'],
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         documents: (docsData || []).map((d: any) => ({
