@@ -5,11 +5,15 @@ export const alliedAgentSchema = z.object({
   id: z.string().uuid().optional(),
   tenant_id: z.string().uuid(),
   full_name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  identification_type: z.string().default('cc'),
   identification: z.string().min(5, 'La identificación debe tener al menos 5 caracteres'),
+  birth_date: z.string().optional().nullable(),
   phone: z.string().min(7, 'El teléfono debe tener al menos 7 caracteres'),
   email: z.string().email('Correo electrónico inválido'),
   address: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
   commission_percentage: z.number().min(0).max(100).default(60),
+  commercial_user_id: z.string().uuid().optional().nullable(),
   document_cedula: z.string().optional().nullable(),
   document_bank_certificate: z.string().optional().nullable(),
   document_rut: z.string().optional().nullable(),
@@ -121,4 +125,10 @@ export const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'bank_certificate', label: 'Certificación Bancaria' },
   { value: 'rut', label: 'RUT' },
   { value: 'other', label: 'Otro' },
+];
+
+export const IDENTIFICATION_TYPES = [
+  { value: 'cc', label: 'Cédula de Ciudadanía' },
+  { value: 'ce', label: 'Cédula de Extranjería' },
+  { value: 'nit', label: 'NIT' },
 ];
