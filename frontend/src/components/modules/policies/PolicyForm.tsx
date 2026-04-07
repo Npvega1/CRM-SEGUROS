@@ -21,14 +21,14 @@ import {
   type Policy,
   type PolicyStatus
 } from '@/lib/validations/policies';
-import { 
-  Loader2, 
-  Save, 
-  X, 
-  Building, 
-  FileText, 
-  Calendar, 
-  MessageSquare, 
+import {
+  Loader2,
+  Save,
+  X,
+  Building,
+  FileText,
+  Calendar,
+  MessageSquare,
   Handshake,
   User,
   Users,
@@ -37,10 +37,7 @@ import {
   AlertCircle,
   Plus,
   Trash2,
-  Upload,
-  Sparkles,
-  CheckCircle,
-  AlertTriangle
+  CheckCircle
 } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
@@ -108,7 +105,7 @@ interface ClientData {
   doc_number: string;
   allied_agent_id?: string | null;
   comercial_id?: string | null;
-  grupo_empresarial_id?: string | null;
+  business_group_id?: string | null;
 }
 
 interface Beneficiario {
@@ -198,17 +195,6 @@ export function PolicyForm({
   const { tenantId } = useTenant();
   const supabase = createClient();
 
-  const [aiEnabled, setAiEnabled] = useState(false);
-  const [loadingAiStatus, setLoadingAiStatus] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isExtractingAI, setIsExtractingAI] = useState(false);
-  const [aiExtractionResult, setAiExtractionResult] = useState<{
-    success: boolean;
-    needsVerification: boolean;
-    verificationFields?: string[];
-    error?: string;
-  } | null>(null);
-
   const [tenantCompanies, setTenantCompanies] = useState<TenantCompany[]>([]);
   const [availableLines, setAvailableLines] = useState<InsuranceLine[]>([]);
   const [availableGroups, setAvailableGroups] = useState<InsuranceGroup[]>([]);
@@ -220,24 +206,24 @@ export function PolicyForm({
 
   const [clientAlliedAgent, setClientAlliedAgent] = useState<AlliedAgentOption | null>(null);
   const [loadingAlliedAgent, setLoadingAlliedAgent] = useState(false);
-  const [alliedAgentPctValue, setAlliedAgentPctValue] = useState(() => {
+  const [alliedAgentPctValue, setAlliedAgentPctValue] = useState<number>(() => {
     if (isEditing && policy) return (policy as any).allied_agent_pct || 0;
     return 0;
   });
 
   const [currentUser, setCurrentUser] = useState<{ id: string; full_name: string } | null>(null);
-  const [comercialName, setComercialName] = useState<string>('');
-  const [grupoEmpresarialName, setGrupoEmpresarialName] = useState<string>('');
+  const [comercialName, setComercialName] = useState('');
+  const [grupoEmpresarialName, setGrupoEmpresarialName] = useState('');
 
-  const [selectedCompanyId, setSelectedCompanyId] = useState(() => {
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>(() => {
     if (isEditing && policy) return (policy as any).insurer_id || '';
     return '';
   });
-  const [selectedLineId, setSelectedLineId] = useState(() => {
+  const [selectedLineId, setSelectedLineId] = useState<string>(() => {
     if (isEditing && policy) return (policy as any).line_id || '';
     return '';
   });
-  const [selectedGroupId, setSelectedGroupId] = useState(() => {
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(() => {
     if (isEditing && policy) return (policy as any).group_id || '';
     return '';
   });
@@ -315,27 +301,7 @@ export function PolicyForm({
     ? POLICY_STATUS_OPTIONS
     : POLICY_STATUS_OPTIONS.filter(o => o.value === 'activa' || o.value === 'verificacion');
 
-  useEffect(() => {
-    async function loadAiStatus() {
-      if (!tenantId) return;
-      try {
-        const { data } = await (supabase as any)
-          .from('tenants')
-          .select('ai_enabled')
-          .eq('id', tenantId)
-          .single();
-        if (data) {
-          setAiEnabled(data.ai_enabled || false);
-        }
-      } catch (err) {
-        console.error('Error loading AI status:', err);
-      } finally {
-        setLoadingAiStatus(false);
-      }
-    }
-    loadAiStatus();
-  }, [tenantId, supabase]);
-
+  // Cargar usuario actual
   useEffect(() => {
     async function loadCurrentUser() {
       try {
@@ -357,6 +323,7 @@ export function PolicyForm({
     loadCurrentUser();
   }, [supabase]);
 
+  // Cargar datos del cliente (tomador, comercial, grupo empresarial)
   useEffect(() => {
     async function loadClientData() {
       const cId = clientId || (isEditing && policy ? policy.client_id : null);
@@ -365,7 +332,7 @@ export function PolicyForm({
       try {
         const { data } = await (supabase as any)
           .from('clients')
-          .select('id, full_name, doc_type, doc_number, allied_agent_id, comercial_id, grupo_empresarial_id')
+          .select('id, full_name, doc_type, doc_number, allied_agent_id, comercial_id, business_group_id')
           .eq('id', cId)
           .single();
         if (data) {
@@ -383,14 +350,14 @@ export function PolicyForm({
               setComercialName(comercialData.full_name);
             }
           }
-          if (data.grupo_empresarial_id) {
+          if (data.business_group_id) {
             const { data: grupoData } = await (supabase as any)
-              .from('grupos_empresariales')
-              .select('nombre')
-              .eq('id', data.grupo_empresarial_id)
+              .from('business_groups')
+              .select('name')
+              .eq('id', data.business_group_id)
               .single();
             if (grupoData) {
-              setGrupoEmpresarialName(grupoData.nombre);
+              setGrupoEmpresarialName(grupoData.name);
             }
           }
         }
@@ -402,6 +369,7 @@ export function PolicyForm({
     loadClientData();
   }, [clientId, isEditing, policy, supabase, setValue]);
 
+  // Inicializar displays cuando se edita
   useEffect(() => {
     if (policy) {
       setNotasValue((policy as any).notas || '');
@@ -414,16 +382,19 @@ export function PolicyForm({
     }
   }, [policy]);
 
+  // Calcular total automáticamente
   useEffect(() => {
     const total = Number(premium) + Number(gastosExpedicion) + Number(iva);
     setValue('total_a_pagar', total);
   }, [premium, gastosExpedicion, iva, setValue]);
 
+  // Calcular días de vigencia
   useEffect(() => {
     const dias = calcularDiasVigencia(startDate, endDate);
     setValue('dias_vigencia', dias);
   }, [startDate, endDate, setValue]);
 
+  // Cargar aliado del cliente
   useEffect(() => {
     async function loadClientAlliedAgent() {
       const cId = clientId || (isEditing && policy ? policy.client_id : null);
@@ -467,6 +438,7 @@ export function PolicyForm({
     loadClientAlliedAgent();
   }, [clientId, tenantId, isEditing, policy, supabase]);
 
+  // Cargar comisión por compañía + grupo
   useEffect(() => {
     async function loadCommission() {
       if (!selectedCompanyId || !selectedGroupId) return;
@@ -492,6 +464,8 @@ export function PolicyForm({
     }
     loadCommission();
   }, [selectedCompanyId, selectedGroupId, setValue, supabase]);
+
+  // Cargar compañías del tenant
   useEffect(() => {
     async function loadTenantCompanies() {
       if (!tenantId) return;
@@ -520,6 +494,7 @@ export function PolicyForm({
     loadTenantCompanies();
   }, [tenantId, supabase]);
 
+  // Cargar líneas por compañía
   useEffect(() => {
     async function loadLinesForCompany() {
       if (!selectedCompanyId) {
@@ -543,6 +518,7 @@ export function PolicyForm({
     loadLinesForCompany();
   }, [selectedCompanyId, supabase]);
 
+  // Cargar grupos por línea
   useEffect(() => {
     async function loadGroupsForLine() {
       if (!selectedLineId) {
@@ -558,7 +534,6 @@ export function PolicyForm({
           .order('display_order');
         if (groupsData) {
           setAvailableGroups(groupsData as InsuranceGroup[]);
-          // Auto-seleccionar primer grupo para cargar comisión del ramo
           if (groupsData.length > 0 && !isEditing) {
             setSelectedGroupId(groupsData[0].id);
           }
@@ -570,6 +545,7 @@ export function PolicyForm({
     loadGroupsForLine();
   }, [selectedLineId, supabase, isEditing]);
 
+  // Sincronizar selects con form values
   useEffect(() => {
     if (selectedCompanyId) {
       const company = tenantCompanies.find(tc => tc.company_id === selectedCompanyId)?.company;
@@ -602,119 +578,9 @@ export function PolicyForm({
     }
   }, [clientId, isEditing, setValue]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-      if (!validTypes.includes(file.type)) {
-        alert('Por favor seleccione un archivo PDF o DOCX');
-        return;
-      }
-      setSelectedFile(file);
-      setAiExtractionResult(null);
-    }
-  };
-
-  const handleExtractWithAI = async () => {
-    if (!selectedFile || !tenantId) return;
-    setIsExtractingAI(true);
-    setAiExtractionResult(null);
-    try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(selectedFile);
-      });
-      const fileType = selectedFile.type === 'application/pdf' ? 'pdf' : 'docx';
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-      const response = await fetch(`${backendUrl}/api/ai/extract-policy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenantId,
-          file_name: selectedFile.name,
-          file_type: fileType,
-          base64_content: base64
-        })
-      });
-      const result = await response.json();
-      if (result.success && result.data) {
-        const data = result.data;
-        if (data.datos_generales) {
-          if (data.datos_generales.numero_poliza) setValue('policy_number', data.datos_generales.numero_poliza);
-          if (data.datos_generales.anexo) setValue('anexo', data.datos_generales.anexo);
-          if (data.datos_generales.tipo_movimiento) setValue('tipo_movimiento', data.datos_generales.tipo_movimiento);
-          if (data.datos_generales.fecha_expedicion) setValue('fecha_expedicion', data.datos_generales.fecha_expedicion);
-        }
-        if (data.vigencia) {
-          if (data.vigencia.fecha_desde) setValue('start_date', data.vigencia.fecha_desde);
-          if (data.vigencia.fecha_hasta) setValue('end_date', data.vigencia.fecha_hasta);
-        }
-        if (data.tomador) {
-          if (data.tomador.nombre) setValue('tomador_nombre', data.tomador.nombre);
-          if (data.tomador.tipo_identificacion) setValue('tomador_tipo_identificacion', data.tomador.tipo_identificacion);
-          if (data.tomador.numero_identificacion) setValue('tomador_numero_identificacion', data.tomador.numero_identificacion);
-        }
-        if (data.asegurado) {
-          setAseguradoDiferente(data.asegurado.es_diferente_tomador || false);
-          if (data.asegurado.es_diferente_tomador) {
-            if (data.asegurado.nombre) setValue('asegurado_nombre', data.asegurado.nombre);
-            if (data.asegurado.tipo_identificacion) setValue('asegurado_tipo_identificacion', data.asegurado.tipo_identificacion);
-            if (data.asegurado.numero_identificacion) setValue('asegurado_numero_identificacion', data.asegurado.numero_identificacion);
-          }
-        }
-        if (data.valores) {
-          if (data.valores.valor_asegurado) {
-            setValue('valor_asegurado', data.valores.valor_asegurado);
-            setValorAseguradoDisplay(formatCurrency(data.valores.valor_asegurado));
-          }
-          if (data.valores.prima_neta) {
-            setValue('premium', data.valores.prima_neta);
-            setPremiumDisplay(formatCurrency(data.valores.prima_neta));
-          }
-          if (data.valores.gastos_expedicion) {
-            setValue('gastos_expedicion', data.valores.gastos_expedicion);
-            setGastosDisplay(formatCurrency(data.valores.gastos_expedicion));
-          }
-          if (data.valores.iva) {
-            setValue('iva', data.valores.iva);
-            setIvaDisplay(formatCurrency(data.valores.iva));
-          }
-        }
-        if (data.beneficiarios && data.beneficiarios.length > 0) {
-          setBeneficiarios(data.beneficiarios);
-          setMostrarBeneficiarios(true);
-        }
-        if (data.notas_extraccion) {
-          setNotasValue(data.notas_extraccion);
-        }
-        if (result.needs_verification) {
-          setValue('status', 'verificacion');
-        }
-        setAiExtractionResult({
-          success: true,
-          needsVerification: result.needs_verification,
-          verificationFields: result.verification_fields
-        });
-      } else {
-        setAiExtractionResult({
-          success: false,
-          needsVerification: false,
-          error: result.error || 'Error al extraer datos'
-        });
-      }
-    } catch (error) {
-      console.error('Error extracting with AI:', error);
-      setAiExtractionResult({
-        success: false,
-        needsVerification: false,
-        error: 'Error de conexión con el servicio de IA'
-      });
-    } finally {
-      setIsExtractingAI(false);
-    }
-  };
+  // =====================================================
+  // HANDLERS
+  // =====================================================
 
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartDate = e.target.value;
@@ -776,7 +642,7 @@ export function PolicyForm({
       allied_agent_id: clientAlliedAgent?.id || null,
       allied_agent_pct: clientAlliedAgent ? alliedAgentPctValue : 0,
       comercial_id: clientData?.comercial_id || null,
-      grupo_empresarial_id: clientData?.grupo_empresarial_id || null,
+      grupo_empresarial_id: clientData?.business_group_id || null,
       usuario_id: currentUser?.id || null,
       asegurado_diferente: aseguradoDiferente,
       beneficiarios: beneficiarios.length > 0 ? beneficiarios : undefined,
@@ -792,124 +658,48 @@ export function PolicyForm({
   const anexoOptions = Array.from({ length: 100 }, (_, i) => i.toString().padStart(2, '0'));
   const diasVigencia = calcularDiasVigencia(startDate, endDate);
 
+  // =====================================================
+  // RENDER
+  // =====================================================
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
-      
-      {!isEditing && aiEnabled && !loadingAiStatus && (
-        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 rounded-lg p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-purple-200">
-            <Sparkles className="h-5 w-5 text-purple-600" />
-            <h3 className="font-semibold text-purple-900">Lectura Automática con IA</h3>
-            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Beta</span>
-          </div>
-          <p className="text-sm text-purple-700 mb-4">
-            Sube el PDF de la póliza y la IA extraerá los datos automáticamente.
-          </p>
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <Input
-                type="file"
-                accept=".pdf,.docx"
-                onChange={handleFileChange}
-                disabled={isExtractingAI}
-                className="bg-white"
-              />
-            </div>
-            <Button
-              type="button"
-              onClick={handleExtractWithAI}
-              disabled={!selectedFile || isExtractingAI}
-              className="bg-purple-600 hover:bg-purple-700"
-            >
-              {isExtractingAI ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Extrayendo...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Extraer Datos
-                </>
-              )}
-            </Button>
-          </div>
-          {selectedFile && (
-            <p className="text-xs text-purple-600 mt-2">
-              Archivo: {selectedFile.name}
-            </p>
-          )}
-          {aiExtractionResult && (
-            <div className="mt-4">
-              {aiExtractionResult.success ? (
-                <div className={`flex items-start gap-3 p-4 rounded-lg border ${aiExtractionResult.needsVerification ? 'border-amber-500 bg-amber-50' : 'border-green-500 bg-green-50'}`}>
-                  {aiExtractionResult.needsVerification ? (
-                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                  ) : (
-                    <CheckCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-                  )}
-                  <div className={aiExtractionResult.needsVerification ? 'text-amber-700' : 'text-green-700'}>
-                    {aiExtractionResult.needsVerification ? (
-                      <>
-                        <strong>Datos extraídos con observaciones.</strong> Verifica los siguientes campos: {aiExtractionResult.verificationFields?.join(', ')}
-                      </>
-                    ) : (
-                      <strong>Datos extraídos correctamente.</strong>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-start gap-3 p-4 rounded-lg border border-red-500 bg-red-50">
-                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                  <div className="text-red-700">
-                    {aiExtractionResult.error}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+    <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-8">
 
-      {!isEditing && !aiEnabled && !loadingAiStatus && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-gray-600">
-            <Sparkles className="h-4 w-4" />
-            <span className="text-sm">
-              La lectura automática con IA no está habilitada para tu cuenta. Contacta al administrador para activarla.
-            </span>
-          </div>
-        </div>
-      )}
+      {/* ============================================= */}
+      {/* SECCION 1: DATOS GENERALES */}
+      {/* ============================================= */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
+          <FileText className="h-5 w-5" />
+          1. Datos Generales de la Póliza
+        </h3>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
-          <FileText className="h-5 w-5 text-blue-600" />
-          <h3 className="font-semibold text-gray-900">1. Datos Generales de la Póliza</h3>
-        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label htmlFor="policy_number">Número de Póliza *</Label>
             <Input
               id="policy_number"
-              {...register('policy_number')}
               placeholder="Ej: POL-2024-001"
+              {...register('policy_number')}
               disabled={loading}
-              className="uppercase"
+              data-testid="policy-number-input"
             />
             {errors.policy_number && (
-              <p className="text-red-500 text-xs">{errors.policy_number.message}</p>
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {errors.policy_number.message}
+              </p>
             )}
           </div>
+
           <div className="space-y-2">
             <Label>Anexo</Label>
             <Select
-              value={watch('anexo') || '00'}
+              defaultValue={(policy as any)?.anexo || '00'}
               onValueChange={(value) => setValue('anexo', value)}
               disabled={loading}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar" />
+              <SelectTrigger data-testid="anexo-select">
+                <SelectValue placeholder="00" />
               </SelectTrigger>
               <SelectContent>
                 {anexoOptions.map((num) => (
@@ -918,20 +708,22 @@ export function PolicyForm({
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-2">
             <Label>Aseguradora *</Label>
             {loadingCatalogs ? (
-              <div className="flex items-center gap-2 text-gray-500 text-sm p-2">
+              <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted/50">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Cargando...
+                <span className="text-sm text-muted-foreground">Cargando...</span>
               </div>
             ) : tenantCompanies.length === 0 ? (
-              <div className="text-amber-600 text-sm p-2 bg-amber-50 rounded">
-                No tienes compañías activas configuradas.
+              <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-amber-50 text-amber-700">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-xs">No tienes compañías activas configuradas.</span>
               </div>
             ) : (
               <Select
-                value={selectedCompanyId}
+                defaultValue={selectedCompanyId}
                 onValueChange={(value) => {
                   setSelectedCompanyId(value);
                   setSelectedLineId('');
@@ -940,7 +732,7 @@ export function PolicyForm({
                 }}
                 disabled={loading}
               >
-                <SelectTrigger>
+                <SelectTrigger data-testid="insurer-select">
                   <SelectValue placeholder="Seleccionar aseguradora" />
                 </SelectTrigger>
                 <SelectContent>
@@ -948,7 +740,7 @@ export function PolicyForm({
                     <SelectItem key={tc.company_id} value={tc.company_id}>
                       <span className="flex items-center gap-2">
                         {tc.company.name}
-                        {tc.company_code && <span className="text-gray-400">({tc.company_code})</span>}
+                        {tc.company_code && (<span className="text-muted-foreground text-xs">({tc.company_code})</span>)}
                       </span>
                     </SelectItem>
                   ))}
@@ -956,10 +748,13 @@ export function PolicyForm({
               </Select>
             )}
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>Ramo *</Label>
             <Select
-              value={selectedLineId}
+              defaultValue={selectedLineId}
               onValueChange={(value) => {
                 setSelectedLineId(value);
                 setSelectedGroupId('');
@@ -967,7 +762,7 @@ export function PolicyForm({
               }}
               disabled={loading || !selectedCompanyId || availableLines.length === 0}
             >
-              <SelectTrigger>
+              <SelectTrigger data-testid="line-select">
                 <SelectValue placeholder="Seleccionar ramo" />
               </SelectTrigger>
               <SelectContent>
@@ -977,14 +772,15 @@ export function PolicyForm({
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-2">
             <Label>Tipo de Movimiento *</Label>
             <Select
-              value={watch('tipo_movimiento') || 'expedicion'}
+              defaultValue={(policy as any)?.tipo_movimiento || 'expedicion'}
               onValueChange={(value) => setValue('tipo_movimiento', value)}
               disabled={loading}
             >
-              <SelectTrigger>
+              <SelectTrigger data-testid="tipo-movimiento-select">
                 <SelectValue placeholder="Seleccionar" />
               </SelectTrigger>
               <SelectContent>
@@ -994,6 +790,7 @@ export function PolicyForm({
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
             <Input
@@ -1001,17 +798,22 @@ export function PolicyForm({
               type="date"
               {...register('fecha_expedicion')}
               disabled={loading}
+              data-testid="fecha-expedicion-input"
             />
           </div>
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
-          <Calendar className="h-5 w-5 text-green-600" />
-          <h3 className="font-semibold text-gray-900">2. Vigencia de la Póliza</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* ============================================= */}
+      {/* SECCION 2: VIGENCIA */}
+      {/* ============================================= */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
+          <Calendar className="h-5 w-5" />
+          2. Vigencia de la Póliza
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label htmlFor="start_date">Vigencia Desde *</Label>
             <Input
@@ -1020,8 +822,10 @@ export function PolicyForm({
               {...register('start_date')}
               onChange={handleStartDateChange}
               disabled={loading}
+              data-testid="start-date-input"
             />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="end_date">Vigencia Hasta *</Label>
             <Input
@@ -1029,8 +833,10 @@ export function PolicyForm({
               type="date"
               {...register('end_date')}
               disabled={loading}
+              data-testid="end-date-input"
             />
           </div>
+
           <div className="space-y-2">
             <Label>Días de Vigencia</Label>
             <Input
@@ -1039,15 +845,18 @@ export function PolicyForm({
               className="bg-gray-50"
             />
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>Estado de la Póliza *</Label>
             <Select
-              value={watch('status') || 'activa'}
+              defaultValue={policy?.status || 'activa'}
               onValueChange={(value) => setValue('status', value as PolicyStatus)}
               disabled={loading || !isEditing}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar" />
+              <SelectTrigger data-testid="status-select">
+                <SelectValue placeholder="Estado" />
               </SelectTrigger>
               <SelectContent>
                 {statusOptions.map(({ value, label }) => (
@@ -1056,21 +865,28 @@ export function PolicyForm({
               </SelectContent>
             </Select>
             {!isEditing && (
-              <p className="text-xs text-gray-500">Estado inicial: Activa</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <CheckCircle className="h-3 w-3 text-green-600" />
+                Estado inicial: Activa
+              </p>
             )}
           </div>
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
-          <User className="h-5 w-5 text-purple-600" />
-          <h3 className="font-semibold text-gray-900">3. Información del Tomador</h3>
-        </div>
+      {/* ============================================= */}
+      {/* SECCION 3: TOMADOR */}
+      {/* ============================================= */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
+          <User className="h-5 w-5" />
+          3. Información del Tomador
+        </h3>
+
         {loadingClient ? (
-          <div className="flex items-center gap-2 text-gray-500">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Cargando datos del tomador...
+          <div className="flex items-center gap-2 py-4 justify-center">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm text-muted-foreground">Cargando datos del tomador...</span>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1079,19 +895,20 @@ export function PolicyForm({
               <Input
                 id="tomador_nombre"
                 {...register('tomador_nombre')}
-                placeholder="Nombre completo o razón social"
                 disabled={loading}
+                data-testid="tomador-nombre-input"
               />
             </div>
+
             <div className="space-y-2">
               <Label>Tipo de Identificación *</Label>
               <Select
-                value={watch('tomador_tipo_identificacion') || 'cedula_ciudadania'}
+                defaultValue={(policy as any)?.tomador_tipo_identificacion || 'cedula_ciudadania'}
                 onValueChange={(value) => setValue('tomador_tipo_identificacion', value)}
                 disabled={loading}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar" />
+                <SelectTrigger data-testid="tomador-tipo-id-select">
+                  <SelectValue placeholder="Tipo" />
                 </SelectTrigger>
                 <SelectContent>
                   {TIPO_IDENTIFICACION_OPTIONS.map((opt) => (
@@ -1100,54 +917,61 @@ export function PolicyForm({
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="tomador_numero_identificacion">Número de Identificación *</Label>
               <Input
                 id="tomador_numero_identificacion"
                 {...register('tomador_numero_identificacion')}
-                placeholder="Número de documento"
                 disabled={loading}
+                data-testid="tomador-numero-id-input"
               />
             </div>
           </div>
         )}
       </div>
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
-          <Users className="h-5 w-5 text-orange-600" />
-          <h3 className="font-semibold text-gray-900">4. Asegurado y Beneficiario</h3>
-        </div>
-        <div className="flex items-center space-x-2 mb-4">
+
+      {/* ============================================= */}
+      {/* SECCION 4: ASEGURADO Y BENEFICIARIO */}
+      {/* ============================================= */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
+          <Users className="h-5 w-5" />
+          4. Asegurado y Beneficiario
+        </h3>
+
+        <div className="flex items-center space-x-2">
           <Checkbox
             id="asegurado_diferente"
             checked={aseguradoDiferente}
             onCheckedChange={(checked) => setAseguradoDiferente(checked === true)}
             disabled={loading}
           />
-          <Label htmlFor="asegurado_diferente" className="text-sm font-normal cursor-pointer">
+          <Label htmlFor="asegurado_diferente" className="text-sm cursor-pointer">
             El asegurado es diferente al tomador
           </Label>
         </div>
+
         {aseguradoDiferente && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-orange-50 rounded-lg">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-6 border-l-2 border-primary/20">
             <div className="space-y-2">
-              <Label htmlFor="asegurado_nombre">Nombre del Asegurado *</Label>
+              <Label>Nombre del Asegurado *</Label>
               <Input
-                id="asegurado_nombre"
                 {...register('asegurado_nombre')}
-                placeholder="Nombre completo"
                 disabled={loading}
+                data-testid="asegurado-nombre-input"
               />
             </div>
+
             <div className="space-y-2">
               <Label>Tipo de Identificación *</Label>
               <Select
-                value={watch('asegurado_tipo_identificacion') || 'cedula_ciudadania'}
+                defaultValue={(policy as any)?.asegurado_tipo_identificacion || ''}
                 onValueChange={(value) => setValue('asegurado_tipo_identificacion', value)}
                 disabled={loading}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar" />
+                <SelectTrigger data-testid="asegurado-tipo-id-select">
+                  <SelectValue placeholder="Tipo" />
                 </SelectTrigger>
                 <SelectContent>
                   {TIPO_IDENTIFICACION_OPTIONS.map((opt) => (
@@ -1156,268 +980,288 @@ export function PolicyForm({
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="asegurado_numero_identificacion">Número de Identificación *</Label>
+              <Label>Número de Identificación *</Label>
               <Input
-                id="asegurado_numero_identificacion"
                 {...register('asegurado_numero_identificacion')}
-                placeholder="Número de documento"
                 disabled={loading}
+                data-testid="asegurado-numero-id-input"
               />
             </div>
           </div>
         )}
-        <div className="border-t pt-4 mt-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="mostrar_beneficiarios"
-                checked={mostrarBeneficiarios}
-                onCheckedChange={(checked) => setMostrarBeneficiarios(checked === true)}
-                disabled={loading}
-              />
-              <Label htmlFor="mostrar_beneficiarios" className="text-sm font-normal cursor-pointer">
-                Agregar beneficiarios diferentes
-              </Label>
-            </div>
-            {mostrarBeneficiarios && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddBeneficiario}
-                disabled={loading}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Agregar
-              </Button>
-            )}
-          </div>
-          {mostrarBeneficiarios && beneficiarios.length > 0 && (
-            <div className="space-y-3">
-              {beneficiarios.map((ben, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 bg-gray-50 rounded-lg items-end">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Nombre</Label>
-                    <Input
-                      value={ben.nombre}
-                      onChange={(e) => handleBeneficiarioChange(index, 'nombre', e.target.value)}
-                      placeholder="Nombre del beneficiario"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Tipo ID</Label>
-                    <Select
-                      value={ben.tipo_identificacion}
-                      onValueChange={(value) => handleBeneficiarioChange(index, 'tipo_identificacion', value)}
-                      disabled={loading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TIPO_IDENTIFICACION_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Número ID</Label>
-                    <Input
-                      value={ben.numero_identificacion}
-                      onChange={(e) => handleBeneficiarioChange(index, 'numero_identificacion', e.target.value)}
-                      placeholder="Número"
-                      disabled={loading}
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemoveBeneficiario(index)}
-                    disabled={loading}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
+
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="mostrar_beneficiarios"
+            checked={mostrarBeneficiarios}
+            onCheckedChange={(checked) => setMostrarBeneficiarios(checked === true)}
+            disabled={loading}
+          />
+          <Label htmlFor="mostrar_beneficiarios" className="text-sm cursor-pointer">
+            Agregar beneficiarios diferentes
+          </Label>
         </div>
+
+        {mostrarBeneficiarios && (
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={handleAddBeneficiario} disabled={loading}>
+              <Plus className="h-4 w-4 mr-1" />
+              Agregar
+            </Button>
+          </div>
+        )}
+
+        {mostrarBeneficiarios && beneficiarios.length > 0 && (
+          <div className="space-y-3 pl-6 border-l-2 border-primary/20">
+            {beneficiarios.map((ben, index) => (
+              <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                <div className="space-y-1">
+                  <Label className="text-xs">Nombre</Label>
+                  <Input
+                    value={ben.nombre}
+                    onChange={(e) => handleBeneficiarioChange(index, 'nombre', e.target.value)}
+                    placeholder="Nombre del beneficiario"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Tipo ID</Label>
+                  <Select
+                    value={ben.tipo_identificacion}
+                    onValueChange={(value) => handleBeneficiarioChange(index, 'tipo_identificacion', value)}
+                    disabled={loading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIPO_IDENTIFICACION_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Número ID</Label>
+                  <Input
+                    value={ben.numero_identificacion}
+                    onChange={(e) => handleBeneficiarioChange(index, 'numero_identificacion', e.target.value)}
+                    placeholder="Número"
+                    disabled={loading}
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleRemoveBeneficiario(index)}
+                  disabled={loading}
+                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
-          <DollarSign className="h-5 w-5 text-emerald-600" />
-          <h3 className="font-semibold text-gray-900">5. Valores de la Póliza</h3>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      {/* ============================================= */}
+      {/* SECCION 5: VALORES */}
+      {/* ============================================= */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
+          <DollarSign className="h-5 w-5" />
+          5. Valores de la Póliza
+        </h3>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="valor_asegurado">Valor Asegurado *</Label>
+            <Label>Valor Asegurado *</Label>
             <Input
-              id="valor_asegurado"
               value={valorAseguradoDisplay}
               onChange={handleValorAseguradoChange}
               placeholder="$0"
               disabled={loading}
+              data-testid="valor-asegurado-input"
             />
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="premium">Prima Neta *</Label>
+            <Label>Prima Neta *</Label>
             <Input
-              id="premium"
               value={premiumDisplay}
               onChange={handlePremiumChange}
               placeholder="$0"
               disabled={loading}
+              data-testid="premium-input"
             />
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="gastos_expedicion">Gastos Expedición</Label>
+            <Label>Gastos Expedición</Label>
             <Input
-              id="gastos_expedicion"
               value={gastosDisplay}
               onChange={handleGastosChange}
               placeholder="$0"
               disabled={loading}
+              data-testid="gastos-input"
             />
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="iva">IVA</Label>
+            <Label>IVA</Label>
             <Input
-              id="iva"
               value={ivaDisplay}
               onChange={handleIvaChange}
               placeholder="$0"
               disabled={loading}
+              data-testid="iva-input"
             />
           </div>
+
           <div className="space-y-2">
             <Label>Total a Pagar</Label>
             <Input
-              value={formatCurrency(watch('total_a_pagar') || 0)}
+              value={formatCurrency(Number(premium) + Number(gastosExpedicion) + Number(iva))}
               disabled
-              className="bg-emerald-50 font-semibold text-emerald-700"
+              className="bg-gray-50 font-semibold"
+              data-testid="total-input"
             />
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="commission_pct">Comisión %</Label>
+            <Label>Comisión %</Label>
             <div className="relative">
               <Input
-                id="commission_pct"
                 type="number"
-                step="0.01"
                 {...register('commission_pct', { valueAsNumber: true })}
                 disabled={loading}
+                min={0}
+                max={100}
+                data-testid="commission-input"
               />
               {loadingCommission && (
-                <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-gray-400" />
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
               )}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
-          <Settings className="h-5 w-5 text-gray-600" />
-          <h3 className="font-semibold text-gray-900">6. Gestión Interna CRM</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* ============================================= */}
+      {/* SECCION 6: GESTION INTERNA CRM */}
+      {/* ============================================= */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
+          <Settings className="h-5 w-5" />
+          6. Gestión Interna CRM
+        </h3>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="space-y-2">
             <Label>Usuario</Label>
             <Input
-              value={currentUser?.full_name || 'Cargando...'}
+              value={currentUser?.full_name || ''}
               disabled
-              className="bg-gray-100"
+              className="bg-gray-50"
             />
           </div>
+
           <div className="space-y-2">
             <Label>Comercial</Label>
             <Input
               value={comercialName || 'No asignado en HV'}
               disabled
-              className="bg-gray-100"
+              className="bg-gray-50"
             />
           </div>
+
           <div className="space-y-2">
             <Label>Aliado</Label>
             {loadingAlliedAgent ? (
-              <div className="flex items-center gap-2 text-gray-500 text-sm p-2">
+              <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted/50">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Cargando...
+                <span className="text-xs text-muted-foreground">Cargando...</span>
               </div>
             ) : (
               <Input
-                value={clientAlliedAgent?.full_name || 'Directo (sin aliado)'}
+                value={clientAlliedAgent?.full_name || 'No asignado en HV'}
                 disabled
-                className="bg-gray-100"
+                className="bg-gray-50"
               />
             )}
           </div>
+
           <div className="space-y-2">
             <Label>Grupo Empresarial</Label>
             <Input
               value={grupoEmpresarialName || 'No asignado en HV'}
               disabled
-              className="bg-gray-100"
+              className="bg-gray-50"
             />
           </div>
         </div>
+
         {clientAlliedAgent && (
-          <div className="mt-4 pt-4 border-t">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="allied_agent_pct">% Comisión Aliado</Label>
-                <Input
-                  id="allied_agent_pct"
-                  type="number"
-                  step="0.01"
-                  value={alliedAgentPctValue}
-                  onChange={(e) => setAlliedAgentPctValue(parseFloat(e.target.value) || 0)}
-                  disabled={loading}
-                />
-                <p className="text-xs text-gray-500">Porcentaje sobre la comisión de la agencia</p>
-              </div>
+          <div className="border-t pt-4">
+            <div className="max-w-xs space-y-2">
+              <Label>% Comisión Aliado</Label>
+              <Input
+                type="number"
+                value={alliedAgentPctValue}
+                onChange={(e) => setAlliedAgentPctValue(parseFloat(e.target.value) || 0)}
+                disabled={loading}
+                min={0}
+                max={100}
+                data-testid="allied-agent-pct-input"
+              />
+              <p className="text-xs text-muted-foreground">
+                Porcentaje sobre la comisión de la agencia
+              </p>
             </div>
           </div>
         )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-4 pb-2 border-b">
-          <MessageSquare className="h-5 w-5 text-gray-600" />
-          <h3 className="font-semibold text-gray-900">Notas y Comentarios</h3>
-        </div>
+      {/* ============================================= */}
+      {/* NOTAS Y COMENTARIOS */}
+      {/* ============================================= */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
+          <MessageSquare className="h-5 w-5" />
+          Notas y Comentarios
+        </h3>
         <Textarea
-          placeholder="Observaciones adicionales sobre la póliza..."
           value={notasValue}
           onChange={(e) => setNotasValue(e.target.value)}
-          disabled={loading}
+          placeholder="Notas adicionales sobre la póliza..."
           rows={3}
+          disabled={loading}
+          data-testid="notas-textarea"
         />
       </div>
 
+      {/* ============================================= */}
+      {/* BOTONES */}
+      {/* ============================================= */}
       <div className="flex justify-end gap-3 pt-4 border-t">
         {onCancel && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            disabled={loading}
-          >
+          <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
             <X className="h-4 w-4 mr-2" />
             Cancelar
           </Button>
         )}
-        <Button type="submit" disabled={loading}>
+        <Button type="submit" disabled={loading} data-testid="submit-policy-btn">
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Guardando...
+              {isEditing ? 'Actualizando...' : 'Creando...'}
             </>
           ) : (
             <>
