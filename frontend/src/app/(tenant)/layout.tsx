@@ -80,6 +80,7 @@ const navGroups: NavGroup[] = [
     icon: Users,
     items: [
       { title: 'Clientes', href: '/clientes', icon: Users, permissionKey: 'clientes' },
+      { title: 'Grupos', href: '/grupos', icon: Building2, adminOnly: true },
       { title: 'Aliados', href: '/aliados', icon: Handshake, adminOnly: true },
       { title: 'Mensajes', href: '/mensajes', icon: MessageSquare, permissionKey: 'mensajes', premiumOnly: true },
     ]
