@@ -580,7 +580,11 @@ export default function DetallePolizaPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Días de Vigencia</p>
-                <p className="text-sm font-medium">{policyAny.dias_vigencia || '-'}</p>
+                <p className="text-sm font-medium">
+                  {policy.start_date && policy.end_date
+                    ? Math.ceil((new Date(policy.end_date).getTime() - new Date(policy.start_date).getTime()) / (1000 * 60 * 60 * 24))
+                    : '-'}
+                </p>
               </div>
             </div>
             {/* Vigencia consolidada si hay anexos que la modifican */}
