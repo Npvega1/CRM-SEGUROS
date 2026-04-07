@@ -6,7 +6,7 @@
 // Usa Supabase Client directo (evita API Routes)
 // =====================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -60,7 +60,11 @@ import {
   ArrowLeft,
   FileWarning,
   CheckCircle2,
-  Clock
+  Clock,
+  Upload,
+  X,
+  FileText,
+  Loader2
 } from 'lucide-react';
 
 interface ClaimStats {
@@ -77,6 +81,25 @@ interface PolicyOption {
   line: string;
   client_id: string;
   client_name: string;
+}
+
+interface PendingFile {
+  file: File;
+  name: string;
+}
+
+// Formatear número con separadores de miles (estilo colombiano)
+function formatThousands(value: string): string {
+  // Eliminar todo excepto dígitos
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return '';
+  // Formatear con puntos de miles
+  return Number(digits).toLocaleString('es-CO');
+}
+
+// Extraer el número limpio (sin separadores) de un string formateado
+function parseCleanNumber(formatted: string): string {
+  return formatted.replace(/\./g, '').replace(/,/g, '');
 }
 
 export default function ClaimsPage() {
@@ -101,8 +124,10 @@ export default function ClaimsPage() {
     claimed_amount: '',
     description: ''
   });
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadClaims = useCallback(async () => {
     if (!tenantId) return;
@@ -236,6 +261,20 @@ export default function ClaimsPage() {
     }
   }, [showNewClaimModal, tenantId, loadActivePolicies]);
 
+  // Manejar selección de archivos
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files).map(f => ({ file: f, name: f.name }));
+      setPendingFiles(prev => [...prev, ...newFiles]);
+      e.target.value = '';
+    }
+  };
+
+  // Eliminar archivo pendiente
+  const removePendingFile = (index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleCreateClaim = async () => {
     if (!selectedPolicy || !tenantId || !userId) return;
     
@@ -243,11 +282,13 @@ export default function ClaimsPage() {
     setIsSubmitting(true);
     
     try {
+      const cleanAmount = parseCleanNumber(newClaimData.claimed_amount);
+
       const input: OpenClaimInput = {
         policy_id: selectedPolicy.id,
         client_id: selectedPolicy.client_id,
         incident_date: newClaimData.incident_date,
-        claimed_amount: parseFloat(newClaimData.claimed_amount) || 0,
+        claimed_amount: parseFloat(cleanAmount) || 0,
         description: newClaimData.description
       };
       
@@ -297,11 +338,43 @@ export default function ClaimsPage() {
           comment: 'Siniestro reportado',
           is_internal: false
         });
+
+      // Subir documentos adjuntos si hay
+      if (pendingFiles.length > 0) {
+        for (const pf of pendingFiles) {
+          const fileExt = pf.file.name.split('.').pop() || 'pdf';
+          const filePath = `${tenantId}/${newClaim.id}/${Date.now()}_${pf.file.name}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('claim-documents')
+            .upload(filePath, pf.file);
+
+          if (uploadError) {
+            console.error('Error uploading file:', uploadError);
+            continue;
+          }
+
+          // Registrar en la tabla claim_documents
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from('claim_documents')
+            .insert({
+              claim_id: newClaim.id,
+              tenant_id: tenantId,
+              uploader_id: userId,
+              file_name: pf.file.name,
+              file_url: filePath,
+              file_type: fileExt,
+              file_size: pf.file.size
+            });
+        }
+      }
       
       // Limpiar y cerrar modal
       setShowNewClaimModal(false);
       setSelectedPolicy(null);
       setNewClaimData({ incident_date: '', claimed_amount: '', description: '' });
+      setPendingFiles([]);
       
       // Recargar datos
       loadClaims();
@@ -518,7 +591,7 @@ export default function ClaimsPage() {
 
       {/* Modal Nuevo Siniestro */}
       <Dialog open={showNewClaimModal} onOpenChange={setShowNewClaimModal}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nuevo Siniestro</DialogTitle>
             <DialogDescription>
@@ -568,19 +641,25 @@ export default function ClaimsPage() {
               />
             </div>
 
-            {/* Monto reclamado */}
+            {/* Monto reclamado - con formato de miles */}
             <div className="space-y-2">
               <Label htmlFor="claimed_amount">Monto Reclamado *</Label>
-              <Input
-                id="claimed_amount"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                value={newClaimData.claimed_amount}
-                onChange={(e) => setNewClaimData(prev => ({ ...prev, claimed_amount: e.target.value }))}
-                data-testid="claimed-amount-input"
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                <Input
+                  id="claimed_amount"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  className="pl-7"
+                  value={newClaimData.claimed_amount}
+                  onChange={(e) => {
+                    const formatted = formatThousands(e.target.value);
+                    setNewClaimData(prev => ({ ...prev, claimed_amount: formatted }));
+                  }}
+                  data-testid="claimed-amount-input"
+                />
+              </div>
             </div>
 
             {/* Descripción */}
@@ -594,6 +673,53 @@ export default function ClaimsPage() {
                 onChange={(e) => setNewClaimData(prev => ({ ...prev, description: e.target.value }))}
                 data-testid="description-input"
               />
+            </div>
+
+            {/* Documentos adjuntos */}
+            <div className="space-y-2">
+              <Label>Documentos Adjuntos</Label>
+              <div
+                className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileSelect}
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                />
+                <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground mt-1">
+                  Haz clic para seleccionar archivos
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  PDF, imágenes, Word, Excel
+                </p>
+              </div>
+
+              {/* Lista de archivos seleccionados */}
+              {pendingFiles.length > 0 && (
+                <div className="space-y-2 mt-2">
+                  {pendingFiles.map((pf, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <span className="text-sm truncate">{pf.name}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 flex-shrink-0"
+                        onClick={() => removePendingFile(index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {formError && (
@@ -610,6 +736,7 @@ export default function ClaimsPage() {
                 setShowNewClaimModal(false);
                 setSelectedPolicy(null);
                 setNewClaimData({ incident_date: '', claimed_amount: '', description: '' });
+                setPendingFiles([]);
                 setFormError(null);
               }}
             >
@@ -620,7 +747,12 @@ export default function ClaimsPage() {
               disabled={isSubmitting || !selectedPolicy || !newClaimData.incident_date || !newClaimData.description}
               data-testid="submit-claim-btn"
             >
-              {isSubmitting ? 'Creando...' : 'Crear Siniestro'}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creando...
+                </>
+              ) : 'Crear Siniestro'}
             </Button>
           </DialogFooter>
         </DialogContent>
