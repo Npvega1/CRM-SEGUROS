@@ -183,17 +183,6 @@ export function ClientsTable({
                   </TableCell>
                   <TableCell className="py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
-                      <span
-                        title={client.status === 'verificado' ? 'Verificado' : 'En verificación'}
-                        className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold leading-none ${
-                          client.status === 'verificado'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}
-                        data-testid={`client-status-${client.id}`}
-                      >
-                        {client.status === 'verificado' ? 'V' : 'P'}
-                      </span>
                       <Link href={`/clientes/${client.id}`}>
                         <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`view-client-${client.id}`}>
                           <Eye className="w-3.5 h-3.5" />
