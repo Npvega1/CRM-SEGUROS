@@ -117,7 +117,7 @@ export default function ClaimDetailPage() {
           ...h,
           changed_by_name: h.users?.full_name || null
         })) as ClaimExpediente['history'],
-        / eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         documents: (docsData || []).map((d: any) => ({
           ...d,
           uploader_name: null
