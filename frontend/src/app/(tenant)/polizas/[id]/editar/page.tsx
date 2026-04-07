@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 export default function EditarPolizaPage() {
   const params = useParams();
   const router = useRouter();
-  const { tenantId, tenantSlug } = useTenant();
+  const { tenantId } = useTenant();
   const supabase = createClient();
   const policyId = params.id as string;
 
@@ -40,7 +40,7 @@ export default function EditarPolizaPage() {
         setPolicy(data);
       } catch (err) {
         console.error('Error loading policy:', err);
-        toast.error('Error al cargar la poliza');
+        toast.error('Error al cargar la póliza');
       } finally {
         setLoading(false);
       }
@@ -56,7 +56,6 @@ export default function EditarPolizaPage() {
     setSaving(true);
 
     try {
-      // Construir payload base (campos que NO son enum con CHECK constraint)
       const updatePayload: Record<string, any> = {
         policy_number: data.policy_number,
         anexo: data.anexo || '00',
@@ -94,7 +93,6 @@ export default function EditarPolizaPage() {
       // =====================================================
       // CRITICO: Campos enum con CHECK constraint en Supabase
       // Solo incluirlos si tienen valor valido (NO vacio)
-      // Esto evita el error: "new row violates check constraint"
       // =====================================================
       if (data.tipo_movimiento && data.tipo_movimiento !== '') {
         updatePayload.tipo_movimiento = data.tipo_movimiento;
@@ -114,11 +112,11 @@ export default function EditarPolizaPage() {
 
       if (updateError) throw updateError;
 
-      toast.success('Poliza actualizada correctamente');
-      router.push(`/${tenantSlug}/polizas/${policyId}`);
+      toast.success('Póliza actualizada correctamente');
+      router.push(`/polizas/${policyId}`);
     } catch (err: any) {
       console.error('Error updating policy:', err);
-      toast.error(err.message || 'Error al actualizar la poliza');
+      toast.error(err.message || 'Error al actualizar la póliza');
     } finally {
       setSaving(false);
     }
@@ -139,11 +137,11 @@ export default function EditarPolizaPage() {
     return (
       <div className="container mx-auto py-6 px-4">
         <div className="text-center py-12">
-          <p className="text-muted-foreground">Poliza no encontrada</p>
-          <Link href={`/${tenantSlug}/polizas`}>
+          <p className="text-muted-foreground">Póliza no encontrada</p>
+          <Link href="/polizas">
             <Button variant="outline" className="mt-4">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Volver a Polizas
+              Volver a Pólizas
             </Button>
           </Link>
         </div>
@@ -152,28 +150,21 @@ export default function EditarPolizaPage() {
   }
 
   // =====================================================
-  // RENDER - Formulario de edicion (sin max-w-4xl)
+  // RENDER
   // =====================================================
   return (
     <div className="container mx-auto py-6 px-4">
-      <div className="flex items-center gap-4 mb-6">
-        <Link href={`/${tenantSlug}/polizas/${policyId}`}>
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold">Editar Poliza</h1>
-          <p className="text-muted-foreground">
-            {policy.policy_number} - {policy.insurer}
-          </p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">Editar Póliza</h1>
+        <p className="text-muted-foreground">
+          {policy.policy_number} - {policy.insurer}
+        </p>
       </div>
 
       <PolicyForm
         policy={policy}
         onSubmit={handleSubmit}
-        onCancel={() => router.push(`/${tenantSlug}/polizas/${policyId}`)}
+        onCancel={() => router.push(`/polizas/${policyId}`)}
         isLoading={saving}
       />
     </div>
