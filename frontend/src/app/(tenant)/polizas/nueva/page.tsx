@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PolicyForm, type PolicyFormData } from '@/components/modules/policies/PolicyForm';
 import type { Client } from '@/lib/validations/clients';
-import { ArrowLeft, Shield, AlertCircle, Search, Loader2, User, Check } from 'lucide-react';
+import { ArrowLeft, Shield, AlertCircle, Search, Loader2, User } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { getBrowserClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 
@@ -24,6 +25,19 @@ function NewPolicyContent() {
   const [selectedClientId, setSelectedClientId] = useState<string>(preselectedClientId || '');
   const [clientSearch, setClientSearch] = useState('');
   const [isLoadingClients, setIsLoadingClients] = useState(true);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar dropdown al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     async function loadClients() {
@@ -133,12 +147,13 @@ function NewPolicyContent() {
   const selectedClient = clients.find(c => c.id === selectedClientId);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/polizas">
-          <button className="p-2 hover:bg-muted rounded-lg transition-colors">
+          <Button variant="ghost" size="icon">
             <ArrowLeft className="h-5 w-5" />
-          </button>
+          </Button>
         </Link>
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-lg">
@@ -152,12 +167,13 @@ function NewPolicyContent() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          <AlertCircle className="h-5 w-5 flex-shrink-0" />
-          <p>{error}</p>
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          <span className="text-sm">{error}</span>
         </div>
       )}
 
+      {/* Selector de Cliente - Buscador Dropdown */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -167,55 +183,72 @@ function NewPolicyContent() {
           <CardDescription>Busca y selecciona el cliente para la póliza</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nombre o documento..."
-                value={clientSearch}
-                onChange={(e) => setClientSearch(e.target.value)}
-                className="pl-10"
-              />
+          {isLoadingClients ? (
+            <div className="flex items-center gap-2 py-4 justify-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Cargando clientes...</span>
             </div>
-
-            {isLoadingClients ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-muted-foreground">Cargando clientes...</span>
+          ) : !selectedClientId ? (
+            <div ref={dropdownRef} className="relative">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nombre o documento..."
+                  value={clientSearch}
+                  onChange={(e) => { setClientSearch(e.target.value); setIsDropdownOpen(true); }}
+                  onFocus={() => setIsDropdownOpen(true)}
+                  className="pl-10"
+                  data-testid="client-search-input"
+                />
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
-                {filteredClients.map((client) => (
-                  <button
-                    key={client.id}
-                    type="button"
-                    onClick={() => setSelectedClientId(client.id)}
-                    className={`w-full text-left p-3 rounded-lg border transition-all ${
-                      selectedClientId === client.id
-                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                        : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-sm">{client.full_name}</p>
-                        <p className="text-xs text-muted-foreground">{client.doc_number}</p>
-                      </div>
-                      {selectedClientId === client.id && <Check className="h-5 w-5 text-primary" />}
+              {isDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredClients.length > 0 ? filteredClients.map((client) => (
+                    <button
+                      key={client.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedClientId(client.id);
+                        setIsDropdownOpen(false);
+                        setClientSearch('');
+                      }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-muted/50 border-b last:border-b-0 flex justify-between items-center transition-colors"
+                      data-testid={`client-option-${client.id}`}
+                    >
+                      <span className="font-medium text-sm">{client.full_name}</span>
+                      <span className="text-xs text-muted-foreground">{client.doc_number}</span>
+                    </button>
+                  )) : (
+                    <div className="px-4 py-4 text-center text-sm text-muted-foreground">
+                      No se encontraron clientes
                     </div>
-                  </button>
-                ))}
-                {filteredClients.length === 0 && (
-                  <div className="col-span-full text-center py-8 text-muted-foreground">
-                    No se encontraron clientes
-                  </div>
-                )}
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+              <User className="h-5 w-5 text-primary" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm">{selectedClient?.full_name}</p>
+                <p className="text-xs text-muted-foreground">{selectedClient?.doc_number}</p>
               </div>
-            )}
-          </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => { setSelectedClientId(''); setClientSearch(''); }}
+                className="text-xs h-8"
+                data-testid="change-client-btn"
+              >
+                Cambiar
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
+      {/* Formulario de Póliza */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -228,8 +261,8 @@ function NewPolicyContent() {
         </CardHeader>
         <CardContent>
           {!selectedClientId ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <div className="text-center py-8 text-muted-foreground">
+              <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p>Selecciona un cliente para crear la póliza</p>
             </div>
           ) : (
