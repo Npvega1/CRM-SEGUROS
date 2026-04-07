@@ -588,20 +588,17 @@ export default function ClaimsPage() {
           </div>
         </div>
       )}
-
+      
       {/* Modal Nuevo Siniestro */}
       <Dialog open={showNewClaimModal} onOpenChange={setShowNewClaimModal}>
-        <DialogContent className="sm:max-w-[425px] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[425px] max-h-[80vh] overflow-y-auto top-[55%]">
           <DialogHeader>
             <DialogTitle>Nuevo Siniestro</DialogTitle>
-            <DialogDescription>
-              Registra un nuevo siniestro. Solo se pueden crear siniestros para pólizas activas.
-            </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
+          <div className="space-y-3 py-2">
             {/* Selector de póliza */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="policy">Póliza Activa *</Label>
               <Select
                 value={selectedPolicy?.id || ''}
@@ -622,53 +619,53 @@ export default function ClaimsPage() {
                 </SelectContent>
               </Select>
               {selectedPolicy && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Cliente: {selectedPolicy.client_name} | Ramo: {POLICY_LINE_LABELS[selectedPolicy.line] || selectedPolicy.line}
                 </p>
               )}
             </div>
 
-            {/* Fecha del incidente */}
-            <div className="space-y-2">
-              <Label htmlFor="incident_date">Fecha del Incidente *</Label>
-              <Input
-                id="incident_date"
-                type="date"
-                value={newClaimData.incident_date}
-                onChange={(e) => setNewClaimData(prev => ({ ...prev, incident_date: e.target.value }))}
-                max={new Date().toISOString().split('T')[0]}
-                data-testid="incident-date-input"
-              />
-            </div>
-
-            {/* Monto reclamado - con formato de miles */}
-            <div className="space-y-2">
-              <Label htmlFor="claimed_amount">Monto Reclamado *</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+            {/* Fecha y Monto en una fila */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="incident_date">Fecha Incidente *</Label>
                 <Input
-                  id="claimed_amount"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="0"
-                  className="pl-7"
-                  value={newClaimData.claimed_amount}
-                  onChange={(e) => {
-                    const formatted = formatThousands(e.target.value);
-                    setNewClaimData(prev => ({ ...prev, claimed_amount: formatted }));
-                  }}
-                  data-testid="claimed-amount-input"
+                  id="incident_date"
+                  type="date"
+                  value={newClaimData.incident_date}
+                  onChange={(e) => setNewClaimData(prev => ({ ...prev, incident_date: e.target.value }))}
+                  max={new Date().toISOString().split('T')[0]}
+                  data-testid="incident-date-input"
                 />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="claimed_amount">Monto Reclamado *</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                  <Input
+                    id="claimed_amount"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    className="pl-7"
+                    value={newClaimData.claimed_amount}
+                    onChange={(e) => {
+                      const formatted = formatThousands(e.target.value);
+                      setNewClaimData(prev => ({ ...prev, claimed_amount: formatted }));
+                    }}
+                    data-testid="claimed-amount-input"
+                  />
+                </div>
               </div>
             </div>
 
             {/* Descripción */}
-            <div className="space-y-2">
-              <Label htmlFor="description">Descripción del Siniestro *</Label>
+            <div className="space-y-1">
+              <Label htmlFor="description">Descripción *</Label>
               <Textarea
                 id="description"
-                placeholder="Describe detalladamente lo ocurrido..."
-                rows={3}
+                placeholder="Describe lo ocurrido..."
+                rows={2}
                 value={newClaimData.description}
                 onChange={(e) => setNewClaimData(prev => ({ ...prev, description: e.target.value }))}
                 data-testid="description-input"
@@ -676,10 +673,10 @@ export default function ClaimsPage() {
             </div>
 
             {/* Documentos adjuntos */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Documentos Adjuntos</Label>
               <div
-                className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                className="border-2 border-dashed rounded-lg p-3 text-center cursor-pointer hover:border-primary/50 transition-colors"
                 onClick={() => fileInputRef.current?.click()}
               >
                 <input
@@ -690,28 +687,24 @@ export default function ClaimsPage() {
                   onChange={handleFileSelect}
                   accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
                 />
-                <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
-                <p className="text-sm text-muted-foreground mt-1">
+                <Upload className="h-5 w-5 mx-auto text-muted-foreground" />
+                <p className="text-xs text-muted-foreground mt-1">
                   Haz clic para seleccionar archivos
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  PDF, imágenes, Word, Excel
                 </p>
               </div>
 
-              {/* Lista de archivos seleccionados */}
               {pendingFiles.length > 0 && (
-                <div className="space-y-2 mt-2">
+                <div className="space-y-1 mt-1">
                   {pendingFiles.map((pf, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                    <div key={index} className="flex items-center justify-between p-1.5 bg-muted/50 rounded-md">
                       <div className="flex items-center gap-2 min-w-0">
-                        <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <span className="text-sm truncate">{pf.name}</span>
+                        <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <span className="text-xs truncate">{pf.name}</span>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 flex-shrink-0"
+                        className="h-5 w-5 flex-shrink-0"
                         onClick={() => removePendingFile(index)}
                       >
                         <X className="h-3 w-3" />
@@ -723,7 +716,7 @@ export default function ClaimsPage() {
             </div>
 
             {formError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded text-sm">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-1.5 rounded text-xs">
                 {formError}
               </div>
             )}
@@ -732,6 +725,7 @@ export default function ClaimsPage() {
           <DialogFooter>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => {
                 setShowNewClaimModal(false);
                 setSelectedPolicy(null);
@@ -743,6 +737,7 @@ export default function ClaimsPage() {
               Cancelar
             </Button>
             <Button
+              size="sm"
               onClick={handleCreateClaim}
               disabled={isSubmitting || !selectedPolicy || !newClaimData.incident_date || !newClaimData.description}
               data-testid="submit-claim-btn"
