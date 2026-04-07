@@ -648,10 +648,6 @@ export function ClientForm({ initialData, tenantId, agentId }: ClientFormProps) 
                     <Input type="date" value={formNatural.fecha_expedicion} onChange={(e) => handleNaturalChange('fecha_expedicion', e.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Fecha de Nacimiento</Label>
-                    <Input type="date" value={formNatural.fecha_nacimiento} onChange={(e) => handleNaturalChange('fecha_nacimiento', e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
                     <Label>Fecha de Nacimiento *</Label>
                     <Input type="date" value={formNatural.fecha_nacimiento} onChange={(e) => handleNaturalChange('fecha_nacimiento', e.target.value)} className={err('fecha_nacimiento')} />
                     {formErrors.fecha_nacimiento && <p className="text-xs text-red-500">Campo obligatorio</p>}
