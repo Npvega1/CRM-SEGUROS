@@ -147,7 +147,7 @@ function NewPolicyContent() {
   const selectedClient = clients.find(c => c.id === selectedClientId);
 
   return (
-    <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
+    <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/polizas">
