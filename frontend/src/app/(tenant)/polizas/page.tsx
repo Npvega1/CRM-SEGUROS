@@ -47,6 +47,7 @@ interface PolicyWithRelations extends Policy {
   };
   consolidated_premium?: number;
   anexo_count?: number;
+  consolidated_end_date?: string | null;
 }
 
 interface StatusCount {
@@ -105,12 +106,12 @@ export default function PoliciesPage() {
 
       const policyNumbers = (data || []).map((p: Record<string, unknown>) => p.policy_number as string);
 
-      let consolidatedPremiums: Record<string, { premium: number; count: number }> = {};
+      let consolidatedPremiums: Record<string, { premium: number; count: number; maxEndDate: string | null }> = {};
 
       if (policyNumbers.length > 0) {
         const { data: allRelatedPolicies } = await supabase
           .from('policies')
-          .select('policy_number, premium, anexo')
+          .select('policy_number, premium, anexo, end_date')
           .eq('tenant_id', tenantId)
           .in('policy_number', policyNumbers);
 
@@ -119,14 +120,19 @@ export default function PoliciesPage() {
             const pn = p.policy_number as string;
             const premium = (p.premium as number) || 0;
             const anexo = p.anexo as string;
+            const endDate = p.end_date as string | null;
 
             if (!consolidatedPremiums[pn]) {
-              consolidatedPremiums[pn] = { premium: 0, count: 0 };
+              consolidatedPremiums[pn] = { premium: 0, count: 0, maxEndDate: null };
             }
             consolidatedPremiums[pn].premium += premium;
 
             if (anexo && anexo !== '00') {
               consolidatedPremiums[pn].count += 1;
+            }
+
+            if (endDate && (!consolidatedPremiums[pn].maxEndDate || endDate > consolidatedPremiums[pn].maxEndDate!)) {
+              consolidatedPremiums[pn].maxEndDate = endDate;
             }
           });
         }
@@ -141,7 +147,8 @@ export default function PoliciesPage() {
           client_name: (p.clients as { full_name: string })?.full_name,
           insurance_line: p.insurance_line as PolicyWithRelations['insurance_line'],
           consolidated_premium: consolidated?.premium || (p.premium as number) || 0,
-          anexo_count: consolidated?.count || 0
+          anexo_count: consolidated?.count || 0,
+          consolidated_end_date: consolidated?.maxEndDate || (p.end_date as string) || null
         };
       }) as PolicyWithRelations[];
 
@@ -309,7 +316,7 @@ export default function PoliciesPage() {
                           {POLICY_STATUS_LABELS[policy.status as PolicyStatus]}
                         </Badge>
                       </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">{formatDate(policy.end_date)}</TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">{formatDate(policy.consolidated_end_date || policy.end_date)}</TableCell>
                       <TableCell className="py-2 text-right">
                         <Link href={`/polizas/${policy.id}`}>
                           <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`ver-poliza-${policy.id}`}>
