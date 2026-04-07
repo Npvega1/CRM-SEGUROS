@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Save, X, AlertTriangle, FileEdit } from 'lucide-react';
+import { Loader2, Save, X, FileEdit } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
 
@@ -106,7 +106,7 @@ const formatCurrency = (value: number): string => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   }).format(Math.abs(value));
-  
+
   return value < 0 ? `-${formatted}` : formatted;
 };
 
@@ -140,7 +140,6 @@ export function PolicyModificationForm({
   const [gastosDisplay, setGastosDisplay] = useState('$0');
   const [ivaDisplay, setIvaDisplay] = useState('$0');
   const [notasValue, setNotasValue] = useState('');
-  const [isNegativePremium, setIsNegativePremium] = useState(false);
 
   const {
     register,
@@ -179,21 +178,22 @@ export function PolicyModificationForm({
   const gastosExpedicion = watch('gastos_expedicion') || 0;
   const iva = watch('iva') || 0;
 
+  // Computar si la prima es negativa (sin estado separado)
+  const isNegativePremium = Number(premium) < 0;
+
   // Calcular total - cuando prima es negativa, gastos e IVA también son negativos
   useEffect(() => {
     const premiumNum = Number(premium);
     const gastosNum = Math.abs(Number(gastosExpedicion));
     const ivaNum = Math.abs(Number(iva));
-    
+
     let total: number;
     if (premiumNum < 0) {
-      // Si prima es negativa, gastos e IVA se suman al negativo
       total = premiumNum - gastosNum - ivaNum;
     } else {
-      // Si prima es positiva, cálculo normal
       total = premiumNum + gastosNum + ivaNum;
     }
-    
+
     setValue('total_a_pagar', total);
   }, [premium, gastosExpedicion, iva, setValue]);
 
@@ -333,47 +333,43 @@ export function PolicyModificationForm({
 
   const handlePremiumChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
+
+    // Permitir escribir solo "-" para empezar un número negativo
+    if (inputValue === '-' || inputValue === '-$' || inputValue === '-$0') {
+      setPremiumDisplay('-');
+      setValue('premium', 0);
+      return;
+    }
+
     const numericValue = parseCurrencyValue(inputValue);
     setValue('premium', numericValue);
     setPremiumDisplay(formatCurrency(numericValue));
-    setIsNegativePremium(numericValue < 0);
-  };
-
-  const handleToggleNegative = () => {
-    const currentPremium = watch('premium') || 0;
-    const newValue = -currentPremium;
-    setValue('premium', newValue);
-    setPremiumDisplay(formatCurrency(newValue));
-    setIsNegativePremium(newValue < 0);
   };
 
   const handleGastosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = parseCurrencyValue(e.target.value);
-    // Siempre guardamos el valor absoluto, el signo lo determina la prima
     setValue('gastos_expedicion', Math.abs(numericValue));
     setGastosDisplay(formatCurrency(Math.abs(numericValue)));
   };
 
   const handleIvaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = parseCurrencyValue(e.target.value);
-    // Siempre guardamos el valor absoluto, el signo lo determina la prima
     setValue('iva', Math.abs(numericValue));
     setIvaDisplay(formatCurrency(Math.abs(numericValue)));
   };
 
   const handleFormSubmit = async (data: ModificationFormData) => {
-    // Ajustar gastos e IVA según el signo de la prima
     const premiumNum = Number(data.premium);
     const gastosNum = Math.abs(Number(data.gastos_expedicion));
     const ivaNum = Math.abs(Number(data.iva));
-    
+
     const adjustedData: ModificationFormData = {
       ...data,
       gastos_expedicion: premiumNum < 0 ? -gastosNum : gastosNum,
       iva: premiumNum < 0 ? -ivaNum : ivaNum,
       notas: notasValue || undefined
     };
-    
+
     await onSubmit(adjustedData);
   };
 
@@ -383,80 +379,65 @@ export function PolicyModificationForm({
   };
 
   const loading = isLoading || isSubmitting;
-  
+
   // Calcular total para mostrar
   const premiumNum = Number(premium);
   const gastosNum = Math.abs(Number(gastosExpedicion));
   const ivaNum = Math.abs(Number(iva));
-  const totalAPagar = premiumNum < 0 
-    ? premiumNum - gastosNum - ivaNum 
+  const totalAPagar = premiumNum < 0
+    ? premiumNum - gastosNum - ivaNum
     : premiumNum + gastosNum + ivaNum;
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-6">
+    <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-8">
       {/* Indicador de Modificación */}
-      <div className="relative w-full rounded-lg border px-4 py-3 text-sm bg-amber-50 border-amber-200">
-        <FileEdit className="h-4 w-4 text-amber-600 absolute left-4 top-4" />
-        <div className="pl-7 text-amber-800">
-          <strong>Creando Modificación (Anexo {nextAnexo})</strong> sobre la Póliza{' '}
-          <strong>{parentPolicy.policy_number}</strong>
-          {parentPolicy.anexo !== '00' && ` - Anexo ${parentPolicy.anexo}`}
-          <br />
-          <span className="text-sm">Cliente: {parentPolicy.client_name}</span>
+      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+        <div className="flex items-start gap-3">
+          <FileEdit className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-blue-900">
+              <strong>Creando Modificación (Anexo {nextAnexo})</strong> sobre la Póliza{' '}
+              <strong>{parentPolicy.policy_number}</strong>
+              {parentPolicy.anexo !== '00' && ` - Anexo ${parentPolicy.anexo}`}
+            </p>
+            <p className="text-xs text-blue-700 mt-1">
+              Cliente: {parentPolicy.client_name}
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Identificación de la Póliza */}
-      <div className="bg-white p-6 rounded-lg border space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-800">
-          Identificación de la Póliza
-        </h3>
-
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Identificación de la Póliza</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
+          <div>
             <Label>Número de Póliza</Label>
-            <Input
-              {...register('policy_number')}
-              disabled={true}
-              className="bg-slate-100"
-            />
+            <Input {...register('policy_number')} disabled className="bg-muted" />
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Anexo</Label>
-            <Input
-              value={nextAnexo}
-              disabled={true}
-              className="bg-slate-100 font-bold text-amber-600"
-            />
-            <p className="text-xs text-slate-500">Calculado automáticamente</p>
+            <Input value={nextAnexo} disabled className="bg-muted" />
+            <p className="text-xs text-muted-foreground mt-1">Calculado automáticamente</p>
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Estado</Label>
-            <Input
-              value="Activa"
-              disabled={true}
-              className="bg-slate-100"
-            />
+            <Input value="Activa" disabled className="bg-muted" />
           </div>
         </div>
       </div>
 
       {/* Selección de Producto */}
-      <div className="bg-white p-6 rounded-lg border space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-800">
-          Producto de Seguro
-        </h3>
-
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Producto de Seguro</h3>
         {loadingCatalogs ? (
-          <div className="flex items-center gap-2 text-slate-500">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
             <Loader2 className="h-4 w-4 animate-spin" />
             Cargando catálogos...
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
+            <div>
               <Label>Compañía *</Label>
               <Select
                 value={selectedCompanyId}
@@ -480,8 +461,7 @@ export function PolicyModificationForm({
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-2">
+            <div>
               <Label>Grupo *</Label>
               <Select
                 value={selectedLineId}
@@ -503,12 +483,11 @@ export function PolicyModificationForm({
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-2">
+            <div>
               <Label>Ramo *</Label>
               <Select
                 value={selectedGroupId}
-                onValueChange={setSelectedGroupId}
+                onValueChange={(value) => setSelectedGroupId(value)}
                 disabled={loading || !selectedLineId || availableGroups.length === 0}
               >
                 <SelectTrigger>
@@ -528,73 +507,50 @@ export function PolicyModificationForm({
       </div>
 
       {/* Fechas */}
-      <div className="bg-white p-6 rounded-lg border space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-800">
-          Fechas <span className="text-red-500 text-sm">(Obligatorias)</span>
-        </h3>
-
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Fechas (Obligatorias)</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
+          <div>
             <Label>Fecha de Expedición *</Label>
-            <Input
-              type="date"
-              {...register('fecha_expedicion')}
-              disabled={loading}
-              className={errors.fecha_expedicion ? 'border-red-500' : ''}
-            />
+            <Input type="date" {...register('fecha_expedicion')} disabled={loading} />
             {errors.fecha_expedicion && (
-              <p className="text-sm text-red-500">{errors.fecha_expedicion.message}</p>
+              <p className="text-xs text-red-500 mt-1">{errors.fecha_expedicion.message}</p>
             )}
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Fecha de Inicio *</Label>
-            <Input
-              type="date"
-              {...register('start_date')}
-              disabled={loading}
-              className={errors.start_date ? 'border-red-500' : ''}
-            />
+            <Input type="date" {...register('start_date')} disabled={loading} />
             {errors.start_date && (
-              <p className="text-sm text-red-500">{errors.start_date.message}</p>
+              <p className="text-xs text-red-500 mt-1">{errors.start_date.message}</p>
             )}
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Fecha de Vencimiento *</Label>
-            <Input
-              type="date"
-              {...register('end_date')}
-              disabled={loading}
-              className={errors.end_date ? 'border-red-500' : ''}
-            />
+            <Input type="date" {...register('end_date')} disabled={loading} />
             {errors.end_date && (
-              <p className="text-sm text-red-500">{errors.end_date.message}</p>
+              <p className="text-xs text-red-500 mt-1">{errors.end_date.message}</p>
             )}
           </div>
         </div>
       </div>
 
       {/* Valores de la Modificación */}
-      <div className="bg-white p-6 rounded-lg border space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-800">
-          Valores de la Modificación
-        </h3>
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Valores de la Modificación</h3>
 
-        {/* Información sobre valores negativos */}
-        <div className="relative w-full rounded-lg border px-4 py-3 text-sm bg-blue-50 border-blue-200">
-          <AlertTriangle className="h-4 w-4 text-blue-600 absolute left-4 top-4" />
-          <div className="pl-7 text-blue-800 text-sm">
-            <strong>Nota:</strong> Si la modificación reduce la prima, usa el botón &quot;Negativo&quot;. 
+        {/* Nota actualizada */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-sm text-blue-800">
+            <strong>Nota:</strong> Si la modificación reduce la prima, escriba el signo <strong>-</strong> antes del valor (ej: -500000).
             Cuando la prima es negativa, los gastos e IVA también se aplicarán como negativos automáticamente.
-          </div>
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <div className="space-y-2">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 items-end">
+          <div>
             <Label>Moneda</Label>
             <Select
-              defaultValue="COP"
+              value={watch('currency')}
               onValueChange={(value) => setValue('currency', value)}
               disabled={loading}
             >
@@ -608,35 +564,26 @@ export function PolicyModificationForm({
             </Select>
           </div>
 
-          <div className="space-y-2 md:col-span-2">
+          <div>
             <Label>Prima (Ajuste) *</Label>
-            <div className="flex gap-2">
-              <Input
-                value={premiumDisplay}
-                onChange={handlePremiumChange}
-                onFocus={(e) => e.target.select()}
-                disabled={loading}
-                className={isNegativePremium ? 'text-red-600 font-bold' : ''}
-              />
-              <Button
-                type="button"
-                variant={isNegativePremium ? "destructive" : "outline"}
-                size="sm"
-                onClick={handleToggleNegative}
-                disabled={loading}
-                className="whitespace-nowrap"
-              >
-                {isNegativePremium ? '+ Positivo' : '- Negativo'}
-              </Button>
-            </div>
+            <Input
+              type="text"
+              value={premiumDisplay}
+              onChange={handlePremiumChange}
+              onFocus={(e) => e.target.select()}
+              disabled={loading}
+              className={isNegativePremium ? 'text-red-600 font-bold' : ''}
+              placeholder="$0 o -$500000"
+            />
             {errors.premium && (
-              <p className="text-sm text-red-500">{errors.premium.message}</p>
+              <p className="text-xs text-red-500 mt-1">{errors.premium.message}</p>
             )}
           </div>
 
-          <div className="space-y-2">
+          <div>
             <Label>Gastos Exp. {isNegativePremium && <span className="text-red-500">(−)</span>}</Label>
             <Input
+              type="text"
               value={gastosDisplay}
               onChange={handleGastosChange}
               onFocus={(e) => e.target.select()}
@@ -645,9 +592,10 @@ export function PolicyModificationForm({
             />
           </div>
 
-          <div className="space-y-2">
+          <div>
             <Label>IVA {isNegativePremium && <span className="text-red-500">(−)</span>}</Label>
             <Input
+              type="text"
               value={ivaDisplay}
               onChange={handleIvaChange}
               onFocus={(e) => e.target.select()}
@@ -656,30 +604,27 @@ export function PolicyModificationForm({
             />
           </div>
 
-          <div className="space-y-2">
+          <div>
             <Label>Total</Label>
-            <Input
-              value={formatCurrency(totalAPagar)}
-              disabled={true}
-              className={`bg-slate-100 font-bold ${totalAPagar < 0 ? 'text-red-600' : 'text-green-600'}`}
-            />
+            <div className={`p-2 rounded-md border text-sm font-semibold ${totalAPagar < 0 ? 'text-red-600 bg-red-50' : 'text-emerald-600 bg-emerald-50'}`}>
+              {formatCurrency(totalAPagar)}
+            </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <div className="space-y-2">
+          <div>
             <Label>Comisión %</Label>
-            <div className="relative">
+            <div className="flex items-center gap-1">
               <Input
                 type="number"
-                step="0.01"
+                step="0.1"
                 min="0"
                 max="100"
                 {...register('commission_pct')}
                 disabled={loading}
+                className="w-24"
               />
               {loadingCommission && (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-slate-400" />
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               )}
             </div>
           </div>
@@ -687,56 +632,45 @@ export function PolicyModificationForm({
 
         {/* Resumen visual */}
         {totalAPagar !== 0 && (
-          <div className={`p-4 rounded-lg ${totalAPagar < 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
-            <p className={`font-semibold ${totalAPagar < 0 ? 'text-red-700' : 'text-green-700'}`}>
-              {totalAPagar < 0 
-                ? `Esta modificación genera un CRÉDITO de ${formatCurrency(Math.abs(totalAPagar))} a favor del cliente`
-                : `Esta modificación genera un CARGO adicional de ${formatCurrency(totalAPagar)}`
-              }
-            </p>
+          <div className={`p-3 rounded-lg text-sm font-medium ${totalAPagar < 0 ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+            {totalAPagar < 0
+              ? `Esta modificación genera un CRÉDITO de ${formatCurrency(Math.abs(totalAPagar))} a favor del cliente`
+              : `Esta modificación genera un CARGO adicional de ${formatCurrency(totalAPagar)}`
+            }
           </div>
         )}
       </div>
 
       {/* Notas */}
-      <div className="bg-white p-6 rounded-lg border space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-800">
-          Notas y Comentarios
-        </h3>
-
-        <div className="space-y-2">
-          <Label htmlFor="notas">Descripción de la modificación</Label>
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Notas y Comentarios</h3>
+        <div>
+          <Label>Descripción de la modificación</Label>
           <Textarea
-            id="notas"
             value={notasValue}
             onChange={(e) => setNotasValue(e.target.value)}
-            placeholder="Describe el motivo de esta modificación (ej: Aumento de cobertura, Inclusión de beneficiario, etc.)"
-            className="min-h-[100px]"
+            placeholder="Describa el motivo y alcance de esta modificación..."
+            rows={3}
             disabled={loading}
           />
         </div>
       </div>
 
-      {/* Botones de Acción */}
-      <div className="flex justify-end gap-3 pt-4">
+      {/* Botones */}
+      <div className="flex justify-end gap-3 pt-4 border-t">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
-            <X className="w-4 h-4 mr-2" />
+            <X className="h-4 w-4 mr-2" />
             Cancelar
           </Button>
         )}
-        <Button type="submit" disabled={loading} className="bg-amber-600 hover:bg-amber-700">
+        <Button type="submit" disabled={loading}>
           {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Guardando...
-            </>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
-            <>
-              <Save className="w-4 h-4 mr-2" />
-              Guardar Modificación (Anexo {nextAnexo})
-            </>
+            <Save className="h-4 w-4 mr-2" />
           )}
+          Guardar Modificación
         </Button>
       </div>
     </form>
