@@ -31,6 +31,13 @@ import {
   type PolicyLine
 } from '@/lib/validations/policies';
 import {
+  CLAIM_STATUS_LABELS,
+  CLAIM_STATUS_COLORS,
+  formatClaimAmount,
+  formatClaimDate,
+  type ClaimStatus
+} from '@/lib/validations/claims';
+import {
   User,
   Mail,
   Phone,
@@ -43,7 +50,8 @@ import {
   FolderOpen,
   Clock,
   Download,
-  Layers
+  Layers,
+  Eye
 } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { getBrowserClient } from '@/lib/supabase/client';
@@ -65,6 +73,17 @@ interface ClientDocument {
   created_at: string;
 }
 
+// Tipo para siniestro con relaciones
+interface ClaimWithRelations {
+  id: string;
+  status: string;
+  incident_date: string;
+  claimed_amount: number;
+  approved_amount: number | null;
+  created_at: string;
+  policies?: { policy_number: string; insurer: string; line: string };
+}
+
 interface Client360ViewProps {
   client: Client;
 }
@@ -73,8 +92,10 @@ export function Client360View({ client }: Client360ViewProps) {
   const { tenantId } = useTenant();
   const [policies, setPolicies] = useState<PolicyWithGroup[]>([]);
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
+  const [claims, setClaims] = useState<ClaimWithRelations[]>([]);
   const [isLoadingPolicies, setIsLoadingPolicies] = useState(true);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(true);
+  const [isLoadingClaims, setIsLoadingClaims] = useState(true);
 
   // =====================================================
   // CARGA DE PÓLIZAS (con nombre de grupo)
@@ -132,12 +153,41 @@ export function Client360View({ client }: Client360ViewProps) {
     setIsLoadingDocuments(false);
   }, [tenantId, client.id]);
 
+  // =====================================================
+  // CARGA DE SINIESTROS
+  // =====================================================
+  const loadClaims = useCallback(async () => {
+    if (!tenantId || !client.id) return;
+
+    setIsLoadingClaims(true);
+    try {
+      const supabase = getBrowserClient();
+
+      const { data, error } = await (supabase as any)
+        .from('claims')
+        .select('id, status, incident_date, claimed_amount, approved_amount, created_at, policies(policy_number, insurer, line)')
+        .eq('tenant_id', tenantId)
+        .eq('client_id', client.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading claims:', error);
+      } else {
+        setClaims((data || []) as ClaimWithRelations[]);
+      }
+    } catch (error) {
+      console.error('Error loading claims:', error);
+    }
+    setIsLoadingClaims(false);
+  }, [tenantId, client.id]);
+
   useEffect(() => {
     if (tenantId && client.id) {
       loadPolicies();
       loadDocuments();
+      loadClaims();
     }
-  }, [tenantId, client.id, loadPolicies, loadDocuments]);
+  }, [tenantId, client.id, loadPolicies, loadDocuments, loadClaims]);
 
   const activePolicies = policies.filter(p => p.status === 'activa');
   const totalPremium = activePolicies.reduce((sum, p) => sum + Number(p.premium), 0);
@@ -257,7 +307,7 @@ export function Client360View({ client }: Client360ViewProps) {
               <p className="text-sm text-muted-foreground">Prima Total</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold">0</p>
+              <p className="text-2xl font-bold">{claims.length}</p>
               <p className="text-sm text-muted-foreground">Siniestros</p>
             </div>
           </div>
@@ -311,7 +361,6 @@ export function Client360View({ client }: Client360ViewProps) {
                 <div className="space-y-6">
                   {sortedYears.map((year) => (
                     <div key={year}>
-                      {/* Encabezado del año */}
                       <div className="flex items-center gap-2 mb-3">
                         <Calendar className="w-4 h-4 text-muted-foreground" />
                         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -323,26 +372,20 @@ export function Client360View({ client }: Client360ViewProps) {
                         </span>
                       </div>
 
-                      {/* Tarjetas compactas */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {policiesByYear[year].map((policy) => (
                           <Link key={policy.id} href={`/polizas/${policy.id}`}>
                             <div className="p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
-                              {/* Fila 1: Número + Estado */}
                               <div className="flex items-center justify-between mb-1">
                                 <span className="text-sm font-semibold">#{policy.policy_number}</span>
                                 <Badge className={`text-xs ${POLICY_STATUS_COLORS[policy.status as PolicyStatus]}`}>
                                   {POLICY_STATUS_LABELS[policy.status as PolicyStatus]}
                                 </Badge>
                               </div>
-
-                              {/* Fila 2: Compañía */}
                               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                 <Building className="w-3 h-3 flex-shrink-0" />
                                 <span className="truncate">{policy.insurer}</span>
                               </div>
-
-                              {/* Fila 3: Grupo y Ramo */}
                               <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                                 {policy.insurance_groups?.name && (
                                   <span className="flex items-center gap-1">
@@ -354,8 +397,6 @@ export function Client360View({ client }: Client360ViewProps) {
                                   {POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line}
                                 </span>
                               </div>
-
-                              {/* Fila 4: Vigencia y Prima */}
                               <div className="flex items-center justify-between mt-2 pt-2 border-t border-dashed">
                                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                                   <Clock className="w-3 h-3" />
@@ -449,21 +490,54 @@ export function Client360View({ client }: Client360ViewProps) {
         <TabsContent value="siniestros">
           <Card>
             <CardHeader>
-              <CardTitle>Siniestros</CardTitle>
+              <CardTitle>Siniestros del Cliente</CardTitle>
               <CardDescription>
                 Historial de siniestros reportados
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8">
-                <AlertTriangle className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground">Ver siniestros del cliente</p>
-                <Link href={`/siniestros?clientId=${client.id}`}>
-                  <Button variant="outline" className="mt-4">
-                    Ver Siniestros
-                  </Button>
-                </Link>
-              </div>
+              {isLoadingClaims ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                  <p className="text-muted-foreground mt-2">Cargando siniestros...</p>
+                </div>
+              ) : claims.length === 0 ? (
+                <div className="text-center py-8">
+                  <AlertTriangle className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground">No hay siniestros registrados</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {claims.map((claim) => (
+                    <Link key={claim.id} href={`/siniestros/${claim.id}`}>
+                      <div className="p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-semibold">
+                            Póliza #{claim.policies?.policy_number || 'N/A'}
+                          </span>
+                          <Badge className={`text-xs ${CLAIM_STATUS_COLORS[claim.status as ClaimStatus]}`}>
+                            {CLAIM_STATUS_LABELS[claim.status as ClaimStatus]}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span>{claim.policies?.insurer}</span>
+                          <span>{formatClaimDate(claim.incident_date)}</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-dashed">
+                          <span className="text-xs text-muted-foreground">
+                            Reclamado: {formatClaimAmount(claim.claimed_amount)}
+                          </span>
+                          {claim.approved_amount != null && (
+                            <span className="text-xs text-green-600 font-medium">
+                              Aprobado: {formatClaimAmount(claim.approved_amount)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
