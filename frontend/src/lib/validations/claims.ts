@@ -15,11 +15,11 @@ import { z } from 'zod';
  */
 export const ClaimStatusEnum = z.enum([
   'reported',       // Reportado
-  'investigating',  // En investigación
+  'investigating',  // En investigación (legacy, se mantiene por BD)
   'docs_complete',  // Documentación completa
   'processing',     // En procesamiento
-  'resolved',       // Resuelto
-  'closed'          // Cerrado
+  'resolved',       // Finalizado - Aprobado y Pagado
+  'closed'          // Finalizado - Denegado
 ]);
 export type ClaimStatus = z.infer<typeof ClaimStatusEnum>;
 
@@ -193,12 +193,13 @@ export interface ClaimExpediente {
 
 /**
  * Transiciones de estado válidas para siniestros
+ * Flujo: Reportado → Docs. Completos → En Proceso → Finalizado
  */
 export const VALID_CLAIM_STATUS_TRANSITIONS: Record<ClaimStatus, ClaimStatus[]> = {
-  reported: ['investigating', 'closed'],
+  reported: ['docs_complete', 'closed'],
   investigating: ['docs_complete', 'closed'],
-  docs_complete: ['processing', 'investigating', 'closed'],
-  processing: ['resolved', 'investigating', 'closed'],
+  docs_complete: ['processing', 'reported', 'closed'],
+  processing: ['resolved', 'closed'],
   resolved: ['closed'],
   closed: []
 };
@@ -232,9 +233,9 @@ export const CLAIM_STATUS_LABELS: Record<ClaimStatus, string> = {
   reported: 'Reportado',
   investigating: 'En Investigación',
   docs_complete: 'Docs. Completos',
-  processing: 'En Procesamiento',
-  resolved: 'Resuelto',
-  closed: 'Cerrado'
+  processing: 'En Proceso',
+  resolved: 'Aprobado / Pagado',
+  closed: 'Denegado'
 };
 
 /**
@@ -246,38 +247,51 @@ export const CLAIM_STATUS_COLORS: Record<ClaimStatus, string> = {
   docs_complete: 'bg-blue-100 text-blue-800 border-blue-300',
   processing: 'bg-indigo-100 text-indigo-800 border-indigo-300',
   resolved: 'bg-green-100 text-green-800 border-green-300',
-  closed: 'bg-gray-100 text-gray-800 border-gray-300'
+  closed: 'bg-red-100 text-red-800 border-red-300'
 };
 
 /**
- * Colores para el stepper de estados
+ * Colores para el stepper de estados (4 pasos)
  */
 export const CLAIM_STATUS_STEPPER_COLORS: Record<ClaimStatus, { bg: string; text: string; border: string }> = {
   reported: { bg: 'bg-yellow-500', text: 'text-yellow-600', border: 'border-yellow-500' },
-  investigating: { bg: 'bg-orange-500', text: 'text-orange-600', border: 'border-orange-500' },
+  investigating: { bg: 'bg-yellow-500', text: 'text-yellow-600', border: 'border-yellow-500' },
   docs_complete: { bg: 'bg-blue-500', text: 'text-blue-600', border: 'border-blue-500' },
   processing: { bg: 'bg-indigo-500', text: 'text-indigo-600', border: 'border-indigo-500' },
   resolved: { bg: 'bg-green-500', text: 'text-green-600', border: 'border-green-500' },
-  closed: { bg: 'bg-gray-500', text: 'text-gray-600', border: 'border-gray-500' }
+  closed: { bg: 'bg-red-500', text: 'text-red-600', border: 'border-red-500' }
 };
 
 /**
- * Orden de los estados para el stepper
+ * Orden de los estados para el stepper visual (4 pasos)
  */
 export const CLAIM_STATUS_ORDER: ClaimStatus[] = [
   'reported',
-  'investigating',
   'docs_complete',
   'processing',
-  'resolved',
-  'closed'
+  'resolved'
 ];
 
 /**
- * Obtiene el índice del estado actual
+ * Labels específicos para el stepper (4 pasos)
+ */
+export const CLAIM_STEPPER_LABELS: Record<string, string> = {
+  reported: 'Reportado',
+  docs_complete: 'Docs. Completos',
+  processing: 'En Proceso',
+  resolved: 'Finalizado'
+};
+
+/**
+ * Obtiene el índice del estado actual para el stepper de 4 pasos
  */
 export function getStatusIndex(status: ClaimStatus): number {
-  return CLAIM_STATUS_ORDER.indexOf(status);
+  // Mapear estados al stepper de 4 pasos
+  if (status === 'reported' || status === 'investigating') return 0;
+  if (status === 'docs_complete') return 1;
+  if (status === 'processing') return 2;
+  if (status === 'resolved' || status === 'closed') return 3;
+  return 0;
 }
 
 /**
