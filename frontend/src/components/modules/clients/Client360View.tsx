@@ -12,6 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   type Client, 
   SEGMENT_LABELS, 
@@ -96,6 +103,7 @@ export function Client360View({ client }: Client360ViewProps) {
   const [isLoadingPolicies, setIsLoadingPolicies] = useState(true);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(true);
   const [isLoadingClaims, setIsLoadingClaims] = useState(true);
+  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
 
   // =====================================================
   // CARGA DE PÓLIZAS (con nombre de grupo)
@@ -189,8 +197,29 @@ export function Client360View({ client }: Client360ViewProps) {
     }
   }, [tenantId, client.id, loadPolicies, loadDocuments, loadClaims]);
 
+  // =====================================================
+  // STATS - VIGENTE (Fila 1)
+  // =====================================================
   const activePolicies = policies.filter(p => p.status === 'activa');
-  const totalPremium = activePolicies.reduce((sum, p) => sum + Number(p.premium), 0);
+  const activePremium = activePolicies.reduce((sum, p) => sum + Number(p.premium), 0);
+  const activeClaims = claims.filter(c => !['resolved', 'closed'].includes(c.status));
+
+  // =====================================================
+  // STATS - HISTÓRICO (Fila 2, filtrado por año)
+  // =====================================================
+  const availableYears = [...new Set([
+    ...policies.map(p => p.start_date ? new Date(p.start_date).getFullYear() : null),
+    ...claims.map(c => c.created_at ? new Date(c.created_at).getFullYear() : null),
+  ])].filter((y): y is number => y !== null).sort((a, b) => b - a);
+
+  const selectedYearNum = parseInt(selectedYear);
+  const historicalPolicies = policies.filter(p =>
+    p.start_date && new Date(p.start_date).getFullYear() === selectedYearNum
+  );
+  const historicalPremium = historicalPolicies.reduce((sum, p) => sum + Number(p.premium), 0);
+  const historicalClaims = claims.filter(c =>
+    c.created_at && new Date(c.created_at).getFullYear() === selectedYearNum
+  );
 
   // =====================================================
   // AGRUPAR PÓLIZAS POR AÑO DE EMISIÓN (start_date)
@@ -292,23 +321,55 @@ export function Client360View({ client }: Client360ViewProps) {
             </div>
           </div>
 
-          {/* Stats rápidos */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t">
-            <div className="text-center">
-              <p className="text-2xl font-bold">{policies.length}</p>
-              <p className="text-sm text-muted-foreground">Total Pólizas</p>
+          {/* Stats - Fila 1: Vigente */}
+          <div className="mt-6 pt-6 border-t">
+            <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wider mb-3">Vigente</p>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-emerald-600">{activePolicies.length}</p>
+                <p className="text-sm text-muted-foreground">Pólizas</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-emerald-600">{formatPremium(activePremium)}</p>
+                <p className="text-sm text-muted-foreground">Prima</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-emerald-600">{activeClaims.length}</p>
+                <p className="text-sm text-muted-foreground">Siniestros</p>
+              </div>
             </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">{activePolicies.length}</p>
-              <p className="text-sm text-muted-foreground">Activas</p>
+          </div>
+
+          {/* Stats - Fila 2: Histórico */}
+          <div className="mt-4 pt-4 border-t border-dashed">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Histórico</p>
+              {availableYears.length > 0 && (
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                  <SelectTrigger className="w-[100px] h-7 text-xs">
+                    <SelectValue placeholder="Año" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableYears.map(y => (
+                      <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold">{formatPremium(totalPremium)}</p>
-              <p className="text-sm text-muted-foreground">Prima Total</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold">{claims.length}</p>
-              <p className="text-sm text-muted-foreground">Siniestros</p>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold">{historicalPolicies.length}</p>
+                <p className="text-sm text-muted-foreground">Pólizas</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold">{formatPremium(historicalPremium)}</p>
+                <p className="text-sm text-muted-foreground">Prima</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold">{historicalClaims.length}</p>
+                <p className="text-sm text-muted-foreground">Siniestros</p>
+              </div>
             </div>
           </div>
         </CardContent>
