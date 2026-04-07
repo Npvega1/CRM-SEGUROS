@@ -154,22 +154,12 @@ export default function ClaimDetailPage() {
       return;
     }
 
-    console.log('Updating claim status:', {
-      claimId,
-      tenantId,
-      userId,
-      currentStatus,
-      newStatus,
-      comment
-    });
-
     setIsUpdating(true);
     try {
       const supabase = getBrowserClient();
 
-      // Actualizar estado del siniestro
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: updateData, error: updateError } = await (supabase as any)
+      const { error: updateError } = await (supabase as any)
         .from('claims')
         .update({ 
           status: newStatus,
@@ -179,8 +169,6 @@ export default function ClaimDetailPage() {
         .eq('tenant_id', tenantId)
         .select();
 
-      console.log('Update result:', { updateData, updateError });
-
       if (updateError) {
         console.error('Error updating status:', updateError);
         alert('Error al actualizar el estado: ' + (updateError.message || JSON.stringify(updateError)));
@@ -188,9 +176,8 @@ export default function ClaimDetailPage() {
         return;
       }
 
-      // Insertar en historial con comentario
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: historyData, error: historyError } = await (supabase as any)
+      await (supabase as any)
         .from('claims_history')
         .insert({
           claim_id: claimId,
@@ -202,14 +189,6 @@ export default function ClaimDetailPage() {
         })
         .select();
 
-      console.log('History insert result:', { historyData, historyError });
-
-      if (historyError) {
-        console.error('Error inserting history:', historyError);
-        // No mostrar error al usuario porque el estado ya se actualizó
-      }
-
-      // Recargar datos
       await loadExpediente();
     } catch (error) {
       console.error('Error changing status:', error);
@@ -266,20 +245,17 @@ export default function ClaimDetailPage() {
 
     for (const file of files) {
       try {
-        // Generar path único
         const timestamp = Date.now();
         const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const path = `${tenantId}/claims/${claimId}/${timestamp}_${safeName}`;
+        const storagePath = `${tenantId}/${claimId}/${timestamp}_${safeName}`;
 
-        // Subir a storage
         const { error: uploadError } = await supabase.storage
           .from('claim-documents')
-          .upload(path, file, {
+          .upload(storagePath, file, {
             cacheControl: '3600',
             upsert: false
           });
 
-        // Simular progreso (storage no tiene evento de progreso real)
         setUploadProgress(prev => ({ ...prev, [file.name]: 50 }));
 
         if (uploadError) {
@@ -288,12 +264,7 @@ export default function ClaimDetailPage() {
           continue;
         }
 
-        // Obtener URL pública o signed
-        const { data: urlData } = supabase.storage
-          .from('claim-documents')
-          .getPublicUrl(path);
-
-        // Insertar registro en claim_documents
+        // Guardar solo el path relativo (NO la URL pública)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: insertError } = await (supabase as any)
           .from('claim_documents')
@@ -302,8 +273,8 @@ export default function ClaimDetailPage() {
             tenant_id: tenantId,
             uploader_id: userId,
             file_name: file.name,
-            file_url: urlData.publicUrl || path,
-            file_type: file.type,
+            file_url: storagePath,
+            file_type: file.type || file.name.split('.').pop() || 'pdf',
             file_size: file.size
           });
 
@@ -318,7 +289,6 @@ export default function ClaimDetailPage() {
       }
     }
 
-    // Limpiar progreso y recargar
     setTimeout(() => {
       setUploadProgress({});
       setIsUploading(false);
@@ -330,25 +300,26 @@ export default function ClaimDetailPage() {
     try {
       const supabase = getBrowserClient();
       
-      // Extraer el path del storage desde file_url
-      const path = doc.file_url.includes('claim-documents/')
-        ? doc.file_url.split('claim-documents/')[1]
-        : doc.file_url;
+      // Extraer el path limpio del storage
+      let storagePath = doc.file_url;
+      // Si contiene la URL completa del bucket, extraer solo el path
+      if (storagePath.includes('/claim-documents/')) {
+        storagePath = storagePath.split('/claim-documents/').pop() || storagePath;
+      }
 
       const { data, error } = await supabase.storage
         .from('claim-documents')
-        .createSignedUrl(path, 3600); // 1 hora
+        .createSignedUrl(storagePath, 3600);
 
       if (error) {
         console.error('Error getting signed URL:', error);
-        // Intentar con la URL directa
-        return doc.file_url;
+        return null;
       }
 
       return data.signedUrl;
     } catch (error) {
       console.error('Error:', error);
-      return doc.file_url;
+      return null;
     }
   };
 
