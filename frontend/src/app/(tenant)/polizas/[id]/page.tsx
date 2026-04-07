@@ -13,12 +13,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { PolicyStatusStepper } from '@/components/modules/policies/PolicyStatusStepper';
 import {
   type PolicyStatus,
   POLICY_STATUS_LABELS,
   POLICY_STATUS_COLORS,
-  formatDate
+  formatDate,
+  formatPremium
 } from '@/lib/validations/policies';
 import {
   ArrowLeft,
@@ -38,7 +47,10 @@ import {
   XCircle,
   Download,
   File,
-  Upload
+  Upload,
+  Eye,
+  Layers,
+  ArrowUp
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -57,7 +69,7 @@ const formatCurrency = (value: number | null | undefined): string => {
 };
 
 // =====================================================
-// Interfaz de documento
+// Interfaces
 // =====================================================
 interface PolicyDoc {
   id: string;
@@ -65,6 +77,16 @@ interface PolicyDoc {
   document_name: string;
   file_name: string;
   file_url: string;
+}
+
+interface AnexoRecord {
+  id: string;
+  anexo: string;
+  premium: number;
+  start_date: string | null;
+  end_date: string | null;
+  status: string;
+  created_at: string;
 }
 
 // =====================================================
@@ -81,6 +103,10 @@ export default function DetallePolizaPage() {
   const [loading, setLoading] = useState(true);
   const [hasRemision, setHasRemision] = useState(false);
   const [hasRecaudo, setHasRecaudo] = useState(false);
+
+  // Anexos
+  const [anexos, setAnexos] = useState<AnexoRecord[]>([]);
+  const [consolidatedEndDate, setConsolidatedEndDate] = useState<string | null>(null);
 
   // Documentos
   const [showDocPanel, setShowDocPanel] = useState(false);
@@ -133,7 +159,6 @@ export default function DetallePolizaPage() {
     async function loadProductionStatus() {
       if (!policyId || !tenantId) return;
       try {
-        // Verificar si existe remisión CON numero_remision asignado
         const { data: remisionData } = await (supabase as any)
           .from('remisiones')
           .select('id, numero_remision')
@@ -148,7 +173,6 @@ export default function DetallePolizaPage() {
           remisionRecord.numero_remision !== ''
         );
 
-        // Verificar si fue recaudada (saldo_pendiente <= 0)
         const { data: carteraData } = await (supabase as any)
           .from('cartera')
           .select('id, saldo_pendiente')
@@ -167,6 +191,41 @@ export default function DetallePolizaPage() {
     }
     if (policy) {
       loadProductionStatus();
+    }
+  }, [policy, policyId, tenantId]);
+
+  // =====================================================
+  // Cargar anexos relacionados + vigencia consolidada
+  // =====================================================
+  useEffect(() => {
+    async function loadAnexos() {
+      if (!policy || !tenantId) return;
+      try {
+        const { data } = await (supabase as any)
+          .from('policies')
+          .select('id, anexo, premium, start_date, end_date, status, created_at')
+          .eq('policy_number', policy.policy_number)
+          .eq('tenant_id', tenantId)
+          .neq('id', policyId)
+          .order('anexo', { ascending: true });
+
+        const anexosList = (data || []) as AnexoRecord[];
+        setAnexos(anexosList);
+
+        // Calcular vigencia consolidada (max end_date entre todos los anexos + póliza principal)
+        let maxEndDate = policy.end_date || null;
+        anexosList.forEach((a) => {
+          if (a.end_date && (!maxEndDate || a.end_date > maxEndDate)) {
+            maxEndDate = a.end_date;
+          }
+        });
+        setConsolidatedEndDate(maxEndDate);
+      } catch (err) {
+        console.error('Error loading anexos:', err);
+      }
+    }
+    if (policy) {
+      loadAnexos();
     }
   }, [policy, policyId, tenantId]);
 
@@ -266,7 +325,7 @@ export default function DetallePolizaPage() {
   };
 
   // =====================================================
-  // Descargar documento (signedUrl)
+  // Descargar documento
   // =====================================================
   const handleDownloadDoc = async (doc: PolicyDoc) => {
     try {
@@ -335,6 +394,7 @@ export default function DetallePolizaPage() {
   }
 
   const policyAny = policy as any;
+  const isAnexo = policyAny.anexo && policyAny.anexo !== '00';
   const displayTotal = policyAny.total_a_pagar || (
     (policy.premium || 0) + (policyAny.gastos_expedicion || 0) + (policyAny.iva || 0)
   );
@@ -347,70 +407,75 @@ export default function DetallePolizaPage() {
   // RENDER
   // =====================================================
   return (
-    <div className="container mx-auto py-6 px-4">
+    <div className="container mx-auto py-4 px-4">
       {/* ============================================= */}
       {/* HEADER + BOTONES DE ACCION */}
       {/* ============================================= */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <div className="flex items-center gap-4">
-          <Link href="/polizas">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-5 w-5" />
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3">
+          <Link href={isAnexo && policyAny.parent_policy_id ? `/polizas/${policyAny.parent_policy_id}` : '/polizas'}>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold">
                 Póliza {policy.policy_number}
+                {isAnexo && <span className="text-muted-foreground"> - Anexo {policyAny.anexo}</span>}
               </h1>
               <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus]}>
                 {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
               </Badge>
             </div>
-            <p className="text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {policy.insurance_company?.name || policy.insurer} - {policy.client?.full_name || 'Sin cliente'}
             </p>
           </div>
         </div>
 
         {/* Botones de acción */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setShowDocPanel(true)}>
-            <Paperclip className="h-4 w-4 mr-2" />
-            Adjuntar Documentos
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowDocPanel(true)}>
+            <Paperclip className="h-3.5 w-3.5 mr-1.5" />
+            Documentos
           </Button>
           <Link href={`/polizas/${policyId}/editar`}>
-            <Button variant="outline" size="sm">
-              <Edit className="h-4 w-4 mr-2" />
+            <Button variant="outline" size="sm" className="h-8 text-xs">
+              <Edit className="h-3.5 w-3.5 mr-1.5" />
               Editar
             </Button>
           </Link>
-          <Link href={`/polizas/modificar?poliza=${policyId}`}>
-            <Button variant="outline" size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Incluir Anexo
-            </Button>
-          </Link>
-          <Link href={`/polizas/renovar?poliza=${policyId}`}>
-            <Button variant="outline" size="sm">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Renovar
-            </Button>
-          </Link>
-          <Link href={`/polizas/cancelar?poliza=${policyId}`}>
-            <Button variant="outline" size="sm" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50">
-              <XCircle className="h-4 w-4 mr-2" />
-              Cancelar
-            </Button>
-          </Link>
+          {!isAnexo && (
+            <>
+              <Link href={`/polizas/modificar?poliza=${policyId}`}>
+                <Button variant="outline" size="sm" className="h-8 text-xs">
+                  <Plus className="h-3.5 w-3.5 mr-1.5" />
+                  Incluir Anexo
+                </Button>
+              </Link>
+              <Link href={`/polizas/renovar?poliza=${policyId}`}>
+                <Button variant="outline" size="sm" className="h-8 text-xs">
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  Renovar
+                </Button>
+              </Link>
+              <Link href={`/polizas/cancelar?poliza=${policyId}`}>
+                <Button variant="outline" size="sm" className="h-8 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50">
+                  <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                  Cancelar
+                </Button>
+              </Link>
+            </>
+          )}
           {isAdmin && (
             <Button
               variant="outline"
               size="sm"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              className="h-8 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
               onClick={handleDelete}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
               Eliminar
             </Button>
           )}
@@ -418,160 +483,171 @@ export default function DetallePolizaPage() {
       </div>
 
       {/* ============================================= */}
-      {/* STATUS STEPPER */}
+      {/* LINK A PÓLIZA PADRE (si es anexo) */}
       {/* ============================================= */}
-      <Card className="mb-6">
-        <CardContent className="pt-4 pb-4">
-          <PolicyStatusStepper
-            hasRemision={hasRemision}
-            hasRecaudo={hasRecaudo}
-          />
-        </CardContent>
-      </Card>
+      {isAnexo && policyAny.parent_policy_id && (
+        <div className="mb-3">
+          <Link href={`/polizas/${policyAny.parent_policy_id}`}>
+            <Button variant="ghost" size="sm" className="h-7 text-xs text-primary">
+              <ArrowUp className="h-3 w-3 mr-1" />
+              Ver póliza principal (Anexo 00)
+            </Button>
+          </Link>
+        </div>
+      )}
 
-      <div className="space-y-6">
+      {/* ============================================= */}
+      {/* STATUS STEPPER (solo para anexo 00) */}
+      {/* ============================================= */}
+      {!isAnexo && (
+        <Card className="mb-4">
+          <CardContent className="pt-3 pb-3">
+            <PolicyStatusStepper
+              hasRemision={hasRemision}
+              hasRecaudo={hasRecaudo}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="space-y-3">
         {/* ============================================= */}
-        {/* DETALLES DE LA POLIZA */}
+        {/* DETALLES DE LA POLIZA (compacto) */}
         {/* ============================================= */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <FileText className="w-4 h-4" />
               Detalles de la Póliza
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <CardContent className="px-4 pb-3 pt-0">
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
               <div>
-                <p className="text-sm text-muted-foreground">Número</p>
-                <p className="font-medium">{policy.policy_number}</p>
+                <p className="text-xs text-muted-foreground">Número</p>
+                <p className="text-sm font-medium">{policy.policy_number}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Anexo</p>
-                <p className="font-medium">{policyAny.anexo || '00'}</p>
+                <p className="text-xs text-muted-foreground">Anexo</p>
+                <p className="text-sm font-medium">{policyAny.anexo || '00'}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Aseguradora</p>
-                <p className="font-medium">
-                  {policy.insurance_company?.name || policy.insurer}
-                </p>
+                <p className="text-xs text-muted-foreground">Aseguradora</p>
+                <p className="text-sm font-medium">{policy.insurance_company?.name || policy.insurer}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Ramo</p>
-                <p className="font-medium">
-                  {policy.insurance_line?.name || '-'}
-                </p>
+                <p className="text-xs text-muted-foreground">Ramo</p>
+                <p className="text-sm font-medium">{policy.insurance_line?.name || '-'}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Grupo</p>
-                <p className="font-medium">
-                  {policy.insurance_group?.name || '-'}
-                </p>
+                <p className="text-xs text-muted-foreground">Grupo</p>
+                <p className="text-sm font-medium">{policy.insurance_group?.name || '-'}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Tipo Movimiento</p>
-                <p className="font-medium capitalize">
-                  {policyAny.tipo_movimiento || '-'}
-                </p>
+                <p className="text-xs text-muted-foreground">Tipo Movimiento</p>
+                <p className="text-sm font-medium capitalize">{policyAny.tipo_movimiento || '-'}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* ============================================= */}
-        {/* VIGENCIA */}
+        {/* VIGENCIA (compacto) */}
         {/* ============================================= */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Calendar className="w-4 h-4" />
               Vigencia
+              {!isAnexo && consolidatedEndDate && consolidatedEndDate !== policy.end_date && (
+                <Badge variant="outline" className="text-xs ml-2">Vigencia consolidada</Badge>
+              )}
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <CardContent className="px-4 pb-3 pt-0">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
-                <p className="text-sm text-muted-foreground">Fecha Expedición</p>
-                <p className="font-medium">{formatDate(policyAny.fecha_expedicion)}</p>
+                <p className="text-xs text-muted-foreground">Fecha Expedición</p>
+                <p className="text-sm font-medium">{formatDate(policyAny.fecha_expedicion)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Vigencia Desde</p>
-                <p className="font-medium">{formatDate(policy.start_date)}</p>
+                <p className="text-xs text-muted-foreground">Vigencia Desde</p>
+                <p className="text-sm font-medium">{formatDate(policy.start_date)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Vigencia Hasta</p>
-                <p className="font-medium">{formatDate(policy.end_date)}</p>
+                <p className="text-xs text-muted-foreground">Vigencia Hasta</p>
+                <p className="text-sm font-medium">{formatDate(policy.end_date)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Días de Vigencia</p>
-                <p className="font-medium">{policyAny.dias_vigencia || '-'}</p>
+                <p className="text-xs text-muted-foreground">Días de Vigencia</p>
+                <p className="text-sm font-medium">{policyAny.dias_vigencia || '-'}</p>
               </div>
             </div>
+            {/* Vigencia consolidada si hay anexos que la modifican */}
+            {!isAnexo && consolidatedEndDate && consolidatedEndDate !== policy.end_date && (
+              <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                Vigencia consolidada (con anexos): hasta <strong>{formatDate(consolidatedEndDate)}</strong>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* ============================================= */}
-        {/* TOMADOR */}
+        {/* TOMADOR (compacto) */}
         {/* ============================================= */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="w-5 h-5" />
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <User className="w-4 h-4" />
               Tomador
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <CardContent className="px-4 pb-3 pt-0">
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <p className="text-sm text-muted-foreground">Nombre / Razón Social</p>
-                <p className="font-medium">
-                  {policyAny.tomador_nombre || policy.client?.full_name || '-'}
-                </p>
+                <p className="text-xs text-muted-foreground">Nombre / Razón Social</p>
+                <p className="text-sm font-medium">{policyAny.tomador_nombre || policy.client?.full_name || '-'}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Tipo Identificación</p>
-                <p className="font-medium capitalize">
+                <p className="text-xs text-muted-foreground">Tipo Identificación</p>
+                <p className="text-sm font-medium capitalize">
                   {(policyAny.tomador_tipo_identificacion || policy.client?.doc_type || '-').replace(/_/g, ' ')}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Número Identificación</p>
-                <p className="font-medium">
-                  {policyAny.tomador_numero_identificacion || policy.client?.doc_number || '-'}
-                </p>
+                <p className="text-xs text-muted-foreground">Número Identificación</p>
+                <p className="text-sm font-medium">{policyAny.tomador_numero_identificacion || policy.client?.doc_number || '-'}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* ============================================= */}
-        {/* ASEGURADO (solo si es diferente al tomador) */}
+        {/* ASEGURADO (solo si es diferente) */}
         {/* ============================================= */}
         {policyAny.asegurado_diferente && (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5" />
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Users className="w-4 h-4" />
                 Asegurado
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <CardContent className="px-4 pb-3 pt-0">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <p className="text-sm text-muted-foreground">Nombre</p>
-                  <p className="font-medium">{policyAny.asegurado_nombre || '-'}</p>
+                  <p className="text-xs text-muted-foreground">Nombre</p>
+                  <p className="text-sm font-medium">{policyAny.asegurado_nombre || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Tipo Identificación</p>
-                  <p className="font-medium capitalize">
+                  <p className="text-xs text-muted-foreground">Tipo Identificación</p>
+                  <p className="text-sm font-medium capitalize">
                     {(policyAny.asegurado_tipo_identificacion || '-').replace(/_/g, ' ')}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Número Identificación</p>
-                  <p className="font-medium">
-                    {policyAny.asegurado_numero_identificacion || '-'}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Número Identificación</p>
+                  <p className="text-sm font-medium">{policyAny.asegurado_numero_identificacion || '-'}</p>
                 </div>
               </div>
             </CardContent>
@@ -579,86 +655,74 @@ export default function DetallePolizaPage() {
         )}
 
         {/* ============================================= */}
-        {/* VALORES DE LA POLIZA */}
+        {/* VALORES (compacto) */}
         {/* ============================================= */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5" />
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <DollarSign className="w-4 h-4" />
               Valores de la Póliza
-              {policyAny.anexo && policyAny.anexo !== '00' && ` (Anexo ${policyAny.anexo})`}
+              {isAnexo && ` (Anexo ${policyAny.anexo})`}
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <CardContent className="px-4 pb-3 pt-0">
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
               <div>
-                <p className="text-sm text-muted-foreground">Valor Asegurado</p>
-                <p className="font-medium text-lg">
-                  {formatCurrency(policyAny.valor_asegurado)}
-                </p>
+                <p className="text-xs text-muted-foreground">Valor Asegurado</p>
+                <p className="text-sm font-medium">{formatCurrency(policyAny.valor_asegurado)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Prima Neta</p>
-                <p className="font-medium text-lg">
-                  {formatCurrency(policy.premium)}
-                </p>
+                <p className="text-xs text-muted-foreground">Prima Neta</p>
+                <p className="text-sm font-medium">{formatCurrency(policy.premium)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Gastos Exp.</p>
-                <p className="font-medium text-lg">
-                  {formatCurrency(policyAny.gastos_expedicion)}
-                </p>
+                <p className="text-xs text-muted-foreground">Gastos Exp.</p>
+                <p className="text-sm font-medium">{formatCurrency(policyAny.gastos_expedicion)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">IVA</p>
-                <p className="font-medium text-lg">
-                  {formatCurrency(policyAny.iva)}
-                </p>
+                <p className="text-xs text-muted-foreground">IVA</p>
+                <p className="text-sm font-medium">{formatCurrency(policyAny.iva)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total a Pagar</p>
-                <p className="font-medium text-lg text-emerald-600">
-                  {formatCurrency(displayTotal)}
-                </p>
+                <p className="text-xs text-muted-foreground">Total a Pagar</p>
+                <p className="text-sm font-medium text-emerald-600">{formatCurrency(displayTotal)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Comisión</p>
-                <p className="font-medium text-lg">
-                  {policyAny.commission_pct || 0}%
-                </p>
+                <p className="text-xs text-muted-foreground">Comisión</p>
+                <p className="text-sm font-medium">{policyAny.commission_pct || 0}%</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* ============================================= */}
-        {/* CLIENTE */}
+        {/* CLIENTE (compacto) */}
         {/* ============================================= */}
         {policy.client && (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="w-5 h-5" />
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Building className="w-4 h-4" />
                 Cliente
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <CardContent className="px-4 pb-3 pt-0">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
-                  <p className="text-sm text-muted-foreground">Nombre</p>
-                  <p className="font-medium">{policy.client.full_name}</p>
+                  <p className="text-xs text-muted-foreground">Nombre</p>
+                  <p className="text-sm font-medium">{policy.client.full_name}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Documento</p>
-                  <p className="font-medium">{policy.client.doc_number}</p>
+                  <p className="text-xs text-muted-foreground">Documento</p>
+                  <p className="text-sm font-medium">{policy.client.doc_number}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="font-medium">{policy.client.email || '-'}</p>
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  <p className="text-sm font-medium">{policy.client.email || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Teléfono</p>
-                  <p className="font-medium">{policy.client.phone || '-'}</p>
+                  <p className="text-xs text-muted-foreground">Teléfono</p>
+                  <p className="text-sm font-medium">{policy.client.phone || '-'}</p>
                 </div>
               </div>
             </CardContent>
@@ -670,41 +734,101 @@ export default function DetallePolizaPage() {
         {/* ============================================= */}
         {policyAny.notas && (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5" />
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <FileText className="w-4 h-4" />
                 Notas
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm whitespace-pre-wrap">{policyAny.notas}</p>
+            <CardContent className="px-4 pb-3 pt-0">
+              <p className="text-xs whitespace-pre-wrap">{policyAny.notas}</p>
             </CardContent>
           </Card>
         )}
 
         {/* ============================================= */}
-        {/* REGISTRO / TIMESTAMPS */}
+        {/* REGISTRO */}
         {/* ============================================= */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Clock className="w-4 h-4" />
               Registro
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
+          <CardContent className="px-4 pb-3 pt-0">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-sm text-muted-foreground">Creado</p>
-                <p className="font-medium">{formatDate(policy.created_at)}</p>
+                <p className="text-xs text-muted-foreground">Creado</p>
+                <p className="text-sm font-medium">{formatDate(policy.created_at)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Última Actualización</p>
-                <p className="font-medium">{formatDate(policy.updated_at)}</p>
+                <p className="text-xs text-muted-foreground">Última Actualización</p>
+                <p className="text-sm font-medium">{formatDate(policy.updated_at)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* ============================================= */}
+        {/* TABLA DE ANEXOS (solo en póliza principal) */}
+        {/* ============================================= */}
+        {!isAnexo && (
+          <Card>
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Layers className="w-4 h-4" />
+                Anexos ({anexos.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-3 pt-0">
+              {anexos.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">No hay anexos para esta póliza</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Anexo</TableHead>
+                        <TableHead className="text-xs">Prima</TableHead>
+                        <TableHead className="text-xs">Vigencia Desde</TableHead>
+                        <TableHead className="text-xs">Vigencia Hasta</TableHead>
+                        <TableHead className="text-xs">Estado</TableHead>
+                        <TableHead className="text-xs">Creado</TableHead>
+                        <TableHead className="text-xs">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {anexos.map((anexo) => (
+                        <TableRow key={anexo.id}>
+                          <TableCell className="text-xs font-medium">{anexo.anexo}</TableCell>
+                          <TableCell className={`text-xs ${anexo.premium < 0 ? 'text-red-600' : ''}`}>
+                            {formatCurrency(anexo.premium)}
+                          </TableCell>
+                          <TableCell className="text-xs">{formatDate(anexo.start_date)}</TableCell>
+                          <TableCell className="text-xs">{formatDate(anexo.end_date)}</TableCell>
+                          <TableCell>
+                            <Badge className={`text-xs ${POLICY_STATUS_COLORS[anexo.status as PolicyStatus]}`}>
+                              {POLICY_STATUS_LABELS[anexo.status as PolicyStatus] || anexo.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs">{formatDate(anexo.created_at)}</TableCell>
+                          <TableCell>
+                            <Link href={`/polizas/${anexo.id}`}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* ============================================= */}
@@ -715,7 +839,7 @@ export default function DetallePolizaPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Paperclip className="h-5 w-5" />
-              Documentos de la Póliza
+              Documentos {isAnexo ? `(Anexo ${policyAny.anexo})` : 'de la Póliza'}
             </DialogTitle>
           </DialogHeader>
 
@@ -727,7 +851,7 @@ export default function DetallePolizaPage() {
             <div className="space-y-6">
               {/* ---- Copia de la Póliza ---- */}
               <div>
-                <h4 className="text-sm font-semibold mb-2">Copia de la Póliza</h4>
+                <h4 className="text-sm font-semibold mb-2">Copia {isAnexo ? 'del Anexo' : 'de la Póliza'}</h4>
                 {copiaPoliza ? (
                   <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
                     <div className="flex items-center gap-2 min-w-0">
@@ -764,7 +888,7 @@ export default function DetallePolizaPage() {
                       onClick={() => copiaInputRef.current?.click()}
                     >
                       {uploadingDoc ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                      Subir copia de póliza
+                      Subir copia
                     </Button>
                   </div>
                 )}
