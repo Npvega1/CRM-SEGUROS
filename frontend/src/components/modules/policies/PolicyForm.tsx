@@ -494,7 +494,7 @@ export function PolicyForm({
     loadTenantCompanies();
   }, [tenantId, supabase]);
 
-  // Cargar líneas por compañía
+  // Cargar líneas (ramos) por compañía
   useEffect(() => {
     async function loadLinesForCompany() {
       if (!selectedCompanyId) {
@@ -518,7 +518,7 @@ export function PolicyForm({
     loadLinesForCompany();
   }, [selectedCompanyId, supabase]);
 
-  // Cargar grupos por línea
+  // Cargar grupos por línea (ramo)
   useEffect(() => {
     async function loadGroupsForLine() {
       if (!selectedLineId) {
@@ -534,16 +534,13 @@ export function PolicyForm({
           .order('display_order');
         if (groupsData) {
           setAvailableGroups(groupsData as InsuranceGroup[]);
-          if (groupsData.length > 0 && !isEditing) {
-            setSelectedGroupId(groupsData[0].id);
-          }
         }
       } catch (error) {
         console.error('Error loading groups:', error);
       }
     }
     loadGroupsForLine();
-  }, [selectedLineId, supabase, isEditing]);
+  }, [selectedLineId, supabase]);
 
   // Sincronizar selects con form values
   useEffect(() => {
@@ -673,6 +670,7 @@ export function PolicyForm({
           1. Datos Generales de la Póliza
         </h3>
 
+        {/* Fila 1: Número | Anexo | Aseguradora */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label htmlFor="policy_number">Número de Póliza *</Label>
@@ -750,6 +748,7 @@ export function PolicyForm({
           </div>
         </div>
 
+        {/* Fila 2: Ramo | Grupo | Tipo de Movimiento */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>Ramo *</Label>
@@ -774,6 +773,26 @@ export function PolicyForm({
           </div>
 
           <div className="space-y-2">
+            <Label>Grupo</Label>
+            <Select
+              value={selectedGroupId}
+              onValueChange={(value) => {
+                setSelectedGroupId(value);
+              }}
+              disabled={loading || !selectedLineId || availableGroups.length === 0}
+            >
+              <SelectTrigger data-testid="group-select">
+                <SelectValue placeholder="Seleccionar grupo" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableGroups.map((group) => (
+                  <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
             <Label>Tipo de Movimiento *</Label>
             <Select
               defaultValue={(policy as any)?.tipo_movimiento || 'expedicion'}
@@ -790,17 +809,6 @@ export function PolicyForm({
               </SelectContent>
             </Select>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
-            <Input
-              id="fecha_expedicion"
-              type="date"
-              {...register('fecha_expedicion')}
-              disabled={loading}
-              data-testid="fecha-expedicion-input"
-            />
-          </div>
         </div>
       </div>
 
@@ -813,7 +821,19 @@ export function PolicyForm({
           2. Vigencia de la Póliza
         </h3>
 
+        {/* Fila 1: Fecha Expedición | Vigencia Desde | Vigencia Hasta */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
+            <Input
+              id="fecha_expedicion"
+              type="date"
+              {...register('fecha_expedicion')}
+              disabled={loading}
+              data-testid="fecha-expedicion-input"
+            />
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="start_date">Vigencia Desde *</Label>
             <Input
@@ -836,7 +856,10 @@ export function PolicyForm({
               data-testid="end-date-input"
             />
           </div>
+        </div>
 
+        {/* Fila 2: Días de Vigencia | Estado */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>Días de Vigencia</Label>
             <Input
@@ -845,9 +868,7 @@ export function PolicyForm({
               className="bg-gray-50"
             />
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>Estado de la Póliza *</Label>
             <Select
