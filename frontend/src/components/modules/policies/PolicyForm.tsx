@@ -17,7 +17,6 @@ import {
 } from '@/components/ui/select';
 import {
   CreatePolicyInputSchema,
-  UpdatePolicyInputSchema,
   type Policy,
   type PolicyStatus
 } from '@/lib/validations/policies';
@@ -25,11 +24,9 @@ import {
   Loader2,
   Save,
   X,
-  Building,
   FileText,
   Calendar,
   MessageSquare,
-  Handshake,
   User,
   Users,
   DollarSign,
@@ -64,6 +61,21 @@ const TIPO_IDENTIFICACION_OPTIONS = [
   { value: 'pasaporte', label: 'Pasaporte' },
   { value: 'nit_extranjero', label: 'NIT Extranjero' },
 ];
+
+// Mapeo de doc_type de clientes al formato del enum de pólizas
+const DOC_TYPE_MAP: Record<string, string> = {
+  'CC': 'cedula_ciudadania',
+  'cc': 'cedula_ciudadania',
+  'cedula': 'cedula_ciudadania',
+  'cedula_ciudadania': 'cedula_ciudadania',
+  'NIT': 'nit',
+  'nit': 'nit',
+  'CE': 'cedula_extranjeria',
+  'ce': 'cedula_extranjeria',
+  'cedula_extranjeria': 'cedula_extranjeria',
+  'pasaporte': 'pasaporte',
+  'nit_extranjero': 'nit_extranjero',
+};
 
 interface InsuranceCompany {
   id: string;
@@ -338,21 +350,8 @@ export function PolicyForm({
         if (data) {
           setClientData(data);
           setValue('tomador_nombre', data.full_name || '');
-          // Mapear doc_type de clientes al formato del enum de pólizas
-          const docTypeMap: Record<string, string> = {
-            'CC': 'cedula_ciudadania',
-            'cc': 'cedula_ciudadania',
-            'cedula': 'cedula_ciudadania',
-            'cedula_ciudadania': 'cedula_ciudadania',
-            'NIT': 'nit',
-            'nit': 'nit',
-            'CE': 'cedula_extranjeria',
-            'ce': 'cedula_extranjeria',
-            'cedula_extranjeria': 'cedula_extranjeria',
-            'pasaporte': 'pasaporte',
-            'nit_extranjero': 'nit_extranjero',
-          };
-          setValue('tomador_tipo_identificacion', docTypeMap[data.doc_type] || 'cedula_ciudadania');
+          // Mapear doc_type al formato del enum
+          setValue('tomador_tipo_identificacion', DOC_TYPE_MAP[data.doc_type] || 'cedula_ciudadania');
           setValue('tomador_numero_identificacion', data.doc_number || '');
           if (data.comercial_id) {
             const { data: comercialData } = await (supabase as any)
@@ -661,6 +660,7 @@ export function PolicyForm({
     await onSubmit(dataWithExtras);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onError = (errors: any) => {
     console.error('Form validation errors:', errors);
   };
@@ -832,6 +832,8 @@ export function PolicyForm({
               />
             )}
           </div>
+        </div>
+      </div>
 
       {/* ============================================= */}
       {/* SECCION 2: VIGENCIA */}
