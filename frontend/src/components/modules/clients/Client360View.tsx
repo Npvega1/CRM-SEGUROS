@@ -205,19 +205,25 @@ export function Client360View({ client }: Client360ViewProps) {
   const activeClaims = claims.filter(c => !['resolved', 'closed'].includes(c.status));
 
   // =====================================================
-  // STATS - HISTÓRICO (Fila 2, filtrado por año)
+  // STATS - HISTÓRICO (Fila 2, filtrado por año de expedición)
+  // Solo pólizas no activas y siniestros finalizados
   // =====================================================
+  const historicalStatuses = ['no_renovada', 'inactiva', 'cancelada'];
+  const finalizedClaimStatuses = ['resolved', 'closed'];
+
   const availableYears = Array.from(new Set([
-    ...policies.map(p => p.start_date ? new Date(p.start_date).getFullYear() : null),
-    ...claims.map(c => c.created_at ? new Date(c.created_at).getFullYear() : null),
+    ...policies.filter(p => historicalStatuses.includes(p.status)).map(p => p.created_at ? new Date(p.created_at).getFullYear() : null),
+    ...claims.filter(c => finalizedClaimStatuses.includes(c.status)).map(c => c.created_at ? new Date(c.created_at).getFullYear() : null),
   ])).filter((y): y is number => y !== null).sort((a, b) => b - a);
 
   const selectedYearNum = parseInt(selectedYear);
   const historicalPolicies = policies.filter(p =>
-    p.start_date && new Date(p.start_date).getFullYear() === selectedYearNum
+    historicalStatuses.includes(p.status) &&
+    p.created_at && new Date(p.created_at).getFullYear() === selectedYearNum
   );
   const historicalPremium = historicalPolicies.reduce((sum, p) => sum + Number(p.premium), 0);
   const historicalClaims = claims.filter(c =>
+    finalizedClaimStatuses.includes(c.status) &&
     c.created_at && new Date(c.created_at).getFullYear() === selectedYearNum
   );
 
@@ -322,27 +328,27 @@ export function Client360View({ client }: Client360ViewProps) {
           </div>
 
           {/* Stats - Fila 1: Vigente */}
-          <div className="mt-6 pt-6 border-t">
-            <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wider mb-3">Vigente</p>
-            <div className="grid grid-cols-3 gap-4">
+          <div className="mt-4 pt-4 border-t">
+            <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wider mb-2">Vigente</p>
+            <div className="grid grid-cols-3 gap-3">
               <div className="text-center">
-                <p className="text-2xl font-bold text-emerald-600">{activePolicies.length}</p>
-                <p className="text-sm text-muted-foreground">Pólizas</p>
+                <p className="text-lg font-bold text-emerald-600">{activePolicies.length}</p>
+                <p className="text-xs text-muted-foreground">Pólizas</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-emerald-600">{formatPremium(activePremium)}</p>
-                <p className="text-sm text-muted-foreground">Prima</p>
+                <p className="text-lg font-bold text-emerald-600">{formatPremium(activePremium)}</p>
+                <p className="text-xs text-muted-foreground">Prima</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-emerald-600">{activeClaims.length}</p>
-                <p className="text-sm text-muted-foreground">Siniestros</p>
+                <p className="text-lg font-bold text-emerald-600">{activeClaims.length}</p>
+                <p className="text-xs text-muted-foreground">Siniestros</p>
               </div>
             </div>
           </div>
 
           {/* Stats - Fila 2: Histórico */}
-          <div className="mt-4 pt-4 border-t border-dashed">
-            <div className="flex items-center justify-between mb-3">
+          <div className="mt-3 pt-3 border-t border-dashed">
+            <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Histórico</p>
               {availableYears.length > 0 && (
                 <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -357,18 +363,18 @@ export function Client360View({ client }: Client360ViewProps) {
                 </Select>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-3">
               <div className="text-center">
-                <p className="text-2xl font-bold">{historicalPolicies.length}</p>
-                <p className="text-sm text-muted-foreground">Pólizas</p>
+                <p className="text-lg font-bold">{historicalPolicies.length}</p>
+                <p className="text-xs text-muted-foreground">Pólizas</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold">{formatPremium(historicalPremium)}</p>
-                <p className="text-sm text-muted-foreground">Prima</p>
+                <p className="text-lg font-bold">{formatPremium(historicalPremium)}</p>
+                <p className="text-xs text-muted-foreground">Prima</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold">{historicalClaims.length}</p>
-                <p className="text-sm text-muted-foreground">Siniestros</p>
+                <p className="text-lg font-bold">{historicalClaims.length}</p>
+                <p className="text-xs text-muted-foreground">Siniestros</p>
               </div>
             </div>
           </div>
