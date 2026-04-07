@@ -73,7 +73,7 @@ interface PolicyDoc {
 export default function DetallePolizaPage() {
   const params = useParams();
   const router = useRouter();
-  const { tenantId, tenantSlug, role } = useTenant();
+  const { tenantId, role } = useTenant();
   const supabase = createClient();
   const policyId = params.id as string;
 
@@ -116,7 +116,7 @@ export default function DetallePolizaPage() {
       setPolicy(data);
     } catch (err) {
       console.error('Error loading policy:', err);
-      toast.error('Error al cargar la poliza');
+      toast.error('Error al cargar la póliza');
     } finally {
       setLoading(false);
     }
@@ -249,12 +249,10 @@ export default function DetallePolizaPage() {
     if (!confirm(`¿Eliminar "${doc.file_name}"?`)) return;
 
     try {
-      // Eliminar de Storage
       await supabase.storage
         .from('policy-documents')
         .remove([doc.file_url]);
 
-      // Eliminar de BD
       await (supabase as any)
         .from('policy_documents')
         .delete()
@@ -302,7 +300,7 @@ export default function DetallePolizaPage() {
       if (error) throw error;
 
       toast.success('Póliza eliminada');
-      router.push(`/${tenantSlug}/polizas`);
+      router.push('/polizas');
     } catch (err: any) {
       console.error('Error deleting policy:', err);
       toast.error(err.message || 'Error al eliminar la póliza');
@@ -325,7 +323,7 @@ export default function DetallePolizaPage() {
       <div className="container mx-auto py-6 px-4">
         <div className="text-center py-12">
           <p className="text-muted-foreground">Póliza no encontrada</p>
-          <Link href={`/${tenantSlug}/polizas`}>
+          <Link href="/polizas">
             <Button variant="outline" className="mt-4">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Volver a Pólizas
@@ -355,7 +353,7 @@ export default function DetallePolizaPage() {
       {/* ============================================= */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
-          <Link href={`/${tenantSlug}/polizas`}>
+          <Link href="/polizas">
             <Button variant="ghost" size="icon">
               <ArrowLeft className="h-5 w-5" />
             </Button>
@@ -381,25 +379,25 @@ export default function DetallePolizaPage() {
             <Paperclip className="h-4 w-4 mr-2" />
             Adjuntar Documentos
           </Button>
-          <Link href={`/${tenantSlug}/polizas/${policyId}/editar`}>
+          <Link href={`/polizas/${policyId}/editar`}>
             <Button variant="outline" size="sm">
               <Edit className="h-4 w-4 mr-2" />
               Editar
             </Button>
           </Link>
-          <Link href={`/${tenantSlug}/polizas/modificar?poliza=${policyId}`}>
+          <Link href={`/polizas/modificar?poliza=${policyId}`}>
             <Button variant="outline" size="sm">
               <Plus className="h-4 w-4 mr-2" />
               Incluir Anexo
             </Button>
           </Link>
-          <Link href={`/${tenantSlug}/polizas/renovar?poliza=${policyId}`}>
+          <Link href={`/polizas/renovar?poliza=${policyId}`}>
             <Button variant="outline" size="sm">
               <RefreshCw className="h-4 w-4 mr-2" />
               Renovar
             </Button>
           </Link>
-          <Link href={`/${tenantSlug}/polizas/cancelar?poliza=${policyId}`}>
+          <Link href={`/polizas/cancelar?poliza=${policyId}`}>
             <Button variant="outline" size="sm" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50">
               <XCircle className="h-4 w-4 mr-2" />
               Cancelar
