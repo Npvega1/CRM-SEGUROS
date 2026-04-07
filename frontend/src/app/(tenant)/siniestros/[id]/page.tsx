@@ -95,14 +95,11 @@ export default function ClaimDetailPage() {
         .eq('claim_id', claimId)
         .order('changed_at', { ascending: false });
 
-      // Cargar documentos
+      // Cargar documentos (sin JOIN a users para evitar error de FK)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: docsData } = await (supabase as any)
         .from('claim_documents')
-        .select(`
-          *,
-          users(full_name)
-        `)
+        .select('*')
         .eq('claim_id', claimId)
         .order('uploaded_at', { ascending: false });
 
@@ -120,10 +117,10 @@ export default function ClaimDetailPage() {
           ...h,
           changed_by_name: h.users?.full_name || null
         })) as ClaimExpediente['history'],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        / eslint-disable-next-line @typescript-eslint/no-explicit-any
         documents: (docsData || []).map((d: any) => ({
           ...d,
-          uploader_name: d.users?.full_name || null
+          uploader_name: null
         })) as ClaimExpediente['documents']
       };
 
