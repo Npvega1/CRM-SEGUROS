@@ -40,13 +40,15 @@ import {
   Paperclip,
   History,
   Plus,
-  Eye
+  Eye,
+  Settings,
+  MessageSquare
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
 // =====================================================
-// Utilidad para formato de moneda
+// Utilidades
 // =====================================================
 const formatCurrency = (value: number | null | undefined): string => {
   if (!value && value !== 0) return '$0';
@@ -58,9 +60,26 @@ const formatCurrency = (value: number | null | undefined): string => {
   }).format(value);
 };
 
+const DOC_TYPE_DISPLAY: Record<string, string> = {
+  'CC': 'Cédula de Ciudadanía',
+  'CE': 'Cédula de Extranjería',
+  'PA': 'Pasaporte',
+  'TE': 'Tarjeta de Extranjería',
+  'RC': 'Registro Civil',
+  'NIT': 'NIT',
+  'nit': 'NIT',
+  'cedula': 'Cédula de Ciudadanía',
+  'cedula_ciudadania': 'Cédula de Ciudadanía',
+  'cedula_extranjeria': 'Cédula de Extranjería',
+  'nit_extranjero': 'NIT Extranjero',
+  'pasaporte': 'Pasaporte',
+  'carnet_diplomatico': 'Carnet Diplomático',
+  'consorcio': 'Consorcio',
+  'rut': 'RUT',
+};
+
 // =====================================================
 // COMPONENTE: Historial de Renovaciones
-// FIX: Tipado explícito en destructuring de Supabase
 // =====================================================
 function RenewalHistory({
   policyId,
@@ -78,7 +97,6 @@ function RenewalHistory({
 
   const loadHistory = useCallback(async () => {
     try {
-      // Pólizas que fueron renovadas DESDE esta (vigencias futuras)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: nextPolicies }: { data: any[] | null } = await (supabase as any)
         .from('policies')
@@ -88,7 +106,6 @@ function RenewalHistory({
         .eq('anexo', '00')
         .order('start_date', { ascending: true });
 
-      // Buscar la póliza padre (de dónde se renovó esta)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: currentPolicy }: { data: any | null } = await (supabase as any)
         .from('policies')
@@ -128,48 +145,27 @@ function RenewalHistory({
 
   return (
     <Card>
-      <CardHeader className="py-3 px-4">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
           <History className="h-4 w-4" />
           Historial de Vigencias
         </CardTitle>
       </CardHeader>
-      <CardContent className="px-4 pb-4">
+      <CardContent>
         <div className="space-y-2">
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           {history.map((p: any) => (
-            <Link
-              key={p.id}
-              href={`/polizas/${p.id}`}
-              className={`flex items-center justify-between p-2 rounded-lg border transition-colors text-xs ${
-                p.id === policyId
-                  ? 'border-primary bg-primary/5'
-                  : 'hover:bg-muted/50'
-              }`}
-            >
+            <Link key={p.id} href={`/polizas/${p.id}`} className="flex items-center justify-between p-2 rounded border hover:bg-muted/50 text-sm">
               <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className={
-                    p.policy_type === 'renovacion'
-                      ? 'border-blue-500 text-blue-700 bg-blue-50'
-                      : 'border-green-500 text-green-700 bg-green-50'
-                  }
-                >
-                  {p.policy_type === 'renovacion' ? 'R' : 'N'}
-                </Badge>
+                <Badge variant="outline" className="text-xs">{p.policy_type === 'renovacion' ? 'R' : 'N'}</Badge>
                 <span className="font-medium">{p.policy_number}</span>
                 {p.id === policyId && (
-                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                    Actual
-                  </Badge>
+                  <Badge variant="secondary" className="text-[10px]">Actual</Badge>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground">
-                  {formatDate(p.start_date)} → {formatDate(p.end_date)}
-                </span>
-                <Badge className={POLICY_STATUS_COLORS[p.status as PolicyStatus] || 'bg-gray-100 text-gray-800'}>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>{formatDate(p.start_date)} → {formatDate(p.end_date)}</span>
+                <Badge className={POLICY_STATUS_COLORS[p.status as PolicyStatus]}>
                   {POLICY_STATUS_LABELS[p.status as PolicyStatus] || p.status}
                 </Badge>
               </div>
@@ -183,7 +179,6 @@ function RenewalHistory({
 
 // =====================================================
 // COMPONENTE: Diálogo de Documentos Adjuntos
-// Copia de póliza (máx 1) + Soportes (máx 5)
 // =====================================================
 function PolicyDocumentsDialog({
   policyId,
@@ -338,29 +333,13 @@ function PolicyDocumentsDialog({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderDocumentRow = (doc: any) => (
-    <div
-      key={doc.id}
-      className="flex items-center justify-between p-2 rounded border text-xs"
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-        <span className="truncate">{doc.file_name}</span>
-      </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0"
-          onClick={() => handleDownload(doc)}
-        >
-          <Download className="h-3.5 w-3.5" />
+    <div key={doc.id} className="flex items-center justify-between p-2 rounded border text-sm">
+      <span className="truncate flex-1">{doc.file_name}</span>
+      <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+        <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleDownload(doc)}>
+          <Eye className="h-3.5 w-3.5" />
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-          onClick={() => handleDeleteDoc(doc)}
-        >
+        <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={() => handleDeleteDoc(doc)}>
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -374,83 +353,54 @@ function PolicyDocumentsDialog({
           <Paperclip className="h-4 w-4" />
           Documentos
           {documents.length > 0 && (
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
-              {documents.length}
-            </Badge>
+            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{documents.length}</Badge>
           )}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Paperclip className="h-5 w-5" />
-            Documentos Adjuntos
-          </DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Paperclip className="h-5 w-5" /> Documentos Adjuntos</DialogTitle>
         </DialogHeader>
 
         {loading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
+          <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin" /></div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {/* Copia de Póliza (máx 1) */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-medium">Copia de Póliza</h4>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={() => handleFileSelect('copia_poliza', 1)}
-                  disabled={uploading || copiaPoliza.length >= 1}
-                >
-                  <Upload className="h-3 w-3" />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-sm">Copia de Póliza</h4>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleFileSelect('copia_poliza', 1)} disabled={uploading || copiaPoliza.length >= 1}>
+                  <Upload className="h-3.5 w-3.5" />
                   Subir
                 </Button>
               </div>
               {copiaPoliza.length > 0 ? (
-                <div className="space-y-1">
-                  {copiaPoliza.map(renderDocumentRow)}
-                </div>
+                <div className="space-y-1">{copiaPoliza.map(renderDocumentRow)}</div>
               ) : (
-                <p className="text-xs text-muted-foreground italic">
-                  Sin copia de póliza adjunta
-                </p>
+                <p className="text-sm text-muted-foreground italic">Sin copia de póliza adjunta</p>
               )}
             </div>
 
             {/* Soportes (máx 5) */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-medium">
-                  Soportes ({soportes.length}/5)
-                </h4>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={() => handleFileSelect('soporte', 5)}
-                  disabled={uploading || soportes.length >= 5}
-                >
-                  <Upload className="h-3 w-3" />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-sm">Soportes ({soportes.length}/5)</h4>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleFileSelect('soporte', 5)} disabled={uploading || soportes.length >= 5}>
+                  <Upload className="h-3.5 w-3.5" />
                   Subir
                 </Button>
               </div>
               {soportes.length > 0 ? (
-                <div className="space-y-1">
-                  {soportes.map(renderDocumentRow)}
-                </div>
+                <div className="space-y-1">{soportes.map(renderDocumentRow)}</div>
               ) : (
-                <p className="text-xs text-muted-foreground italic">
-                  Sin soportes adjuntos
-                </p>
+                <p className="text-sm text-muted-foreground italic">Sin soportes adjuntos</p>
               )}
             </div>
 
             {uploading && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Subiendo documento...
               </div>
             )}
@@ -479,6 +429,12 @@ export default function DetallePolizaPage() {
   const [anexos, setAnexos] = useState<any[]>([]);
   const [consolidatedEndDate, setConsolidatedEndDate] = useState<string | null>(null);
 
+  // Estado para Gestión Interna CRM
+  const [usuarioName, setUsuarioName] = useState('');
+  const [comercialName, setComercialName] = useState('');
+  const [aliadoName, setAliadoName] = useState('');
+  const [grupoEmpresarialName, setGrupoEmpresarialName] = useState('');
+
   // =====================================================
   // Cargar póliza con relaciones
   // =====================================================
@@ -491,7 +447,7 @@ export default function DetallePolizaPage() {
         .from('policies')
         .select(`
           *,
-          client:clients(id, full_name, doc_type, doc_number, email, phone),
+          client:clients(id, full_name, doc_type, doc_number, email, phone, business_group_id),
           insurance_company:insurance_companies(id, name),
           insurance_line:insurance_lines(id, name),
           insurance_group:insurance_groups(id, name)
@@ -503,7 +459,12 @@ export default function DetallePolizaPage() {
       if (error) throw error;
       setPolicy(data);
 
-      // Si es póliza principal (anexo 00), cargar anexos y vigencia consolidada
+      // Cargar datos de Gestión Interna CRM
+      if (data) {
+        await loadCrmData(data);
+      }
+
+      // Si es póliza principal (anexo 00), cargar anexos
       if (data && (data.anexo === '00' || !data.anexo)) {
         await loadAnexos(data.id, data.policy_number);
       }
@@ -512,6 +473,42 @@ export default function DetallePolizaPage() {
       toast.error('Error al cargar la póliza');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // =====================================================
+  // Cargar datos de Gestión CRM
+  // =====================================================
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function loadCrmData(policyData: any) {
+    try {
+      // Usuario
+      if (policyData.usuario_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: ud } = await (supabase as any).from('users').select('full_name').eq('id', policyData.usuario_id).maybeSingle();
+        if (ud) setUsuarioName(ud.full_name);
+      }
+      // Comercial
+      if (policyData.comercial_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: cd } = await (supabase as any).from('users').select('full_name').eq('id', policyData.comercial_id).maybeSingle();
+        if (cd) setComercialName(cd.full_name);
+      }
+      // Aliado
+      if (policyData.allied_agent_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: ad } = await (supabase as any).from('allied_agents').select('full_name').eq('id', policyData.allied_agent_id).maybeSingle();
+        if (ad) setAliadoName(ad.full_name);
+      }
+      // Grupo Empresarial - buscar desde business_group_id del cliente o grupo_empresarial_id de la póliza
+      const grupoId = policyData.grupo_empresarial_id || policyData.client?.business_group_id;
+      if (grupoId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: gd } = await (supabase as any).from('business_groups').select('name').eq('id', grupoId).maybeSingle();
+        if (gd) setGrupoEmpresarialName(gd.name);
+      }
+    } catch (err) {
+      console.error('Error loading CRM data:', err);
     }
   }
 
@@ -531,7 +528,6 @@ export default function DetallePolizaPage() {
       const validAnexos = anexosData || [];
       setAnexos(validAnexos);
 
-      // Calcular vigencia consolidada (max end_date entre principal y todos los anexos)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const allEndDates = [policy?.end_date, ...validAnexos.map((a: any) => a.end_date)].filter(Boolean);
       if (allEndDates.length > 0) {
@@ -570,7 +566,6 @@ export default function DetallePolizaPage() {
 
       if (error) throw error;
 
-      // Registrar en historial
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any)
         .from('policy_history')
@@ -633,9 +628,7 @@ export default function DetallePolizaPage() {
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">Póliza no encontrada</p>
-        <Link href="/polizas">
-          <Button variant="link" className="mt-2">Volver a Pólizas</Button>
-        </Link>
+        <Link href="/polizas"><Button variant="outline" className="mt-4">Volver a Pólizas</Button></Link>
       </div>
     );
   }
@@ -648,6 +641,20 @@ export default function DetallePolizaPage() {
   const isPrincipal = !policyAny.anexo || policyAny.anexo === '00';
   const isRenewal = policyAny.policy_type === 'renovacion';
 
+  // Datos de tomador, asegurado y beneficiarios
+  const tomadorNombre = policyAny.tomador_nombre || policy.client?.full_name || '-';
+  const tomadorTipoId = policyAny.tomador_tipo_identificacion || policy.client?.doc_type || '-';
+  const tomadorNumeroId = policyAny.tomador_numero_identificacion || policy.client?.doc_number || '-';
+
+  const aseguradoEsDiferente = policyAny.asegurado_diferente === true;
+  const aseguradoNombre = aseguradoEsDiferente ? (policyAny.asegurado_nombre || '-') : tomadorNombre;
+  const aseguradoTipoId = aseguradoEsDiferente ? (policyAny.asegurado_tipo_identificacion || '-') : tomadorTipoId;
+  const aseguradoNumeroId = aseguradoEsDiferente ? (policyAny.asegurado_numero_identificacion || '-') : tomadorNumeroId;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const beneficiarios: any[] = policyAny.beneficiarios || [];
+  const hasBeneficiarios = beneficiarios.length > 0;
+
   // =====================================================
   // RENDER
   // =====================================================
@@ -655,140 +662,198 @@ export default function DetallePolizaPage() {
     <div className="space-y-6">
 
       {/* ============================================= */}
-      {/* HEADER + BOTONES DE ACCIÓN                    */}
+      {/* HEADER + BOTONES DE ACCIÓN */}
       {/* ============================================= */}
       <div>
-        <Link
-          href="/polizas"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Volver a Pólizas
+        <Link href="/polizas">
+          <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />Volver a Pólizas</Button>
         </Link>
+      </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold">
-                Póliza {policy.policy_number}
-              </h1>
-              {/* Badge de estado */}
-              <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus] || 'bg-gray-100 text-gray-800'}>
-                {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
-              </Badge>
-              {/* Badge R/N (Renovación / Nueva) */}
-              {isRenewal && (
-                <Badge variant="outline" className="border-blue-500 text-blue-700 bg-blue-50">
-                  R - Renovación
-                </Badge>
-              )}
-              {/* Badge de Anexo */}
-              {!isPrincipal && (
-                <Badge variant="outline">Anexo {policyAny.anexo}</Badge>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              {policy.insurance_company?.name || policy.insurer} - {policy.client?.full_name || 'Sin cliente'}
-            </p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold">Póliza {policy.policy_number}</h1>
+            <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus]}>
+              {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
+            </Badge>
+            {isRenewal && (
+              <Badge variant="outline" className="text-xs">R - Renovación</Badge>
+            )}
+            {!isPrincipal && (
+              <Badge variant="secondary">Anexo {policyAny.anexo}</Badge>
+            )}
           </div>
+          <p className="text-muted-foreground mt-1">
+            {policy.insurance_company?.name || policy.insurer} - {policy.client?.full_name || 'Sin cliente'}
+          </p>
+        </div>
 
-          {/* Botones de acción */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Documentos (Dialog) */}
-            <PolicyDocumentsDialog policyId={policyId} tenantId={tenantId!} />
-
-            {/* Editar */}
-            <Link href={`/polizas/${policyId}/editar`}>
-              <Button variant="outline" size="sm" className="gap-1.5">
-                <Edit className="h-4 w-4" />
-                Editar
-              </Button>
+        {/* Botones de acción */}
+        <div className="flex flex-wrap items-center gap-2">
+          <PolicyDocumentsDialog policyId={policyId} tenantId={tenantId!} />
+          <Link href={`/polizas/${policyId}/editar`}>
+            <Button variant="outline" size="sm" className="gap-1.5"><Edit className="h-4 w-4" />Editar</Button>
+          </Link>
+          {isPrincipal && (
+            <Link href={`/polizas/modificar?parentId=${policyId}`}>
+              <Button variant="outline" size="sm" className="gap-1.5"><Plus className="h-4 w-4" />Incluir Anexo</Button>
             </Link>
-
-            {/* Incluir Anexo (solo para póliza principal) */}
-            {isPrincipal && (
-              <Link href={`/polizas/modificar?poliza=${policyId}`}>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <Plus className="h-4 w-4" />
-                  Incluir Anexo
-                </Button>
-              </Link>
-            )}
-
-            {/* Renovar (solo para póliza principal) */}
-            {isPrincipal && (
-              <Link href={`/polizas/renovar?poliza=${policyId}`}>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <RefreshCw className="h-4 w-4" />
-                  Renovar
-                </Button>
-              </Link>
-            )}
-
-            {/* Eliminar */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
-              onClick={handleDelete}
-            >
-              <Trash2 className="h-4 w-4" />
-              Eliminar
-            </Button>
-          </div>
+          )}
+          {isPrincipal && (
+            <Link href={`/polizas/renovar?policyId=${policyId}`}>
+              <Button variant="outline" size="sm" className="gap-1.5"><RefreshCw className="h-4 w-4" />Renovar</Button>
+            </Link>
+          )}
+          <Button variant="outline" size="sm" className="gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={handleDelete}>
+            <Trash2 className="h-4 w-4" />Eliminar
+          </Button>
         </div>
       </div>
 
       {/* ============================================= */}
-      {/* STATUS STEPPER                                */}
+      {/* STATUS STEPPER */}
       {/* ============================================= */}
-      <PolicyStatusStepper
-        {...({
-          currentStatus: policy.status as PolicyStatus,
-          onStatusChange: handleStatusChange,
-          isLoading: statusLoading
-        } as any)}
-      />
+      <PolicyStatusStepper policy={policy as any} onStatusChange={handleStatusChange} isLoading={statusLoading} />
 
       {/* ============================================= */}
-      {/* HISTORIAL DE VIGENCIAS (Renovaciones)         */}
+      {/* HISTORIAL DE VIGENCIAS */}
       {/* ============================================= */}
       {isPrincipal && (
-        <RenewalHistory
-          policyId={policyId}
-          policyNumber={policy.policy_number}
-          tenantId={tenantId!}
-        />
+        <RenewalHistory policyId={policyId} policyNumber={policy.policy_number} tenantId={tenantId!} />
       )}
 
       {/* ============================================= */}
-      {/* LINK A PÓLIZA PRINCIPAL (para anexos)         */}
+      {/* LINK A PÓLIZA PRINCIPAL (para anexos) */}
       {/* ============================================= */}
       {!isPrincipal && policyAny.parent_policy_id && (
-        <Card className="border-dashed">
-          <CardContent className="py-3 px-4">
-            <Link
-              href={`/polizas/${policyAny.parent_policy_id}`}
-              className="flex items-center gap-2 text-sm text-primary hover:underline"
-            >
-              <Eye className="h-4 w-4" />
-              Ver póliza principal ({policy.policy_number} - Anexo 00)
-            </Link>
-          </CardContent>
-        </Card>
+        <Link href={`/polizas/${policyAny.parent_policy_id}`}>
+          <Button variant="link" className="text-sm p-0 h-auto">
+            Ver póliza principal ({policy.policy_number} - Anexo 00)
+          </Button>
+        </Link>
       )}
 
       {/* ============================================= */}
-      {/* DETALLES DE LA PÓLIZA                         */}
+      {/* FECHAS DE REGISTRO (texto pequeño) */}
+      {/* ============================================= */}
+      <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+        <span>Creado: {formatDate(policy.created_at)}</span>
+        <span>Última actualización: {formatDate(policy.updated_at)}</span>
+      </div>
+
+      {/* ============================================= */}
+      {/* TARJETA 1: TOMADOR, ASEGURADO Y BENEFICIARIO */}
       {/* ============================================= */}
       <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Detalles de la Póliza
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Tomador, Asegurado y Beneficiario
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
+        <CardContent className="space-y-5">
+          {/* Tomador */}
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Tomador</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Nombre / Razón Social</p>
+                <p className="text-sm font-medium">{tomadorNombre}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Tipo Identificación</p>
+                <p className="text-sm font-medium">{DOC_TYPE_DISPLAY[tomadorTipoId] || tomadorTipoId.replace(/_/g, ' ')}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Número Identificación</p>
+                <p className="text-sm font-medium">{tomadorNumeroId}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t" />
+
+          {/* Asegurado */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <h4 className="text-sm font-semibold text-muted-foreground">Asegurado</h4>
+              {!aseguradoEsDiferente && (
+                <Badge variant="outline" className="text-[10px]">Igual al Tomador</Badge>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Nombre</p>
+                <p className="text-sm font-medium">{aseguradoNombre}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Tipo Identificación</p>
+                <p className="text-sm font-medium">{DOC_TYPE_DISPLAY[aseguradoTipoId] || aseguradoTipoId.replace(/_/g, ' ')}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Número Identificación</p>
+                <p className="text-sm font-medium">{aseguradoNumeroId}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t" />
+
+          {/* Beneficiarios */}
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Beneficiario(s)</h4>
+            {hasBeneficiarios ? (
+              <div className="space-y-2">
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {beneficiarios.map((ben: any, index: number) => (
+                  <div key={index} className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3 border rounded-lg">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Nombre</p>
+                      <p className="text-sm font-medium">{ben.nombre || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Tipo Identificación</p>
+                      <p className="text-sm font-medium">{DOC_TYPE_DISPLAY[ben.tipo_identificacion] || (ben.tipo_identificacion || '-').replace(/_/g, ' ')}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Número Identificación</p>
+                      <p className="text-sm font-medium">{ben.numero_identificacion || '-'}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Nombre</p>
+                  <p className="text-sm font-medium">{tomadorNombre}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Tipo Identificación</p>
+                  <p className="text-sm font-medium">{DOC_TYPE_DISPLAY[tomadorTipoId] || tomadorTipoId.replace(/_/g, ' ')}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Número Identificación</p>
+                  <p className="text-sm font-medium">{tomadorNumeroId}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ============================================= */}
+      {/* TARJETA 2: DETALLE DE LA PÓLIZA */}
+      {/* ============================================= */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Detalle de la Póliza
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <div>
               <p className="text-xs text-muted-foreground">Número</p>
@@ -812,26 +877,26 @@ export default function DetallePolizaPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Tipo Movimiento</p>
-              <p className="text-sm font-medium capitalize">{policyAny.tipo_movimiento || '-'}</p>
+              <p className="text-sm font-medium">{policyAny.tipo_movimiento || '-'}</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* ============================================= */}
-      {/* VIGENCIA                                      */}
+      {/* TARJETA 3: VIGENCIA */}
       {/* ============================================= */}
       <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             Vigencia
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
+        <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs text-muted-foreground">Fecha Expedición</p>
+              <p className="text-xs text-muted-foreground">Fecha de Expedición</p>
               <p className="text-sm font-medium">{formatDate(policyAny.fecha_expedicion)}</p>
             </div>
             <div>
@@ -849,94 +914,26 @@ export default function DetallePolizaPage() {
           </div>
           {/* Vigencia consolidada para póliza principal con anexos */}
           {isPrincipal && consolidatedEndDate && consolidatedEndDate !== policy.end_date && (
-            <div className="mt-3 pt-3 border-t">
-              <p className="text-xs text-muted-foreground">Vigencia Consolidada (con anexos)</p>
-              <p className="text-sm font-medium text-primary">
-                {formatDate(policy.start_date)} → {formatDate(consolidatedEndDate)}
-              </p>
+            <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+              <p className="text-xs text-muted-foreground mb-1">Vigencia Consolidada (con anexos)</p>
+              <p className="text-sm font-medium">{formatDate(policy.start_date)} → {formatDate(consolidatedEndDate)}</p>
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* ============================================= */}
-      {/* TOMADOR                                       */}
+      {/* TARJETA 4: VALORES DE LA PÓLIZA */}
       {/* ============================================= */}
       <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Tomador
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Nombre / Razón Social</p>
-              <p className="text-sm font-medium">
-                {policyAny.tomador_nombre || policy.client?.full_name || '-'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Tipo Identificación</p>
-              <p className="text-sm font-medium">
-                {(policyAny.tomador_tipo_identificacion || policy.client?.doc_type || '-').replace(/_/g, ' ')}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Número Identificación</p>
-              <p className="text-sm font-medium">
-                {policyAny.tomador_numero_identificacion || policy.client?.doc_number || '-'}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ============================================= */}
-      {/* ASEGURADO (solo si es diferente al tomador)   */}
-      {/* ============================================= */}
-      {policyAny.asegurado_diferente && (
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Asegurado
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Nombre</p>
-                <p className="text-sm font-medium">{policyAny.asegurado_nombre || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Tipo Identificación</p>
-                <p className="text-sm font-medium">
-                  {(policyAny.asegurado_tipo_identificacion || '-').replace(/_/g, ' ')}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Número Identificación</p>
-                <p className="text-sm font-medium">{policyAny.asegurado_numero_identificacion || '-'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ============================================= */}
-      {/* VALORES DE LA PÓLIZA                          */}
-      {/* ============================================= */}
-      <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
             <DollarSign className="h-4 w-4" />
             Valores de la Póliza
             {!isPrincipal && ` (Anexo ${policyAny.anexo})`}
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
+        <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <div>
               <p className="text-xs text-muted-foreground">Valor Asegurado</p>
@@ -956,7 +953,7 @@ export default function DetallePolizaPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total a Pagar</p>
-              <p className="text-sm font-bold">{formatCurrency(displayTotal)}</p>
+              <p className="text-sm font-semibold">{formatCurrency(displayTotal)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Comisión</p>
@@ -967,51 +964,40 @@ export default function DetallePolizaPage() {
       </Card>
 
       {/* ============================================= */}
-      {/* TABLA DE ANEXOS (solo póliza principal)       */}
+      {/* TABLA DE ANEXOS (solo póliza principal) */}
       {/* ============================================= */}
       {isPrincipal && anexos.length > 0 && (
         <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
               <FileText className="h-4 w-4" />
               Anexos ({anexos.length})
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-4 pb-4">
+          <CardContent>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 pr-3 font-medium">Anexo</th>
-                    <th className="pb-2 pr-3 font-medium">Tipo Mov.</th>
-                    <th className="pb-2 pr-3 font-medium">Prima</th>
-                    <th className="pb-2 pr-3 font-medium">Total</th>
-                    <th className="pb-2 pr-3 font-medium">Vigencia</th>
-                    <th className="pb-2 font-medium">Estado</th>
+                  <tr className="border-b text-xs text-muted-foreground">
+                    <th className="text-left py-2 px-2">Anexo</th>
+                    <th className="text-left py-2 px-2">Tipo Mov.</th>
+                    <th className="text-right py-2 px-2">Prima</th>
+                    <th className="text-right py-2 px-2">Total</th>
+                    <th className="text-left py-2 px-2">Vigencia</th>
+                    <th className="text-left py-2 px-2">Estado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {anexos.map((anexo: any) => (
-                    <tr key={anexo.id} className="border-b last:border-0">
-                      <td className="py-2 pr-3">
-                        <Link
-                          href={`/polizas/${anexo.id}`}
-                          className="text-primary hover:underline font-medium"
-                        >
-                          {anexo.anexo}
-                        </Link>
-                      </td>
-                      <td className="py-2 pr-3 capitalize">{anexo.tipo_movimiento || '-'}</td>
-                      <td className="py-2 pr-3">{formatCurrency(anexo.premium)}</td>
-                      <td className="py-2 pr-3">{formatCurrency(anexo.total_a_pagar)}</td>
-                      <td className="py-2 pr-3">
-                        {formatDate(anexo.start_date)} → {formatDate(anexo.end_date)}
-                      </td>
-                      <td className="py-2">
-                        <Badge
-                          className={`text-[10px] ${POLICY_STATUS_COLORS[anexo.status as PolicyStatus] || 'bg-gray-100 text-gray-800'}`}
-                        >
+                    <tr key={anexo.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => router.push(`/polizas/${anexo.id}`)}>
+                      <td className="py-2 px-2 font-medium">{anexo.anexo}</td>
+                      <td className="py-2 px-2">{anexo.tipo_movimiento || '-'}</td>
+                      <td className="py-2 px-2 text-right">{formatCurrency(anexo.premium)}</td>
+                      <td className="py-2 px-2 text-right">{formatCurrency(anexo.total_a_pagar)}</td>
+                      <td className="py-2 px-2">{formatDate(anexo.start_date)} → {formatDate(anexo.end_date)}</td>
+                      <td className="py-2 px-2">
+                        <Badge className={POLICY_STATUS_COLORS[anexo.status as PolicyStatus]}>
                           {POLICY_STATUS_LABELS[anexo.status as PolicyStatus] || anexo.status}
                         </Badge>
                       </td>
@@ -1025,76 +1011,62 @@ export default function DetallePolizaPage() {
       )}
 
       {/* ============================================= */}
-      {/* CLIENTE                                       */}
-      {/* ============================================= */}
-      {policy.client && (
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <User className="h-4 w-4" />
-              Cliente
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Nombre</p>
-                <p className="text-sm font-medium">{policy.client.full_name}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Documento</p>
-                <p className="text-sm font-medium">{policy.client.doc_number}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Email</p>
-                <p className="text-sm font-medium">{policy.client.email || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Teléfono</p>
-                <p className="text-sm font-medium">{policy.client.phone || '-'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ============================================= */}
-      {/* NOTAS                                         */}
-      {/* ============================================= */}
-      {policyAny.notas && (
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-semibold">Notas</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <p className="text-sm whitespace-pre-wrap">{policyAny.notas}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ============================================= */}
-      {/* REGISTRO / TIMESTAMPS                         */}
+      {/* TARJETA 5: GESTIÓN INTERNA CRM */}
       {/* ============================================= */}
       <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Registro
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Gestión Interna CRM
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <div className="grid grid-cols-2 gap-4">
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             <div>
-              <p className="text-xs text-muted-foreground">Creado</p>
-              <p className="text-sm font-medium">{formatDate(policy.created_at)}</p>
+              <p className="text-xs text-muted-foreground">Usuario</p>
+              <p className="text-sm font-medium">{usuarioName || '-'}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Última Actualización</p>
-              <p className="text-sm font-medium">{formatDate(policy.updated_at)}</p>
+              <p className="text-xs text-muted-foreground">Comercial</p>
+              <p className="text-sm font-medium">{comercialName || '-'}</p>
             </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Aliado</p>
+              <p className="text-sm font-medium">{aliadoName || 'Sin aliado'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Grupo Empresarial</p>
+              <p className="text-sm font-medium">{grupoEmpresarialName || '-'}</p>
+            </div>
+            {policyAny.allied_agent_id && (
+              <div>
+                <p className="text-xs text-muted-foreground">% Comisión Aliado</p>
+                <p className="text-sm font-medium">{policyAny.allied_agent_pct || 0}%</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
+
+      {/* ============================================= */}
+      {/* TARJETA 6: NOTAS */}
+      {/* ============================================= */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Notas y Comentarios
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {policyAny.notas ? (
+            <p className="text-sm whitespace-pre-wrap">{policyAny.notas}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">Sin notas</p>
+          )}
+        </CardContent>
+      </Card>
+
     </div>
   );
 }
