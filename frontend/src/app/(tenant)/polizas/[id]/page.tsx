@@ -239,13 +239,14 @@ function PolicyDocumentsDialog({
         return;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: insertError } = await (supabase as any)
         .from('policy_documents')
         .insert({
           policy_id: policyId,
           tenant_id: tenantId,
           document_type: docType,
+          document_name: file.name,
           file_name: file.name,
           file_url: filePath,
           file_size: file.size
