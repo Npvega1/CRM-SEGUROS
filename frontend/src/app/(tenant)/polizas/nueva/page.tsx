@@ -117,6 +117,7 @@ function NewPolicyContent() {
           client_id: selectedClientId,
           policy_number: data.policy_number,
           anexo: data.anexo || '00',
+          placa: data.placa || null,
           insurer: data.insurer,
           insurer_id: data.insurer_id || null,
           line: data.line,
@@ -135,6 +136,7 @@ function NewPolicyContent() {
           allied_agent_pct: data.allied_agent_pct || 0,
           comercial_id: data.comercial_id || null,
           grupo_empresarial_id: data.grupo_empresarial_id || null,
+          usuario_id: data.usuario_id || null,
           fecha_expedicion: data.fecha_expedicion || null,
           start_date: data.start_date || null,
           end_date: data.end_date || null,
@@ -148,7 +150,6 @@ function NewPolicyContent() {
           asegurado_numero_identificacion: data.asegurado_numero_identificacion || null,
           beneficiarios: data.beneficiarios || null,
           notas: data.notas || null,
-          placa: data.placa || null,
           metadata: data.metadata || {}
         })
         .select()
@@ -189,78 +190,86 @@ function NewPolicyContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link href="/polizas" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Volver a Pólizas
+      <div className="flex items-center gap-2">
+        <Link href="/polizas">
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Volver a Pólizas
+          </Button>
         </Link>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+      </div>
+
+      <div>
+        <h1 className="text-2xl font-bold flex items-center gap-2">
           <Shield className="h-6 w-6" />
           Crear Nueva Póliza
         </h1>
-        <p className="text-muted-foreground mt-1">Registra una nueva póliza de seguro</p>
+        <p className="text-muted-foreground">Registra una nueva póliza de seguro</p>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-2">
-          <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
-          <p className="text-red-800 text-sm">{error}</p>
+        <div className="flex items-center gap-2 p-4 border border-red-200 bg-red-50 rounded-lg text-red-700">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          <p className="text-sm">{error}</p>
         </div>
       )}
 
       {/* Buscador de Tomador */}
-      <div ref={searchRef} className="relative">
-        <Label>Buscar Tomador *</Label>
-        <div className="relative mt-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Escribe el nombre o documento del tomador..."
-            value={clientSearch}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            onFocus={() => { if (clientSearch.length >= 2 && !selectedClientId) setShowResults(true); }}
-            className="pl-10"
-          />
-          {selectedClientId && (
-            <button
-              type="button"
-              onClick={handleClearSelection}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        {showResults && !selectedClientId && (
-          <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-            {isLoadingClients ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
-                Cargando...
-              </div>
-            ) : filteredClients.length > 0 ? (
-              filteredClients.map((client) => (
-                <button
-                  key={client.id}
-                  onClick={() => handleSelectClient(client)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0"
-                >
-                  <p className="font-medium">{client.full_name}</p>
-                  <p className="text-xs text-muted-foreground">{client.doc_number}</p>
-                </button>
-              ))
-            ) : (
-              <div className="p-4 text-center space-y-2">
-                <p className="text-sm text-muted-foreground">No se encontró &quot;{clientSearch}&quot;</p>
-                <Link href="/clientes/nuevo">
-                  <Button variant="outline" size="sm" className="gap-1.5">
-                    <Plus className="h-4 w-4" />
-                    Crear nuevo cliente
-                  </Button>
-                </Link>
-              </div>
+      <div>
+        <Label className="text-base font-semibold">Buscar Tomador *</Label>
+        <div className="relative mt-2" ref={searchRef}>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Escribe el nombre o documento del tomador..."
+              value={clientSearch}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => { if (clientSearch.length >= 2 && !selectedClientId) setShowResults(true); }}
+              className="pl-10"
+            />
+            {selectedClientId && (
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
             )}
           </div>
-        )}
+
+          {showResults && !selectedClientId && (
+            <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+              {isLoadingClients ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                  Cargando...
+                </div>
+              ) : filteredClients.length > 0 ? (
+                filteredClients.map((client) => (
+                  <button
+                    key={client.id}
+                    onClick={() => handleSelectClient(client)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0"
+                  >
+                    <p className="font-medium">{client.full_name}</p>
+                    <p className="text-xs text-muted-foreground">{client.doc_number}</p>
+                  </button>
+                ))
+              ) : (
+                <div className="p-4 text-center space-y-2">
+                  <p className="text-sm text-muted-foreground">No se encontró &quot;{clientSearch}&quot;</p>
+                  <Link href="/clientes/nuevo">
+                    <Button variant="outline" size="sm" className="gap-1.5">
+                      <Plus className="h-4 w-4" />
+                      Crear nuevo cliente
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {selectedClientId && selectedClient ? (
