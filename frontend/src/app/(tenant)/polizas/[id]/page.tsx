@@ -50,7 +50,8 @@ import {
   Upload,
   Eye,
   Layers,
-  ArrowUp
+  ArrowUp,
+  History
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -87,6 +88,116 @@ interface AnexoRecord {
   end_date: string | null;
   status: string;
   created_at: string;
+}
+
+// =====================================================
+// Componente: Historial de Vigencias
+// =====================================================
+function RenewalHistory({ policyId, tenantId }: { policyId: string; tenantId: string }) {
+  const supabase = createClient();
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadHistory() {
+      if (!tenantId || !policyId) return;
+      try {
+        // Cargar la póliza actual
+        const { data: currentPolicy } = await (supabase as any)
+          .from('policies')
+          .select('id, policy_number, anexo, start_date, end_date, status, policy_type, renewed_from_policy_id')
+          .eq('id', policyId)
+          .eq('tenant_id', tenantId)
+          .single();
+
+        if (!currentPolicy) { setLoading(false); return; }
+
+        // Ir hacia atrás por renewed_from_policy_id
+        const backwards: any[] = [];
+        let lookbackId = currentPolicy.renewed_from_policy_id;
+        while (lookbackId) {
+          const { data: prevPolicy } = await (supabase as any)
+            .from('policies')
+            .select('id, policy_number, anexo, start_date, end_date, status, policy_type, renewed_from_policy_id')
+            .eq('id', lookbackId)
+            .eq('tenant_id', tenantId)
+            .single();
+          if (!prevPolicy) break;
+          backwards.unshift(prevPolicy);
+          lookbackId = prevPolicy.renewed_from_policy_id;
+        }
+
+        // Ir hacia adelante (pólizas que renovaron esta)
+        const forwards: any[] = [];
+        let lookforwardId: string | null = policyId;
+        while (lookforwardId) {
+          const { data: nextPolicies } = await (supabase as any)
+            .from('policies')
+            .select('id, policy_number, anexo, start_date, end_date, status, policy_type, renewed_from_policy_id')
+            .eq('renewed_from_policy_id', lookforwardId)
+            .eq('tenant_id', tenantId)
+            .eq('anexo', '00')
+            .limit(1);
+          if (nextPolicies && nextPolicies.length > 0) {
+            forwards.push(nextPolicies[0]);
+            lookforwardId = nextPolicies[0].id;
+          } else {
+            lookforwardId = null;
+          }
+        }
+
+        const fullChain = [...backwards, currentPolicy, ...forwards];
+
+        // Solo mostrar si hay más de 1 vigencia
+        if (fullChain.length > 1) {
+          setHistory(fullChain);
+        }
+      } catch (err) {
+        console.error('Error loading renewal history:', err);
+      }
+      setLoading(false);
+    }
+    loadHistory();
+  }, [policyId, tenantId, supabase]);
+
+  if (loading || history.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader className="py-3 px-4">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <History className="w-4 h-4" />
+          Historial de Vigencias ({history.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-3 pt-0">
+        <div className="flex items-center gap-1 flex-wrap">
+          {history.map((h, idx) => {
+            const isCurrent = h.id === policyId;
+            const startYear = h.start_date ? new Date(h.start_date).getFullYear() : '?';
+            const endYear = h.end_date ? new Date(h.end_date).getFullYear() : '?';
+
+            return (
+              <div key={h.id} className="flex items-center gap-1">
+                {idx > 0 && <span className="text-muted-foreground text-xs mx-1">→</span>}
+                {isCurrent ? (
+                  <span className="text-xs font-semibold bg-primary/10 text-primary px-2 py-1 rounded">
+                    {h.policy_number} ({startYear}-{endYear}) - Actual
+                  </span>
+                ) : (
+                  <Link href={`/polizas/${h.id}`}>
+                    <span className="text-xs text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50 cursor-pointer">
+                      {h.policy_number} ({startYear}-{endYear})
+                    </span>
+                  </Link>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 // =====================================================
@@ -201,7 +312,6 @@ export default function DetallePolizaPage() {
     async function loadAnexos() {
       if (!policy || !tenantId) return;
       try {
-        // Solo hijos directos de esta póliza (por parent_policy_id)
         const { data } = await (supabase as any)
           .from('policies')
           .select('id, anexo, premium, start_date, end_date, status, created_at')
@@ -212,7 +322,6 @@ export default function DetallePolizaPage() {
         const anexosList = (data || []) as AnexoRecord[];
         setAnexos(anexosList);
 
-        // Calcular vigencia consolidada (max end_date entre hijos directos + póliza principal)
         let maxEndDate = policy.end_date || null;
         anexosList.forEach((a) => {
           if (a.end_date && (!maxEndDate || a.end_date > maxEndDate)) {
@@ -427,6 +536,11 @@ export default function DetallePolizaPage() {
               <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus]}>
                 {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
               </Badge>
+              {policyAny.policy_type === 'renovacion' ? (
+                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-300">R</Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-300">N</Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               {policy.insurance_company?.name || policy.insurer} - {policy.client?.full_name || 'Sin cliente'}
@@ -587,7 +701,6 @@ export default function DetallePolizaPage() {
                 </p>
               </div>
             </div>
-            {/* Vigencia consolidada si hay anexos que la modifican */}
             {!isAnexo && consolidatedEndDate && consolidatedEndDate !== policy.end_date && (
               <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
                 Vigencia consolidada (con anexos): hasta <strong>{formatDate(consolidatedEndDate)}</strong>
@@ -773,6 +886,11 @@ export default function DetallePolizaPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ============================================= */}
+        {/* HISTORIAL DE VIGENCIAS */}
+        {/* ============================================= */}
+        <RenewalHistory policyId={policyId} tenantId={tenantId || ''} />
 
         {/* ============================================= */}
         {/* TABLA DE ANEXOS (solo en póliza principal) */}
