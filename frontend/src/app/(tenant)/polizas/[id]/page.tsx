@@ -194,45 +194,6 @@ export default function DetallePolizaPage() {
     }
   }, [policy, policyId, tenantId]);
 
-  
-Archivo 2: frontend/src/app/(tenant)/polizas/[id]/page.tsx
-Solo cambia la función loadAnexos (líneas 200-230). El resto del archivo es idéntico. Busca este bloque:
-
-  // =====================================================
-  // Cargar anexos relacionados + vigencia consolidada
-  // =====================================================
-  useEffect(() => {
-    async function loadAnexos() {
-      if (!policy || !tenantId) return;
-      try {
-        const { data } = await (supabase as any)
-          .from('policies')
-          .select('id, anexo, premium, start_date, end_date, status, created_at')
-          .eq('policy_number', policy.policy_number)
-          .eq('tenant_id', tenantId)
-          .neq('id', policyId)
-          .order('anexo', { ascending: true });
-
-        const anexosList = (data || []) as AnexoRecord[];
-        setAnexos(anexosList);
-
-        // Calcular vigencia consolidada (max end_date entre todos los anexos + póliza principal)
-        let maxEndDate = policy.end_date || null;
-        anexosList.forEach((a) => {
-          if (a.end_date && (!maxEndDate || a.end_date > maxEndDate)) {
-            maxEndDate = a.end_date;
-          }
-        });
-        setConsolidatedEndDate(maxEndDate);
-      } catch (err) {
-        console.error('Error loading anexos:', err);
-      }
-    }
-    if (policy) {
-      loadAnexos();
-    }
-  }, [policy, policyId, tenantId]);
-
   // =====================================================
   // Cargar anexos relacionados + vigencia consolidada
   // =====================================================
