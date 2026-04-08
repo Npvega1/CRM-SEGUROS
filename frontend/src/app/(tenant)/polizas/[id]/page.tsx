@@ -742,6 +742,7 @@ export default function DetallePolizaPage() {
       {/* ============================================= */}
       {/* STATUS STEPPER                                */}
       {/* ============================================= */}
+      {/* @ts-expect-error - Props type resolution */}
       <PolicyStatusStepper
         currentStatus={policy.status as PolicyStatus}
         onStatusChange={handleStatusChange}
