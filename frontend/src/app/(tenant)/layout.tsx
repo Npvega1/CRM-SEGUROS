@@ -27,6 +27,7 @@ import {
   Settings,
   X,
   Building2,
+  Landmark,
   ChevronRight,
   ChevronLeft,
   Zap,
@@ -81,6 +82,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Clientes', href: '/clientes', icon: Users, permissionKey: 'clientes' },
       { title: 'Grupos', href: '/grupos', icon: Building2, adminOnly: true },
+      { title: 'Centro de Costos', href: '/centro-costos', icon: Landmark, adminOnly: true },
       { title: 'Aliados', href: '/aliados', icon: Handshake, adminOnly: true },
       { title: 'Mensajes', href: '/mensajes', icon: MessageSquare, permissionKey: 'mensajes', premiumOnly: true },
     ]
