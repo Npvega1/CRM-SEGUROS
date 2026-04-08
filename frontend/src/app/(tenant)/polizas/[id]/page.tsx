@@ -714,7 +714,7 @@ export default function DetallePolizaPage() {
       {/* ============================================= */}
       {/* STATUS STEPPER */}
       {/* ============================================= */}
-      <PolicyStatusStepper policy={policy as any} onStatusChange={handleStatusChange} isLoading={statusLoading} />
+      <PolicyStatusStepper hasRemision={false} hasRecaudo={false} />
 
       {/* ============================================= */}
       {/* HISTORIAL DE VIGENCIAS */}
