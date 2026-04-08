@@ -100,7 +100,7 @@ interface InsuranceLine { id: string; name: string; slug: string; unit: string; 
 interface InsuranceGroup { id: string; name: string; slug: string; line_id: string; }
 interface TenantCompany { company_id: string; is_active: boolean; company_code: string | null; company: InsuranceCompany; }
 interface AlliedAgentOption { id: string; full_name: string; commission_percentage: number; }
-interface ClientData { id: string; full_name: string; doc_type: string; doc_number: string; allied_agent_id?: string | null; comercial_id?: string | null; grupo_empresarial_id?: string | null; }
+interface ClientData { id: string; full_name: string; doc_type: string; doc_number: string; allied_agent_id?: string | null; comercial_id?: string | null; grupo_empresarial_id?: string | null; business_group_id?: string | null; }
 interface Beneficiario { nombre: string; tipo_identificacion: string; numero_identificacion: string; }
 interface PendingDocument { file_name: string; file_url: string; file_size: number; document_type: string; }
 
@@ -331,7 +331,6 @@ export function PolicyForm({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       asegurado_numero_identificacion: (policy as any).asegurado_numero_identificacion || '',
     } : {
-      // FIX: Agregados insurer y policy_number a los defaults para que Zod no falle con undefined
       client_id: clientId || '',
       policy_number: '',
       insurer: '',
@@ -347,7 +346,6 @@ export function PolicyForm({
       total_a_pagar: 0,
       commission_pct: 0,
       tomador_nombre: selectedClient?.full_name || '',
-      // FIX: Usar mapDocTypeToEnum para garantizar valor válido en el enum Zod
       tomador_tipo_identificacion: mapDocTypeToEnum(selectedClient?.doc_type),
       tomador_numero_identificacion: selectedClient?.doc_number || '',
       asegurado_diferente: false,
@@ -388,12 +386,12 @@ export function PolicyForm({
       if (!cId) return;
       setLoadingClient(true);
       try {
+        // FIX: Agregado business_group_id al select
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any).from('clients').select('id, full_name, doc_type, doc_number, allied_agent_id, comercial_id, grupo_empresarial_id').eq('id', cId).maybeSingle();
+        const { data } = await (supabase as any).from('clients').select('id, full_name, doc_type, doc_number, allied_agent_id, comercial_id, grupo_empresarial_id, business_group_id').eq('id', cId).maybeSingle();
         if (data) {
           setClientData(data);
           setValue('tomador_nombre', data.full_name || '');
-          // FIX: Usar mapDocTypeToEnum
           setValue('tomador_tipo_identificacion', mapDocTypeToEnum(data.doc_type));
           setValue('tomador_numero_identificacion', data.doc_number || '');
           if (data.comercial_id) {
@@ -401,10 +399,12 @@ export function PolicyForm({
             const { data: cd } = await (supabase as any).from('users').select('full_name').eq('id', data.comercial_id).maybeSingle();
             if (cd) setComercialName(cd.full_name);
           }
-          if (data.grupo_empresarial_id) {
+          // FIX: Buscar grupo empresarial en business_groups usando business_group_id
+          const grupoId = data.business_group_id || data.grupo_empresarial_id;
+          if (grupoId) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data: gd } = await (supabase as any).from('grupos_empresariales').select('nombre').eq('id', data.grupo_empresarial_id).maybeSingle();
-            if (gd) setGrupoEmpresarialName(gd.nombre);
+            const { data: gd } = await (supabase as any).from('business_groups').select('name').eq('id', grupoId).maybeSingle();
+            if (gd) setGrupoEmpresarialName(gd.name);
           }
         }
       } catch (err) { console.error('Error loading client data:', err); }
@@ -629,7 +629,8 @@ export function PolicyForm({
       allied_agent_id: clientAlliedAgent?.id || null,
       allied_agent_pct: clientAlliedAgent ? alliedAgentPctValue : 0,
       comercial_id: clientData?.comercial_id || null,
-      grupo_empresarial_id: clientData?.grupo_empresarial_id || null,
+      // FIX: Usar business_group_id como fuente principal
+      grupo_empresarial_id: clientData?.business_group_id || clientData?.grupo_empresarial_id || null,
       usuario_id: currentUser?.id || null,
       asegurado_diferente: aseguradoDiferente,
       beneficiarios: beneficiarios.length > 0 ? beneficiarios : undefined,
@@ -638,13 +639,11 @@ export function PolicyForm({
     // Crear: si asegurado NO es diferente, copiar datos del tomador
     if (isCreateMode && selectedClient && !aseguradoDiferente) {
       dataWithExtras.asegurado_nombre = selectedClient.full_name;
-      // FIX: Usar mapDocTypeToEnum
       dataWithExtras.asegurado_tipo_identificacion = mapDocTypeToEnum(selectedClient.doc_type);
       dataWithExtras.asegurado_numero_identificacion = selectedClient.doc_number;
       if (!beneficiarios || beneficiarios.length === 0) {
         dataWithExtras.beneficiarios = [{
           nombre: selectedClient.full_name,
-          // FIX: Usar mapDocTypeToEnum
           tipo_identificacion: mapDocTypeToEnum(selectedClient.doc_type),
           numero_identificacion: selectedClient.doc_number
         }];
@@ -655,14 +654,13 @@ export function PolicyForm({
       dataWithExtras.status = 'activa' as PolicyStatus;
       dataWithExtras.tipo_movimiento = 'expedicion';
       dataWithExtras.tomador_nombre = selectedClient?.full_name || data.tomador_nombre;
-      // FIX: Usar mapDocTypeToEnum
       dataWithExtras.tomador_tipo_identificacion = mapDocTypeToEnum(selectedClient?.doc_type) || data.tomador_tipo_identificacion;
       dataWithExtras.tomador_numero_identificacion = selectedClient?.doc_number || data.tomador_numero_identificacion;
     }
     await onSubmit(dataWithExtras);
   };
 
-  // FIX: onError ahora muestra los errores visualmente en lugar de solo console.error
+  // FIX: onError ahora muestra los errores visualmente
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onError = (errs: any) => {
     console.error('Form validation errors:', errs);
@@ -987,7 +985,7 @@ export function PolicyForm({
   }
 
   // ###################################################
-  // EDIT MODE RENDER (sin cambios respecto al original)
+  // EDIT MODE RENDER
   // ###################################################
 
   return (
