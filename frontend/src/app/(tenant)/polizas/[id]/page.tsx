@@ -712,9 +712,15 @@ export default function DetallePolizaPage() {
       </div>
 
       {/* ============================================= */}
-      {/* STATUS STEPPER */}
+      {/* STATUS STEPPER + TIMESTAMPS                   */}
       {/* ============================================= */}
-      <PolicyStatusStepper hasRemision={false} hasRecaudo={false} />
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <PolicyStatusStepper hasRemision={false} hasRecaudo={false} />
+        <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+          <span>Creado: {formatDate(policy.created_at)}</span>
+          <span>Última actualización: {formatDate(policy.updated_at)}</span>
+        </div>
+      </div>
 
       {/* ============================================= */}
       {/* HISTORIAL DE VIGENCIAS */}
@@ -734,13 +740,6 @@ export default function DetallePolizaPage() {
         </Link>
       )}
 
-      {/* ============================================= */}
-      {/* FECHAS DE REGISTRO (texto pequeño) */}
-      {/* ============================================= */}
-      <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
-        <span>Creado: {formatDate(policy.created_at)}</span>
-        <span>Última actualización: {formatDate(policy.updated_at)}</span>
-      </div>
 
       {/* ============================================= */}
       {/* TARJETA 1: TOMADOR, ASEGURADO Y BENEFICIARIO */}
