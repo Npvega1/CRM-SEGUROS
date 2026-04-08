@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import {
   CreatePolicyInputSchema,
+  UpdatePolicyInputSchema,
   type Policy,
   type PolicyStatus
 } from '@/lib/validations/policies';
@@ -24,9 +25,11 @@ import {
   Loader2,
   Save,
   X,
+  Building,
   FileText,
   Calendar,
   MessageSquare,
+  Handshake,
   User,
   Users,
   DollarSign,
@@ -34,7 +37,11 @@ import {
   AlertCircle,
   Plus,
   Trash2,
-  CheckCircle
+  Upload,
+  Sparkles,
+  CheckCircle,
+  AlertTriangle,
+  Car
 } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
@@ -61,21 +68,6 @@ const TIPO_IDENTIFICACION_OPTIONS = [
   { value: 'pasaporte', label: 'Pasaporte' },
   { value: 'nit_extranjero', label: 'NIT Extranjero' },
 ];
-
-// Mapeo de doc_type de clientes al formato del enum de pólizas
-const DOC_TYPE_MAP: Record<string, string> = {
-  'CC': 'cedula_ciudadania',
-  'cc': 'cedula_ciudadania',
-  'cedula': 'cedula_ciudadania',
-  'cedula_ciudadania': 'cedula_ciudadania',
-  'NIT': 'nit',
-  'nit': 'nit',
-  'CE': 'cedula_extranjeria',
-  'ce': 'cedula_extranjeria',
-  'cedula_extranjeria': 'cedula_extranjeria',
-  'pasaporte': 'pasaporte',
-  'nit_extranjero': 'nit_extranjero',
-};
 
 interface InsuranceCompany {
   id: string;
@@ -117,7 +109,7 @@ interface ClientData {
   doc_number: string;
   allied_agent_id?: string | null;
   comercial_id?: string | null;
-  business_group_id?: string | null;
+  grupo_empresarial_id?: string | null;
 }
 
 interface Beneficiario {
@@ -130,6 +122,7 @@ export interface PolicyFormData {
   client_id: string;
   policy_number: string;
   anexo: string;
+  placa?: string;
   insurer: string;
   insurer_id?: string;
   line: string;
@@ -207,6 +200,17 @@ export function PolicyForm({
   const { tenantId } = useTenant();
   const supabase = createClient();
 
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [loadingAiStatus, setLoadingAiStatus] = useState(true);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isExtractingAI, setIsExtractingAI] = useState(false);
+  const [aiExtractionResult, setAiExtractionResult] = useState<{
+    success: boolean;
+    needsVerification: boolean;
+    verificationFields?: string[];
+    error?: string;
+  } | null>(null);
+
   const [tenantCompanies, setTenantCompanies] = useState<TenantCompany[]>([]);
   const [availableLines, setAvailableLines] = useState<InsuranceLine[]>([]);
   const [availableGroups, setAvailableGroups] = useState<InsuranceGroup[]>([]);
@@ -218,7 +222,7 @@ export function PolicyForm({
 
   const [clientAlliedAgent, setClientAlliedAgent] = useState<AlliedAgentOption | null>(null);
   const [loadingAlliedAgent, setLoadingAlliedAgent] = useState(false);
-  const [alliedAgentPctValue, setAlliedAgentPctValue] = useState<number>(() => {
+  const [alliedAgentPctValue, setAlliedAgentPctValue] = useState(() => {
     if (isEditing && policy) return (policy as any).allied_agent_pct || 0;
     return 0;
   });
@@ -227,15 +231,15 @@ export function PolicyForm({
   const [comercialName, setComercialName] = useState('');
   const [grupoEmpresarialName, setGrupoEmpresarialName] = useState('');
 
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>(() => {
+  const [selectedCompanyId, setSelectedCompanyId] = useState(() => {
     if (isEditing && policy) return (policy as any).insurer_id || '';
     return '';
   });
-  const [selectedLineId, setSelectedLineId] = useState<string>(() => {
+  const [selectedLineId, setSelectedLineId] = useState(() => {
     if (isEditing && policy) return (policy as any).line_id || '';
     return '';
   });
-  const [selectedGroupId, setSelectedGroupId] = useState<string>(() => {
+  const [selectedGroupId, setSelectedGroupId] = useState(() => {
     if (isEditing && policy) return (policy as any).group_id || '';
     return '';
   });
@@ -249,6 +253,9 @@ export function PolicyForm({
   const [aseguradoDiferente, setAseguradoDiferente] = useState(false);
   const [beneficiarios, setBeneficiarios] = useState<Beneficiario[]>([]);
   const [mostrarBeneficiarios, setMostrarBeneficiarios] = useState(false);
+
+  const [placaValue, setPlacaValue] = useState(isEditing ? ((policy as any)?.placa || '') : '');
+  const isAutoRamo = availableLines.find(l => l.id === selectedLineId)?.name?.toLowerCase().includes('auto') || false;
 
   const {
     register,
@@ -313,7 +320,27 @@ export function PolicyForm({
     ? POLICY_STATUS_OPTIONS
     : POLICY_STATUS_OPTIONS.filter(o => o.value === 'activa' || o.value === 'verificacion');
 
-  // Cargar usuario actual
+  useEffect(() => {
+    async function loadAiStatus() {
+      if (!tenantId) return;
+      try {
+        const { data } = await (supabase as any)
+          .from('tenants')
+          .select('ai_enabled')
+          .eq('id', tenantId)
+          .single();
+        if (data) {
+          setAiEnabled(data.ai_enabled || false);
+        }
+      } catch (err) {
+        console.error('Error loading AI status:', err);
+      } finally {
+        setLoadingAiStatus(false);
+      }
+    }
+    loadAiStatus();
+  }, [tenantId, supabase]);
+
   useEffect(() => {
     async function loadCurrentUser() {
       try {
@@ -335,7 +362,6 @@ export function PolicyForm({
     loadCurrentUser();
   }, [supabase]);
 
-  // Cargar datos del cliente (tomador, comercial, grupo empresarial)
   useEffect(() => {
     async function loadClientData() {
       const cId = clientId || (isEditing && policy ? policy.client_id : null);
@@ -344,14 +370,13 @@ export function PolicyForm({
       try {
         const { data } = await (supabase as any)
           .from('clients')
-          .select('id, full_name, doc_type, doc_number, allied_agent_id, comercial_id, business_group_id')
+          .select('id, full_name, doc_type, doc_number, allied_agent_id, comercial_id, grupo_empresarial_id')
           .eq('id', cId)
           .single();
         if (data) {
           setClientData(data);
           setValue('tomador_nombre', data.full_name || '');
-          // Mapear doc_type al formato del enum
-          setValue('tomador_tipo_identificacion', DOC_TYPE_MAP[data.doc_type] || 'cedula_ciudadania');
+          setValue('tomador_tipo_identificacion', data.doc_type || 'cedula_ciudadania');
           setValue('tomador_numero_identificacion', data.doc_number || '');
           if (data.comercial_id) {
             const { data: comercialData } = await (supabase as any)
@@ -363,14 +388,14 @@ export function PolicyForm({
               setComercialName(comercialData.full_name);
             }
           }
-          if (data.business_group_id) {
+          if (data.grupo_empresarial_id) {
             const { data: grupoData } = await (supabase as any)
-              .from('business_groups')
-              .select('name')
-              .eq('id', data.business_group_id)
+              .from('grupos_empresariales')
+              .select('nombre')
+              .eq('id', data.grupo_empresarial_id)
               .single();
             if (grupoData) {
-              setGrupoEmpresarialName(grupoData.name);
+              setGrupoEmpresarialName(grupoData.nombre);
             }
           }
         }
@@ -382,7 +407,6 @@ export function PolicyForm({
     loadClientData();
   }, [clientId, isEditing, policy, supabase, setValue]);
 
-  // Inicializar displays cuando se edita
   useEffect(() => {
     if (policy) {
       setNotasValue((policy as any).notas || '');
@@ -395,19 +419,16 @@ export function PolicyForm({
     }
   }, [policy]);
 
-  // Calcular total automáticamente
   useEffect(() => {
     const total = Number(premium) + Number(gastosExpedicion) + Number(iva);
     setValue('total_a_pagar', total);
   }, [premium, gastosExpedicion, iva, setValue]);
 
-  // Calcular días de vigencia
   useEffect(() => {
     const dias = calcularDiasVigencia(startDate, endDate);
     setValue('dias_vigencia', dias);
   }, [startDate, endDate, setValue]);
 
-  // Cargar aliado del cliente
   useEffect(() => {
     async function loadClientAlliedAgent() {
       const cId = clientId || (isEditing && policy ? policy.client_id : null);
@@ -451,7 +472,6 @@ export function PolicyForm({
     loadClientAlliedAgent();
   }, [clientId, tenantId, isEditing, policy, supabase]);
 
-  // Cargar comisión por compañía + grupo
   useEffect(() => {
     async function loadCommission() {
       if (!selectedCompanyId || !selectedGroupId) return;
@@ -478,7 +498,6 @@ export function PolicyForm({
     loadCommission();
   }, [selectedCompanyId, selectedGroupId, setValue, supabase]);
 
-  // Cargar compañías del tenant
   useEffect(() => {
     async function loadTenantCompanies() {
       if (!tenantId) return;
@@ -507,7 +526,6 @@ export function PolicyForm({
     loadTenantCompanies();
   }, [tenantId, supabase]);
 
-  // Cargar líneas (ramos) por compañía
   useEffect(() => {
     async function loadLinesForCompany() {
       if (!selectedCompanyId) {
@@ -531,7 +549,6 @@ export function PolicyForm({
     loadLinesForCompany();
   }, [selectedCompanyId, supabase]);
 
-  // Cargar grupos por línea (ramo)
   useEffect(() => {
     async function loadGroupsForLine() {
       if (!selectedLineId) {
@@ -547,15 +564,17 @@ export function PolicyForm({
           .order('display_order');
         if (groupsData) {
           setAvailableGroups(groupsData as InsuranceGroup[]);
+          if (groupsData.length > 0 && !isEditing) {
+            setSelectedGroupId(groupsData[0].id);
+          }
         }
       } catch (error) {
         console.error('Error loading groups:', error);
       }
     }
     loadGroupsForLine();
-  }, [selectedLineId, supabase]);
+  }, [selectedLineId, supabase, isEditing]);
 
-  // Sincronizar selects con form values
   useEffect(() => {
     if (selectedCompanyId) {
       const company = tenantCompanies.find(tc => tc.company_id === selectedCompanyId)?.company;
@@ -588,9 +607,119 @@ export function PolicyForm({
     }
   }, [clientId, isEditing, setValue]);
 
-  // =====================================================
-  // HANDLERS
-  // =====================================================
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!validTypes.includes(file.type)) {
+        alert('Por favor seleccione un archivo PDF o DOCX');
+        return;
+      }
+      setSelectedFile(file);
+      setAiExtractionResult(null);
+    }
+  };
+
+  const handleExtractWithAI = async () => {
+    if (!selectedFile || !tenantId) return;
+    setIsExtractingAI(true);
+    setAiExtractionResult(null);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedFile);
+      });
+      const fileType = selectedFile.type === 'application/pdf' ? 'pdf' : 'docx';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+      const response = await fetch(`${backendUrl}/api/ai/extract-policy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId,
+          file_name: selectedFile.name,
+          file_type: fileType,
+          base64_content: base64
+        })
+      });
+      const result = await response.json();
+      if (result.success && result.data) {
+        const data = result.data;
+        if (data.datos_generales) {
+          if (data.datos_generales.numero_poliza) setValue('policy_number', data.datos_generales.numero_poliza);
+          if (data.datos_generales.anexo) setValue('anexo', data.datos_generales.anexo);
+          if (data.datos_generales.tipo_movimiento) setValue('tipo_movimiento', data.datos_generales.tipo_movimiento);
+          if (data.datos_generales.fecha_expedicion) setValue('fecha_expedicion', data.datos_generales.fecha_expedicion);
+        }
+        if (data.vigencia) {
+          if (data.vigencia.fecha_desde) setValue('start_date', data.vigencia.fecha_desde);
+          if (data.vigencia.fecha_hasta) setValue('end_date', data.vigencia.fecha_hasta);
+        }
+        if (data.tomador) {
+          if (data.tomador.nombre) setValue('tomador_nombre', data.tomador.nombre);
+          if (data.tomador.tipo_identificacion) setValue('tomador_tipo_identificacion', data.tomador.tipo_identificacion);
+          if (data.tomador.numero_identificacion) setValue('tomador_numero_identificacion', data.tomador.numero_identificacion);
+        }
+        if (data.asegurado) {
+          setAseguradoDiferente(data.asegurado.es_diferente_tomador || false);
+          if (data.asegurado.es_diferente_tomador) {
+            if (data.asegurado.nombre) setValue('asegurado_nombre', data.asegurado.nombre);
+            if (data.asegurado.tipo_identificacion) setValue('asegurado_tipo_identificacion', data.asegurado.tipo_identificacion);
+            if (data.asegurado.numero_identificacion) setValue('asegurado_numero_identificacion', data.asegurado.numero_identificacion);
+          }
+        }
+        if (data.valores) {
+          if (data.valores.valor_asegurado) {
+            setValue('valor_asegurado', data.valores.valor_asegurado);
+            setValorAseguradoDisplay(formatCurrency(data.valores.valor_asegurado));
+          }
+          if (data.valores.prima_neta) {
+            setValue('premium', data.valores.prima_neta);
+            setPremiumDisplay(formatCurrency(data.valores.prima_neta));
+          }
+          if (data.valores.gastos_expedicion) {
+            setValue('gastos_expedicion', data.valores.gastos_expedicion);
+            setGastosDisplay(formatCurrency(data.valores.gastos_expedicion));
+          }
+          if (data.valores.iva) {
+            setValue('iva', data.valores.iva);
+            setIvaDisplay(formatCurrency(data.valores.iva));
+          }
+        }
+        if (data.beneficiarios && data.beneficiarios.length > 0) {
+          setBeneficiarios(data.beneficiarios);
+          setMostrarBeneficiarios(true);
+        }
+        if (data.notas_extraccion) {
+          setNotasValue(data.notas_extraccion);
+        }
+        if (result.needs_verification) {
+          setValue('status', 'verificacion');
+        }
+        setAiExtractionResult({
+          success: true,
+          needsVerification: result.needs_verification,
+          verificationFields: result.verification_fields
+        });
+      } else {
+        setAiExtractionResult({
+          success: false,
+          needsVerification: false,
+          error: result.error || 'Error al extraer datos'
+        });
+      }
+    } catch (error) {
+      console.error('Error extracting with AI:', error);
+      setAiExtractionResult({
+        success: false,
+        needsVerification: false,
+        error: 'Error de conexión con el servicio de IA'
+      });
+    } finally {
+      setIsExtractingAI(false);
+    }
+  };
 
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartDate = e.target.value;
@@ -646,13 +775,18 @@ export function PolicyForm({
   };
 
   const handleFormSubmit = async (data: PolicyFormData) => {
+    if (isAutoRamo && (!placaValue || placaValue.length < 4 || placaValue.length > 8)) {
+      alert('Para el ramo de Automóviles, la placa es obligatoria (4 a 8 caracteres).');
+      return;
+    }
     const dataWithExtras: PolicyFormData = {
       ...data,
+      placa: isAutoRamo ? placaValue.toUpperCase() : undefined,
       notas: notasValue || undefined,
       allied_agent_id: clientAlliedAgent?.id || null,
       allied_agent_pct: clientAlliedAgent ? alliedAgentPctValue : 0,
       comercial_id: clientData?.comercial_id || null,
-      grupo_empresarial_id: clientData?.business_group_id || null,
+      grupo_empresarial_id: clientData?.grupo_empresarial_id || null,
       usuario_id: currentUser?.id || null,
       asegurado_diferente: aseguradoDiferente,
       beneficiarios: beneficiarios.length > 0 ? beneficiarios : undefined,
@@ -660,7 +794,6 @@ export function PolicyForm({
     await onSubmit(dataWithExtras);
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onError = (errors: any) => {
     console.error('Form validation errors:', errors);
   };
@@ -669,48 +802,114 @@ export function PolicyForm({
   const anexoOptions = Array.from({ length: 100 }, (_, i) => i.toString().padStart(2, '0'));
   const diasVigencia = calcularDiasVigencia(startDate, endDate);
 
-  // =====================================================
-  // RENDER
-  // =====================================================
   return (
     <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-8">
 
-      {/* ============================================= */}
-      {/* SECCION 1: DATOS GENERALES */}
-      {/* ============================================= */}
+      {/* Lectura Automática con IA */}
+      {!isEditing && aiEnabled && !loadingAiStatus && (
+        <div className="space-y-4 p-4 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5">
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            Lectura Automática con IA
+            <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full">Beta</span>
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Sube el PDF de la póliza y la IA extraerá los datos automáticamente.
+          </p>
+          <div className="flex items-center gap-3">
+            <Input
+              type="file"
+              accept=".pdf,.docx"
+              onChange={handleFileChange}
+              disabled={loading || isExtractingAI}
+              className="max-w-xs"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExtractWithAI}
+              disabled={!selectedFile || isExtractingAI || loading}
+            >
+              {isExtractingAI ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Extrayendo...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-1" />
+                  Extraer Datos
+                </>
+              )}
+            </Button>
+          </div>
+          {selectedFile && (
+            <p className="text-xs text-muted-foreground">
+              Archivo: {selectedFile.name}
+            </p>
+          )}
+          {aiExtractionResult && (
+            <div className="mt-2">
+              {aiExtractionResult.success ? (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                  {aiExtractionResult.needsVerification ? (
+                    <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  ) : (
+                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                  )}
+                  <div className="text-sm">
+                    {aiExtractionResult.needsVerification ? (
+                      <>
+                        <strong>Datos extraídos con observaciones.</strong> Verifica los siguientes campos: {aiExtractionResult.verificationFields?.join(', ')}
+                      </>
+                    ) : (
+                      <strong>Datos extraídos correctamente.</strong>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200">
+                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                  <p className="text-sm text-red-800">{aiExtractionResult.error}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!isEditing && !aiEnabled && !loadingAiStatus && (
+        <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+          La lectura automática con IA no está habilitada para tu cuenta. Contacta al administrador para activarla.
+        </div>
+      )}
+
+      {/* ======================================= */}
+      {/* 1. Datos Generales de la Póliza         */}
+      {/* ======================================= */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
-          <FileText className="h-5 w-5" />
+        <h3 className="text-base font-semibold flex items-center gap-2">
+          <FileText className="h-4 w-4" />
           1. Datos Generales de la Póliza
         </h3>
-
-        {/* Fila 1: Número | Anexo | Aseguradora */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="policy_number">Número de Póliza *</Label>
-            <Input
-              id="policy_number"
-              placeholder="Ej: POL-2024-001"
-              {...register('policy_number')}
-              disabled={loading}
-              data-testid="policy-number-input"
-            />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <Label>Número de Póliza *</Label>
+            <Input {...register('policy_number')} disabled={loading} placeholder="Ej: 1234567" />
             {errors.policy_number && (
-              <p className="text-xs text-destructive flex items-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                {errors.policy_number.message}
-              </p>
+              <p className="text-xs text-red-500 mt-1">{errors.policy_number.message}</p>
             )}
           </div>
 
-          <div className="space-y-2">
+          <div>
             <Label>Anexo</Label>
             <Select
               defaultValue={(policy as any)?.anexo || '00'}
               onValueChange={(value) => setValue('anexo', value)}
               disabled={loading}
             >
-              <SelectTrigger data-testid="anexo-select">
+              <SelectTrigger>
                 <SelectValue placeholder="00" />
               </SelectTrigger>
               <SelectContent>
@@ -721,18 +920,17 @@ export function PolicyForm({
             </Select>
           </div>
 
-          <div className="space-y-2">
+          <div>
             <Label>Aseguradora *</Label>
             {loadingCatalogs ? (
-              <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted/50">
+              <div className="flex items-center gap-2 h-10 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm text-muted-foreground">Cargando...</span>
+                Cargando...
               </div>
             ) : tenantCompanies.length === 0 ? (
-              <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-amber-50 text-amber-700">
-                <AlertCircle className="h-4 w-4" />
-                <span className="text-xs">No tienes compañías activas configuradas.</span>
-              </div>
+              <p className="text-sm text-muted-foreground py-2">
+                No tienes compañías activas configuradas.
+              </p>
             ) : (
               <Select
                 defaultValue={selectedCompanyId}
@@ -744,7 +942,7 @@ export function PolicyForm({
                 }}
                 disabled={loading}
               >
-                <SelectTrigger data-testid="insurer-select">
+                <SelectTrigger>
                   <SelectValue placeholder="Seleccionar aseguradora" />
                 </SelectTrigger>
                 <SelectContent>
@@ -752,7 +950,7 @@ export function PolicyForm({
                     <SelectItem key={tc.company_id} value={tc.company_id}>
                       <span className="flex items-center gap-2">
                         {tc.company.name}
-                        {tc.company_code && (<span className="text-muted-foreground text-xs">({tc.company_code})</span>)}
+                        {tc.company_code && (<span className="text-xs text-muted-foreground">({tc.company_code})</span>)}
                       </span>
                     </SelectItem>
                   ))}
@@ -760,11 +958,8 @@ export function PolicyForm({
               </Select>
             )}
           </div>
-        </div>
 
-        {/* Fila 2: Ramo | Grupo | Tipo de Movimiento */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
+          <div>
             <Label>Ramo *</Label>
             <Select
               defaultValue={selectedLineId}
@@ -775,7 +970,7 @@ export function PolicyForm({
               }}
               disabled={loading || !selectedCompanyId || availableLines.length === 0}
             >
-              <SelectTrigger data-testid="line-select">
+              <SelectTrigger>
                 <SelectValue placeholder="Seleccionar ramo" />
               </SelectTrigger>
               <SelectContent>
@@ -786,104 +981,70 @@ export function PolicyForm({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Grupo</Label>
+          <div>
+            <Label>Tipo de Movimiento *</Label>
             <Select
-              value={selectedGroupId}
-              onValueChange={(value) => {
-                setSelectedGroupId(value);
-              }}
-              disabled={loading || !selectedLineId || availableGroups.length === 0}
+              defaultValue={(policy as any)?.tipo_movimiento || 'expedicion'}
+              onValueChange={(value) => setValue('tipo_movimiento', value)}
+              disabled={loading}
             >
-              <SelectTrigger data-testid="group-select">
-                <SelectValue placeholder="Seleccionar grupo" />
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar" />
               </SelectTrigger>
               <SelectContent>
-                {availableGroups.map((group) => (
-                  <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>
+                {TIPO_MOVIMIENTO_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Tipo de Movimiento *</Label>
-            {isEditing ? (
-              <Select
-                defaultValue={(policy as any)?.tipo_movimiento || 'expedicion'}
-                onValueChange={(value) => setValue('tipo_movimiento', value)}
-                disabled={loading}
-              >
-                <SelectTrigger data-testid="tipo-movimiento-select">
-                  <SelectValue placeholder="Seleccionar" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIPO_MOVIMIENTO_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input
-                value={(policy as any)?.tipo_movimiento === 'renovacion' ? 'Renovación' : 'Expedición'}
-                disabled
-                className="bg-gray-50"
-                data-testid="tipo-movimiento-fixed"
-              />
-            )}
+          <div>
+            <Label>Fecha de Expedición</Label>
+            <Input type="date" {...register('fecha_expedicion')} disabled={loading} />
           </div>
+
+          {/* Campo Placa - Solo para ramo Automóviles */}
+          {isAutoRamo && (
+            <div>
+              <Label className="flex items-center gap-1.5">
+                <Car className="h-3.5 w-3.5" />
+                Placa *
+              </Label>
+              <Input
+                value={placaValue}
+                onChange={(e) => setPlacaValue(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
+                placeholder="Ej: ABC123"
+                disabled={loading}
+                maxLength={8}
+                className={!placaValue || placaValue.length < 4 ? 'border-red-300' : ''}
+              />
+              {isAutoRamo && placaValue.length > 0 && placaValue.length < 4 && (
+                <p className="text-xs text-red-500 mt-1">Mínimo 4 caracteres</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ============================================= */}
-      {/* SECCION 2: VIGENCIA */}
-      {/* ============================================= */}
+      {/* ======================================= */}
+      {/* 2. Vigencia de la Póliza                */}
+      {/* ======================================= */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
-          <Calendar className="h-5 w-5" />
+        <h3 className="text-base font-semibold flex items-center gap-2">
+          <Calendar className="h-4 w-4" />
           2. Vigencia de la Póliza
         </h3>
-
-        {/* Fila 1: Fecha Expedición | Vigencia Desde | Vigencia Hasta */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="fecha_expedicion">Fecha de Expedición</Label>
-            <Input
-              id="fecha_expedicion"
-              type="date"
-              {...register('fecha_expedicion')}
-              disabled={loading}
-              data-testid="fecha-expedicion-input"
-            />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <Label>Vigencia Desde *</Label>
+            <Input type="date" {...register('start_date')} onChange={handleStartDateChange} disabled={loading} />
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="start_date">Vigencia Desde *</Label>
-            <Input
-              id="start_date"
-              type="date"
-              {...register('start_date')}
-              onChange={handleStartDateChange}
-              disabled={loading}
-              data-testid="start-date-input"
-            />
+          <div>
+            <Label>Vigencia Hasta *</Label>
+            <Input type="date" {...register('end_date')} disabled={loading} />
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="end_date">Vigencia Hasta *</Label>
-            <Input
-              id="end_date"
-              type="date"
-              {...register('end_date')}
-              disabled={loading}
-              data-testid="end-date-input"
-            />
-          </div>
-        </div>
-
-        {/* Fila 2: Días de Vigencia | Estado */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
+          <div>
             <Label>Días de Vigencia</Label>
             <Input
               value={diasVigencia > 0 ? `${diasVigencia} días` : '-'}
@@ -891,16 +1052,15 @@ export function PolicyForm({
               className="bg-gray-50"
             />
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Estado de la Póliza *</Label>
             <Select
               defaultValue={policy?.status || 'activa'}
               onValueChange={(value) => setValue('status', value as PolicyStatus)}
               disabled={loading || !isEditing}
             >
-              <SelectTrigger data-testid="status-select">
-                <SelectValue placeholder="Estado" />
+              <SelectTrigger>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {statusOptions.map(({ value, label }) => (
@@ -909,8 +1069,7 @@ export function PolicyForm({
               </SelectContent>
             </Select>
             {!isEditing && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <CheckCircle className="h-3 w-3 text-green-600" />
+              <p className="text-xs text-muted-foreground mt-1">
                 Estado inicial: Activa
               </p>
             )}
@@ -918,104 +1077,42 @@ export function PolicyForm({
         </div>
       </div>
 
-      {/* ============================================= */}
-      {/* SECCION 3: TOMADOR */}
-      {/* ============================================= */}
+      {/* ======================================= */}
+      {/* 3. Asegurado y Beneficiario             */}
+      {/* ======================================= */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
-          <User className="h-5 w-5" />
-          3. Información del Tomador
+        <h3 className="text-base font-semibold flex items-center gap-2">
+          <Users className="h-4 w-4" />
+          3. Asegurado y Beneficiario
         </h3>
 
-        {loadingClient ? (
-          <div className="flex items-center gap-2 py-4 justify-center">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm text-muted-foreground">Cargando datos del tomador...</span>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="tomador_nombre">Nombre / Razón Social *</Label>
-              <Input
-                id="tomador_nombre"
-                {...register('tomador_nombre')}
-                disabled={loading}
-                data-testid="tomador-nombre-input"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Tipo de Identificación *</Label>
-              <Select
-                defaultValue={(policy as any)?.tomador_tipo_identificacion || 'cedula_ciudadania'}
-                onValueChange={(value) => setValue('tomador_tipo_identificacion', value)}
-                disabled={loading}
-              >
-                <SelectTrigger data-testid="tomador-tipo-id-select">
-                  <SelectValue placeholder="Tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIPO_IDENTIFICACION_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="tomador_numero_identificacion">Número de Identificación *</Label>
-              <Input
-                id="tomador_numero_identificacion"
-                {...register('tomador_numero_identificacion')}
-                disabled={loading}
-                data-testid="tomador-numero-id-input"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ============================================= */}
-      {/* SECCION 4: ASEGURADO Y BENEFICIARIO */}
-      {/* ============================================= */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
-          <Users className="h-5 w-5" />
-          4. Asegurado y Beneficiario
-        </h3>
-
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <Checkbox
             id="asegurado_diferente"
             checked={aseguradoDiferente}
             onCheckedChange={(checked) => setAseguradoDiferente(checked === true)}
             disabled={loading}
           />
-          <Label htmlFor="asegurado_diferente" className="text-sm cursor-pointer">
+          <Label htmlFor="asegurado_diferente" className="cursor-pointer">
             El asegurado es diferente al tomador
           </Label>
         </div>
 
         {aseguradoDiferente && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-6 border-l-2 border-primary/20">
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
               <Label>Nombre del Asegurado *</Label>
-              <Input
-                {...register('asegurado_nombre')}
-                disabled={loading}
-                data-testid="asegurado-nombre-input"
-              />
+              <Input {...register('asegurado_nombre')} disabled={loading} />
             </div>
-
-            <div className="space-y-2">
+            <div>
               <Label>Tipo de Identificación *</Label>
               <Select
-                defaultValue={(policy as any)?.asegurado_tipo_identificacion || ''}
+                defaultValue={(policy as any)?.asegurado_tipo_identificacion || 'cedula_ciudadania'}
                 onValueChange={(value) => setValue('asegurado_tipo_identificacion', value)}
                 disabled={loading}
               >
-                <SelectTrigger data-testid="asegurado-tipo-id-select">
-                  <SelectValue placeholder="Tipo" />
+                <SelectTrigger>
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {TIPO_IDENTIFICACION_OPTIONS.map((opt) => (
@@ -1024,44 +1121,37 @@ export function PolicyForm({
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-2">
+            <div>
               <Label>Número de Identificación *</Label>
-              <Input
-                {...register('asegurado_numero_identificacion')}
-                disabled={loading}
-                data-testid="asegurado-numero-id-input"
-              />
+              <Input {...register('asegurado_numero_identificacion')} disabled={loading} />
             </div>
           </div>
         )}
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <Checkbox
             id="mostrar_beneficiarios"
             checked={mostrarBeneficiarios}
             onCheckedChange={(checked) => setMostrarBeneficiarios(checked === true)}
             disabled={loading}
           />
-          <Label htmlFor="mostrar_beneficiarios" className="text-sm cursor-pointer">
+          <Label htmlFor="mostrar_beneficiarios" className="cursor-pointer">
             Agregar beneficiarios diferentes
           </Label>
         </div>
 
         {mostrarBeneficiarios && (
-          <div className="flex justify-end">
-            <Button type="button" variant="outline" size="sm" onClick={handleAddBeneficiario} disabled={loading}>
-              <Plus className="h-4 w-4 mr-1" />
-              Agregar
-            </Button>
-          </div>
+          <Button type="button" variant="outline" size="sm" onClick={handleAddBeneficiario} disabled={loading}>
+            <Plus className="h-4 w-4 mr-1" />
+            Agregar
+          </Button>
         )}
 
         {mostrarBeneficiarios && beneficiarios.length > 0 && (
-          <div className="space-y-3 pl-6 border-l-2 border-primary/20">
+          <div className="space-y-3">
             {beneficiarios.map((ben, index) => (
-              <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                <div className="space-y-1">
+              <div key={index} className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-3 border rounded-lg">
+                <div>
                   <Label className="text-xs">Nombre</Label>
                   <Input
                     value={ben.nombre}
@@ -1070,11 +1160,10 @@ export function PolicyForm({
                     disabled={loading}
                   />
                 </div>
-
-                <div className="space-y-1">
+                <div>
                   <Label className="text-xs">Tipo ID</Label>
                   <Select
-                    value={ben.tipo_identificacion}
+                    defaultValue={ben.tipo_identificacion}
                     onValueChange={(value) => handleBeneficiarioChange(index, 'tipo_identificacion', value)}
                     disabled={loading}
                   >
@@ -1088,8 +1177,7 @@ export function PolicyForm({
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="space-y-1">
+                <div>
                   <Label className="text-xs">Número ID</Label>
                   <Input
                     value={ben.numero_identificacion}
@@ -1098,187 +1186,149 @@ export function PolicyForm({
                     disabled={loading}
                   />
                 </div>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleRemoveBeneficiario(index)}
-                  disabled={loading}
-                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveBeneficiario(index)}
+                    disabled={loading}
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* ============================================= */}
-      {/* SECCION 5: VALORES */}
-      {/* ============================================= */}
+      {/* ======================================= */}
+      {/* 4. Valores de la Póliza                 */}
+      {/* ======================================= */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
-          <DollarSign className="h-5 w-5" />
-          5. Valores de la Póliza
+        <h3 className="text-base font-semibold flex items-center gap-2">
+          <DollarSign className="h-4 w-4" />
+          4. Valores de la Póliza
         </h3>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div>
             <Label>Valor Asegurado *</Label>
             <Input
               value={valorAseguradoDisplay}
               onChange={handleValorAseguradoChange}
               placeholder="$0"
               disabled={loading}
-              data-testid="valor-asegurado-input"
             />
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Prima Neta *</Label>
             <Input
               value={premiumDisplay}
               onChange={handlePremiumChange}
               placeholder="$0"
               disabled={loading}
-              data-testid="premium-input"
             />
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Gastos Expedición</Label>
             <Input
               value={gastosDisplay}
               onChange={handleGastosChange}
               placeholder="$0"
               disabled={loading}
-              data-testid="gastos-input"
             />
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>IVA</Label>
             <Input
               value={ivaDisplay}
               onChange={handleIvaChange}
               placeholder="$0"
               disabled={loading}
-              data-testid="iva-input"
             />
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Total a Pagar</Label>
             <Input
               value={formatCurrency(Number(premium) + Number(gastosExpedicion) + Number(iva))}
               disabled
               className="bg-gray-50 font-semibold"
-              data-testid="total-input"
             />
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Comisión %</Label>
-            <div className="relative">
-              <Input
-                type="number"
-                {...register('commission_pct', { valueAsNumber: true })}
-                disabled={loading}
-                min={0}
-                max={100}
-                data-testid="commission-input"
-              />
-              {loadingCommission && (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-              )}
-            </div>
+            <Input
+              type="number"
+              step="0.01"
+              {...register('commission_pct', { valueAsNumber: true })}
+              disabled={loading}
+            />
+            {loadingCommission && (
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground mt-1" />
+            )}
           </div>
         </div>
       </div>
 
-      {/* ============================================= */}
-      {/* SECCION 6: GESTION INTERNA CRM */}
-      {/* ============================================= */}
+      {/* ======================================= */}
+      {/* 5. Gestión Interna CRM                  */}
+      {/* ======================================= */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
-          <Settings className="h-5 w-5" />
-          6. Gestión Interna CRM
+        <h3 className="text-base font-semibold flex items-center gap-2">
+          <Settings className="h-4 w-4" />
+          5. Gestión Interna CRM
         </h3>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="space-y-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div>
             <Label>Usuario</Label>
-            <Input
-              value={currentUser?.full_name || ''}
-              disabled
-              className="bg-gray-50"
-            />
+            <Input value={currentUser?.full_name || ''} disabled className="bg-gray-50" />
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Comercial</Label>
-            <Input
-              value={comercialName || 'No asignado en HV'}
-              disabled
-              className="bg-gray-50"
-            />
+            <Input value={comercialName || '-'} disabled className="bg-gray-50" />
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Aliado</Label>
             {loadingAlliedAgent ? (
-              <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted/50">
+              <div className="flex items-center gap-2 h-10 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-xs text-muted-foreground">Cargando...</span>
+                Cargando...
               </div>
             ) : (
-              <Input
-                value={clientAlliedAgent?.full_name || 'No asignado en HV'}
-                disabled
-                className="bg-gray-50"
-              />
+              <Input value={clientAlliedAgent?.full_name || 'Sin aliado'} disabled className="bg-gray-50" />
             )}
           </div>
-
-          <div className="space-y-2">
+          <div>
             <Label>Grupo Empresarial</Label>
-            <Input
-              value={grupoEmpresarialName || 'No asignado en HV'}
-              disabled
-              className="bg-gray-50"
-            />
+            <Input value={grupoEmpresarialName || '-'} disabled className="bg-gray-50" />
           </div>
-        </div>
 
-        {clientAlliedAgent && (
-          <div className="border-t pt-4">
-            <div className="max-w-xs space-y-2">
+          {clientAlliedAgent && (
+            <div>
               <Label>% Comisión Aliado</Label>
               <Input
                 type="number"
+                step="0.01"
                 value={alliedAgentPctValue}
                 onChange={(e) => setAlliedAgentPctValue(parseFloat(e.target.value) || 0)}
                 disabled={loading}
-                min={0}
-                max={100}
-                data-testid="allied-agent-pct-input"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[10px] text-muted-foreground mt-1">
                 Porcentaje sobre la comisión de la agencia
               </p>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* ============================================= */}
-      {/* NOTAS Y COMENTARIOS */}
-      {/* ============================================= */}
+      {/* ======================================= */}
+      {/* Notas y Comentarios                     */}
+      {/* ======================================= */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2 border-b pb-2">
-          <MessageSquare className="h-5 w-5" />
+        <h3 className="text-base font-semibold flex items-center gap-2">
+          <MessageSquare className="h-4 w-4" />
           Notas y Comentarios
         </h3>
         <Textarea
@@ -1287,25 +1337,24 @@ export function PolicyForm({
           placeholder="Notas adicionales sobre la póliza..."
           rows={3}
           disabled={loading}
-          data-testid="notas-textarea"
         />
       </div>
 
-      {/* ============================================= */}
-      {/* BOTONES */}
-      {/* ============================================= */}
-      <div className="flex justify-end gap-3 pt-4 border-t">
+      {/* ======================================= */}
+      {/* Botones de acción                       */}
+      {/* ======================================= */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
             <X className="h-4 w-4 mr-2" />
             Cancelar
           </Button>
         )}
-        <Button type="submit" disabled={loading} data-testid="submit-policy-btn">
+        <Button type="submit" disabled={loading}>
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              {isEditing ? 'Actualizando...' : 'Creando...'}
+              Guardando...
             </>
           ) : (
             <>
