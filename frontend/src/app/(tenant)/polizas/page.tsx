@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTenant } from '@/lib/context/TenantContext';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,7 +36,8 @@ import {
   ChevronRight,
   Eye,
   Shield,
-  Layers
+  Layers,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface PolicyWithRelations extends Policy {
@@ -59,14 +61,16 @@ interface StatusCount {
 
 export default function PoliciesPage() {
   const { isLoading: isLoadingTenant, tenantName, tenantId } = useTenant();
+  const { isAdmin } = usePermissions();
 
   const [policies, setPolicies] = useState<PolicyWithRelations[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | undefined>();
+  const [statusFilter, setStatusFilter] = useState<string>('activa');
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const [statusCounts, setStatusCounts] = useState<StatusCount>({ all: 0, activa: 0, no_renovada: 0, inactiva: 0, cancelada: 0 });
 
   const loadPolicies = useCallback(async () => {
@@ -91,7 +95,7 @@ export default function PoliciesPage() {
       if (searchQuery) {
         query = query.or(`policy_number.ilike.%${searchQuery}%,insurer.ilike.%${searchQuery}%`);
       }
-      if (statusFilter && statusFilter !== 'all') {
+      if (statusFilter) {
         query = query.eq('status', statusFilter);
       }
 
@@ -189,6 +193,88 @@ export default function PoliciesPage() {
     }
   }, [isLoadingTenant, tenantId, loadPolicies, loadStatusCounts]);
 
+  // =====================================================
+  // Exportar a Excel (CSV con BOM para compatibilidad)
+  // =====================================================
+  const handleExportExcel = async () => {
+    if (!tenantId) return;
+
+    setIsExporting(true);
+    try {
+      const supabase = getBrowserClient();
+
+      const { data, error } = await supabase
+        .from('policies')
+        .select(`
+          *,
+          clients!inner(full_name),
+          insurance_line:insurance_lines(id, name, slug)
+        `)
+        .eq('tenant_id', tenantId)
+        .or('anexo.eq.00,anexo.is.null')
+        .in('status', ['activa', 'inactiva', 'no_renovada', 'cancelada'])
+        .order('status', { ascending: true })
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error exporting:', error);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        alert('No hay pólizas para exportar.');
+        setIsExporting(false);
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = data.map((p: any) => ({
+        'Numero': p.policy_number || '',
+        'Anexo': p.anexo || '00',
+        'Cliente': p.clients?.full_name || '',
+        'Aseguradora': p.insurer || '',
+        'Ramo': p.insurance_line?.name || p.line || '',
+        'Estado': POLICY_STATUS_LABELS[p.status as PolicyStatus] || p.status,
+        'Prima Neta': p.premium || 0,
+        'Gastos Expedicion': p.gastos_expedicion || 0,
+        'IVA': p.iva || 0,
+        'Total a Pagar': p.total_a_pagar || 0,
+        'Valor Asegurado': p.valor_asegurado || 0,
+        'Comision %': p.commission_pct || 0,
+        'Vigencia Desde': p.start_date || '',
+        'Vigencia Hasta': p.end_date || '',
+        'Fecha Expedicion': p.fecha_expedicion || '',
+      }));
+
+      const headers = Object.keys(rows[0]);
+      const csvContent = [
+        headers.join(';'),
+        ...rows.map(row => headers.map(h => {
+          const val = row[h as keyof typeof row];
+          if (typeof val === 'string' && (val.includes(';') || val.includes('"'))) {
+            return `"${val.replace(/"/g, '""')}"`;
+          }
+          return val;
+        }).join(';'))
+      ].join('\n');
+
+      // BOM para que Excel reconozca UTF-8
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `polizas_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting:', error);
+    }
+    setIsExporting(false);
+  };
+
   const totalPages = Math.ceil(total / pageSize);
 
   const formatPremiumDisplay = (value: number, anexoCount?: number) => {
@@ -214,7 +300,7 @@ export default function PoliciesPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Header fijo */}
-      <div className="flex-shrink-0 space-y-4 pb-4">
+      <div className="flex-shrink-0 space-y-3 pb-3">
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -222,18 +308,30 @@ export default function PoliciesPage() {
             <h1 className="text-2xl font-bold tracking-tight">Polizas</h1>
             <p className="text-sm text-muted-foreground">{tenantName}</p>
           </div>
-          <Link href="/polizas/nueva">
-            <Button data-testid="new-policy-btn">
-              <Plus className="h-4 w-4 mr-2" />
-              Nueva Poliza
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/polizas/nueva">
+              <Button data-testid="new-policy-btn">
+                <Plus className="h-4 w-4 mr-2" />
+                Nueva Poliza
+              </Button>
+            </Link>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                data-testid="export-excel-btn"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                {isExporting ? 'Exportando...' : 'Excel'}
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Status Tabs */}
+        {/* Status Tabs - Sin "Todas", inicia en "Activas" */}
         <div className="flex items-center gap-2 flex-wrap">
           {[
-            { key: 'all', label: 'Todas', count: statusCounts.all },
             { key: 'activa', label: 'Activas', count: statusCounts.activa },
             { key: 'no_renovada', label: 'No renovadas', count: statusCounts.no_renovada },
             { key: 'inactiva', label: 'Inactivas', count: statusCounts.inactiva },
@@ -241,9 +339,9 @@ export default function PoliciesPage() {
           ].map(tab => (
             <button
               key={tab.key}
-              onClick={() => { setStatusFilter(tab.key === 'all' ? undefined : tab.key); setPage(1); }}
+              onClick={() => { setStatusFilter(tab.key); setPage(1); }}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                (statusFilter || 'all') === tab.key
+                statusFilter === tab.key
                   ? 'bg-slate-200 text-slate-800 ring-1 ring-slate-400'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
@@ -267,7 +365,7 @@ export default function PoliciesPage() {
         </div>
       </div>
 
-      {/* Tabla scrolleable */}
+      {/* Tabla scrolleable - Compacta */}
       <div className="flex-1 overflow-auto">
         <Card>
           <CardContent className="p-0">
@@ -283,39 +381,39 @@ export default function PoliciesPage() {
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Numero</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Aseguradora</TableHead>
-                    <TableHead>Ramo</TableHead>
-                    <TableHead className="text-right">Prima Consolidada</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Vencimiento</TableHead>
-                    <TableHead className="text-center">Acciones</TableHead>
+                  <TableRow className="text-xs">
+                    <TableHead className="py-2 px-3">Numero</TableHead>
+                    <TableHead className="py-2 px-3">Cliente</TableHead>
+                    <TableHead className="py-2 px-3">Aseguradora</TableHead>
+                    <TableHead className="py-2 px-3">Ramo</TableHead>
+                    <TableHead className="py-2 px-3 text-right">Prima Consolidada</TableHead>
+                    <TableHead className="py-2 px-3">Estado</TableHead>
+                    <TableHead className="py-2 px-3">Vencimiento</TableHead>
+                    <TableHead className="py-2 px-3 text-center">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {policies.map((policy) => (
-                    <TableRow key={policy.id}>
-                      <TableCell className="font-medium">{policy.policy_number}</TableCell>
-                      <TableCell>{policy.client_name || 'N/A'}</TableCell>
-                      <TableCell>{policy.insurer}</TableCell>
-                      <TableCell>
+                    <TableRow key={policy.id} className="text-xs">
+                      <TableCell className="py-1.5 px-3 font-medium">{policy.policy_number}</TableCell>
+                      <TableCell className="py-1.5 px-3">{policy.client_name || 'N/A'}</TableCell>
+                      <TableCell className="py-1.5 px-3">{policy.insurer}</TableCell>
+                      <TableCell className="py-1.5 px-3">
                         {policy.insurance_line?.name || POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line || '-'}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="py-1.5 px-3 text-right">
                         {formatPremiumDisplay(policy.consolidated_premium || policy.premium, policy.anexo_count)}
                       </TableCell>
-                      <TableCell>
-                        <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus]}>
+                      <TableCell className="py-1.5 px-3">
+                        <Badge className={`text-[10px] ${POLICY_STATUS_COLORS[policy.status as PolicyStatus]}`}>
                           {POLICY_STATUS_LABELS[policy.status as PolicyStatus]}
                         </Badge>
                       </TableCell>
-                      <TableCell>{formatDate(policy.end_date)}</TableCell>
-                      <TableCell className="text-center">
+                      <TableCell className="py-1.5 px-3">{formatDate(policy.end_date)}</TableCell>
+                      <TableCell className="py-1.5 px-3 text-center">
                         <Link href={`/polizas/${policy.id}`}>
-                          <Button variant="ghost" size="icon" data-testid={`view-policy-${policy.id}`}>
-                            <Eye className="h-4 w-4" />
+                          <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`view-policy-${policy.id}`}>
+                            <Eye className="h-3.5 w-3.5" />
                           </Button>
                         </Link>
                       </TableCell>
