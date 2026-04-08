@@ -695,7 +695,7 @@ export default function DetallePolizaPage() {
           {/* Botones de acción */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Documentos (Dialog) */}
-            <PolicyDocumentsDialog policyId={policyId} tenantId={tenantId} />
+            <PolicyDocumentsDialog policyId={policyId} tenantId={tenantId!} />
 
             {/* Editar */}
             <Link href={`/polizas/${policyId}/editar`}>
@@ -755,7 +755,7 @@ export default function DetallePolizaPage() {
         <RenewalHistory
           policyId={policyId}
           policyNumber={policy.policy_number}
-          tenantId={tenantId}
+          tenantId={tenantId!}
         />
       )}
 
