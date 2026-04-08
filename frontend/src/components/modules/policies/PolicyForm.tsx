@@ -175,6 +175,29 @@ const calcularDiasVigencia = (startDate: string | null | undefined, endDate: str
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
+// FIX: Mapea doc_type del cliente al enum Zod válido
+const mapDocTypeToEnum = (docType: string | undefined | null): string => {
+  if (!docType) return 'cedula_ciudadania';
+  const mapping: Record<string, string> = {
+    'CC': 'cedula_ciudadania',
+    'CE': 'cedula_extranjeria',
+    'PA': 'pasaporte',
+    'TE': 'cedula_extranjeria',
+    'RC': 'cedula_ciudadania',
+    'NIT': 'nit',
+    'nit': 'nit',
+    'cedula': 'cedula_ciudadania',
+    'cedula_ciudadania': 'cedula_ciudadania',
+    'cedula_extranjeria': 'cedula_extranjeria',
+    'nit_extranjero': 'nit_extranjero',
+    'pasaporte': 'pasaporte',
+    'carnet_diplomatico': 'cedula_extranjeria',
+    'consorcio': 'nit',
+    'rut': 'nit',
+  };
+  return mapping[docType] || 'cedula_ciudadania';
+};
+
 // =====================================================
 // COMPONENT
 // =====================================================
@@ -250,6 +273,9 @@ export function PolicyForm({
   const [pendingDocuments, setPendingDocuments] = useState<PendingDocument[]>([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
+  // FIX: Estado para mostrar errores de validación visualmente
+  const [formErrors, setFormErrors] = useState<string[]>([]);
+
   // =====================================================
   // FORM
   // =====================================================
@@ -260,7 +286,7 @@ export function PolicyForm({
     setValue,
     watch,
     formState: { errors, isSubmitting }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<PolicyFormData>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...(isEditing ? {} : { resolver: zodResolver(CreatePolicyInputSchema) as any }),
@@ -305,7 +331,10 @@ export function PolicyForm({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       asegurado_numero_identificacion: (policy as any).asegurado_numero_identificacion || '',
     } : {
+      // FIX: Agregados insurer y policy_number a los defaults para que Zod no falle con undefined
       client_id: clientId || '',
+      policy_number: '',
+      insurer: '',
       anexo: '00',
       line: 'otro',
       status: 'activa' as PolicyStatus,
@@ -318,8 +347,8 @@ export function PolicyForm({
       total_a_pagar: 0,
       commission_pct: 0,
       tomador_nombre: selectedClient?.full_name || '',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tomador_tipo_identificacion: (selectedClient?.doc_type as any) || 'cedula_ciudadania',
+      // FIX: Usar mapDocTypeToEnum para garantizar valor válido en el enum Zod
+      tomador_tipo_identificacion: mapDocTypeToEnum(selectedClient?.doc_type),
       tomador_numero_identificacion: selectedClient?.doc_number || '',
       asegurado_diferente: false,
     }
@@ -345,7 +374,7 @@ export function PolicyForm({
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: userData } = await (supabase as any).from('users').select('id, full_name').eq('id', user.id).single();
+          const { data: userData } = await (supabase as any).from('users').select('id, full_name').eq('id', user.id).maybeSingle();
           if (userData) setCurrentUser(userData);
         }
       } catch (err) { console.error('Error loading current user:', err); }
@@ -360,20 +389,21 @@ export function PolicyForm({
       setLoadingClient(true);
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any).from('clients').select('id, full_name, doc_type, doc_number, allied_agent_id, comercial_id, grupo_empresarial_id').eq('id', cId).single();
+        const { data } = await (supabase as any).from('clients').select('id, full_name, doc_type, doc_number, allied_agent_id, comercial_id, grupo_empresarial_id').eq('id', cId).maybeSingle();
         if (data) {
           setClientData(data);
           setValue('tomador_nombre', data.full_name || '');
-          setValue('tomador_tipo_identificacion', data.doc_type || 'cedula_ciudadania');
+          // FIX: Usar mapDocTypeToEnum
+          setValue('tomador_tipo_identificacion', mapDocTypeToEnum(data.doc_type));
           setValue('tomador_numero_identificacion', data.doc_number || '');
           if (data.comercial_id) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data: cd } = await (supabase as any).from('users').select('full_name').eq('id', data.comercial_id).single();
+            const { data: cd } = await (supabase as any).from('users').select('full_name').eq('id', data.comercial_id).maybeSingle();
             if (cd) setComercialName(cd.full_name);
           }
           if (data.grupo_empresarial_id) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data: gd } = await (supabase as any).from('grupos_empresariales').select('nombre').eq('id', data.grupo_empresarial_id).single();
+            const { data: gd } = await (supabase as any).from('grupos_empresariales').select('nombre').eq('id', data.grupo_empresarial_id).maybeSingle();
             if (gd) setGrupoEmpresarialName(gd.nombre);
           }
         }
@@ -414,10 +444,10 @@ export function PolicyForm({
       setLoadingAlliedAgent(true);
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: cr } = await (supabase as any).from('clients').select('allied_agent_id').eq('id', cId).single();
+        const { data: cr } = await (supabase as any).from('clients').select('allied_agent_id').eq('id', cId).maybeSingle();
         if (cr?.allied_agent_id) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: ad } = await (supabase as any).from('allied_agents').select('id, full_name, commission_percentage').eq('id', cr.allied_agent_id).single();
+          const { data: ad } = await (supabase as any).from('allied_agents').select('id, full_name, commission_percentage').eq('id', cr.allied_agent_id).maybeSingle();
           if (ad) { setClientAlliedAgent(ad as AlliedAgentOption); if (!isEditing) setAlliedAgentPctValue(ad.commission_percentage); }
           else { setClientAlliedAgent(null); if (!isEditing) setAlliedAgentPctValue(0); }
         } else { setClientAlliedAgent(null); if (!isEditing) setAlliedAgentPctValue(0); }
@@ -433,7 +463,7 @@ export function PolicyForm({
       setLoadingCommission(true);
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await (supabase as any).from('company_group_commissions').select('commission_pct').eq('company_id', selectedCompanyId).eq('group_id', selectedGroupId).single();
+        const { data, error } = await (supabase as any).from('company_group_commissions').select('commission_pct').eq('company_id', selectedCompanyId).eq('group_id', selectedGroupId).maybeSingle();
         if (data && !error) setValue('commission_pct', data.commission_pct);
         else setValue('commission_pct', 10);
       } catch (err) { console.error('Error loading commission:', err); setValue('commission_pct', 10); }
@@ -585,6 +615,9 @@ export function PolicyForm({
   };
 
   const handleFormSubmit = async (data: PolicyFormData) => {
+    // Limpiar errores previos
+    setFormErrors([]);
+
     if (isCreateMode && isAutoRamo && (!placaValue || placaValue.length < 4 || placaValue.length > 8)) {
       alert('Para el ramo de Automóviles, la placa es obligatoria (4 a 8 caracteres).');
       return;
@@ -605,14 +638,14 @@ export function PolicyForm({
     // Crear: si asegurado NO es diferente, copiar datos del tomador
     if (isCreateMode && selectedClient && !aseguradoDiferente) {
       dataWithExtras.asegurado_nombre = selectedClient.full_name;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      dataWithExtras.asegurado_tipo_identificacion = selectedClient.doc_type as any;
+      // FIX: Usar mapDocTypeToEnum
+      dataWithExtras.asegurado_tipo_identificacion = mapDocTypeToEnum(selectedClient.doc_type);
       dataWithExtras.asegurado_numero_identificacion = selectedClient.doc_number;
       if (!beneficiarios || beneficiarios.length === 0) {
         dataWithExtras.beneficiarios = [{
           nombre: selectedClient.full_name,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          tipo_identificacion: selectedClient.doc_type as any,
+          // FIX: Usar mapDocTypeToEnum
+          tipo_identificacion: mapDocTypeToEnum(selectedClient.doc_type),
           numero_identificacion: selectedClient.doc_number
         }];
       }
@@ -622,15 +655,24 @@ export function PolicyForm({
       dataWithExtras.status = 'activa' as PolicyStatus;
       dataWithExtras.tipo_movimiento = 'expedicion';
       dataWithExtras.tomador_nombre = selectedClient?.full_name || data.tomador_nombre;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      dataWithExtras.tomador_tipo_identificacion = (selectedClient?.doc_type as any) || data.tomador_tipo_identificacion;
+      // FIX: Usar mapDocTypeToEnum
+      dataWithExtras.tomador_tipo_identificacion = mapDocTypeToEnum(selectedClient?.doc_type) || data.tomador_tipo_identificacion;
       dataWithExtras.tomador_numero_identificacion = selectedClient?.doc_number || data.tomador_numero_identificacion;
     }
     await onSubmit(dataWithExtras);
   };
 
+  // FIX: onError ahora muestra los errores visualmente en lugar de solo console.error
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onError = (errs: any) => { console.error('Form validation errors:', errs); };
+  const onError = (errs: any) => {
+    console.error('Form validation errors:', errs);
+    const messages: string[] = [];
+    Object.entries(errs).forEach(([key, val]: [string, any]) => {
+      if (val?.message) messages.push(`${key}: ${val.message}`);
+      else messages.push(`${key}: Campo inválido`);
+    });
+    setFormErrors(messages);
+  };
 
   // =====================================================
   // COMPUTED
@@ -921,6 +963,19 @@ export function PolicyForm({
           </CardContent>
         </Card>
 
+        {/* FIX: ERRORES DE VALIDACIÓN VISIBLES */}
+        {formErrors.length > 0 && (
+          <div className="p-4 border border-red-200 bg-red-50 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <p className="text-sm font-medium text-red-800">Corrige los siguientes errores:</p>
+            </div>
+            <ul className="list-disc pl-5 text-xs text-red-700 space-y-1">
+              {formErrors.map((msg, i) => <li key={i}>{msg}</li>)}
+            </ul>
+          </div>
+        )}
+
         {/* BOTÓN CREAR PÓLIZA */}
         <div className="flex items-center justify-end pt-4 border-t">
           <Button type="submit" disabled={loading}>
@@ -1133,6 +1188,19 @@ export function PolicyForm({
         </h3>
         <Textarea value={notasValue} onChange={(e) => setNotasValue(e.target.value)} placeholder="Notas adicionales sobre la póliza..." rows={3} disabled={loading} />
       </div>
+
+      {/* FIX: ERRORES DE VALIDACIÓN VISIBLES (modo edición) */}
+      {formErrors.length > 0 && (
+        <div className="p-4 border border-red-200 bg-red-50 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <p className="text-sm font-medium text-red-800">Corrige los siguientes errores:</p>
+          </div>
+          <ul className="list-disc pl-5 text-xs text-red-700 space-y-1">
+            {formErrors.map((msg, i) => <li key={i}>{msg}</li>)}
+          </ul>
+        </div>
+      )}
 
       {/* Botones de acción */}
       <div className="flex items-center justify-end gap-3 pt-4 border-t">
