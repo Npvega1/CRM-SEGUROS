@@ -388,6 +388,11 @@ export function PolicyModificationForm({
     ? premiumNum - gastosNum - ivaNum
     : premiumNum + gastosNum + ivaNum;
 
+  // Resolver nombres para campos estáticos
+  const companyDisplayName = tenantCompanies.find(tc => tc.company_id === selectedCompanyId)?.company.name || parentPolicy.insurer;
+  const lineDisplayName = availableLines.find(l => l.id === selectedLineId)?.name || parentPolicy.line;
+  const groupDisplayName = availableGroups.find(g => g.id === selectedGroupId)?.name || '-';
+
   return (
     <form onSubmit={handleSubmit(handleFormSubmit, onError)} className="space-y-8">
       {/* Indicador de Modificación */}
@@ -427,83 +432,23 @@ export function PolicyModificationForm({
         </div>
       </div>
 
-      {/* Selección de Producto */}
+      {/* Selección de Producto (heredado de póliza principal - no editable) */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Producto de Seguro</h3>
-        {loadingCatalogs ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Cargando catálogos...
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <Label>Compañía</Label>
+            <Input value={companyDisplayName} disabled className="bg-muted" />
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label>Compañía *</Label>
-              <Select
-                value={selectedCompanyId}
-                onValueChange={(value) => {
-                  setSelectedCompanyId(value);
-                  setSelectedLineId('');
-                  setSelectedGroupId('');
-                }}
-                disabled={loading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar compañía" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenantCompanies.map((tc) => (
-                    <SelectItem key={tc.company_id} value={tc.company_id}>
-                      {tc.company.name}
-                      {tc.company_code && ` (${tc.company_code})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Grupo *</Label>
-              <Select
-                value={selectedLineId}
-                onValueChange={(value) => {
-                  setSelectedLineId(value);
-                  setSelectedGroupId('');
-                }}
-                disabled={loading || !selectedCompanyId || availableLines.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar grupo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableLines.map((line) => (
-                    <SelectItem key={line.id} value={line.id}>
-                      {line.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Ramo *</Label>
-              <Select
-                value={selectedGroupId}
-                onValueChange={(value) => setSelectedGroupId(value)}
-                disabled={loading || !selectedLineId || availableGroups.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar ramo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableGroups.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {group.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div>
+            <Label>Grupo</Label>
+            <Input value={lineDisplayName} disabled className="bg-muted" />
           </div>
-        )}
+          <div>
+            <Label>Ramo</Label>
+            <Input value={groupDisplayName} disabled className="bg-muted" />
+          </div>
+        </div>
       </div>
 
       {/* Fechas */}
