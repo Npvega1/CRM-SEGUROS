@@ -31,8 +31,8 @@ import {
   getCostCenters,
   createCostCenter,
   updateCostCenter,
-  deleteCostCenter,
 } from '@/lib/services/cost-centers.service';
+import { getBrowserClient } from '@/lib/supabase/client';
 import type { CostCenter, CreateCostCenterInput } from '@/types/cost-centers';
 
 const emptyForm = {
@@ -129,12 +129,18 @@ export default function CostCentersPage() {
     if (!selected?.id) return;
     setDeleting(true);
     try {
-      await deleteCostCenter(selected.id);
-      toast.success('Centro de costos desactivado exitosamente');
+      const newStatus = !selected.is_active;
+      const supabase = getBrowserClient();
+      const { error } = await (supabase as any)
+        .from('cost_centers')
+        .update({ is_active: newStatus })
+        .eq('id', selected.id);
+      if (error) throw error;
+      toast.success(newStatus ? 'Centro de costos activado' : 'Centro de costos desactivado');
       setDeleteOpen(false);
       loadCenters();
     } catch (error) {
-      toast.error('Error al desactivar centro de costos');
+      toast.error('Error al cambiar estado');
       console.error(error);
     } finally {
       setDeleting(false);
@@ -276,20 +282,20 @@ export default function CostCentersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
+      {/* Delete/Toggle Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar Desactivación</DialogTitle>
+            <DialogTitle>{selected?.is_active ? 'Confirmar Desactivación' : 'Confirmar Activación'}</DialogTitle>
             <DialogDescription>
-              ¿Estás seguro de que deseas desactivar el centro de costos{' '}
+              ¿Estás seguro de que deseas {selected?.is_active ? 'desactivar' : 'activar'} el centro de costos{' '}
               <strong>{selected?.name}</strong>?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancelar</Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Desactivar'}
+            <Button variant={selected?.is_active ? 'destructive' : 'default'} onClick={confirmDelete} disabled={deleting}>
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : (selected?.is_active ? 'Desactivar' : 'Activar')}
             </Button>
           </DialogFooter>
         </DialogContent>
