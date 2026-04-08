@@ -205,6 +205,19 @@ export default function ModificarPolizaPage() {
         return;
       }
 
+      // Actualizar el end_date de la póliza principal con la fecha del anexo
+      if (data.end_date) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('policies')
+          .update({
+            end_date: data.end_date,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', parentPolicy.id)
+          .eq('tenant_id', tenantId);
+      }
+
       // Redirigir a la página de detalle de la nueva modificación
       router.push(`/polizas/${newPolicy.id}`);
 
