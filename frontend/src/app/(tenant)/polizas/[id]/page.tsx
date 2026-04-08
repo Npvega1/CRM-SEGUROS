@@ -597,6 +597,11 @@ export default function DetallePolizaPage() {
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const policyData = policy as any;
+      const parentPolicyId = policyData.parent_policy_id;
+      const isAnexo = !!parentPolicyId && policyData.anexo !== '00';
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('policies')
         .delete()
@@ -605,8 +610,62 @@ export default function DetallePolizaPage() {
 
       if (error) throw error;
 
-      toast.success('Póliza eliminada');
-      router.push('/polizas');
+      // Si era un anexo, recalcular el end_date de la póliza principal
+      if (isAnexo && parentPolicyId) {
+        // Buscar anexos restantes ordenados por end_date descendente
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: remainingAnexos } = await (supabase as any)
+          .from('policies')
+          .select('end_date')
+          .eq('parent_policy_id', parentPolicyId)
+          .eq('tenant_id', tenantId)
+          .order('end_date', { ascending: false })
+          .limit(1);
+
+        if (remainingAnexos && remainingAnexos.length > 0) {
+          // Hay otros anexos: usar la fecha más reciente de los restantes
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from('policies')
+            .update({
+              end_date: remainingAnexos[0].end_date,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', parentPolicyId)
+            .eq('tenant_id', tenantId);
+        } else {
+          // No quedan anexos: restaurar fecha original usando start_date + dias_vigencia
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: parentData } = await (supabase as any)
+            .from('policies')
+            .select('start_date, dias_vigencia')
+            .eq('id', parentPolicyId)
+            .eq('tenant_id', tenantId)
+            .single();
+
+          if (parentData?.start_date && parentData?.dias_vigencia) {
+            const originalEnd = new Date(parentData.start_date);
+            originalEnd.setDate(originalEnd.getDate() + parentData.dias_vigencia);
+            const originalEndStr = originalEnd.toISOString().split('T')[0];
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any)
+              .from('policies')
+              .update({
+                end_date: originalEndStr,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', parentPolicyId)
+              .eq('tenant_id', tenantId);
+          }
+        }
+
+        toast.success('Anexo eliminado');
+        router.push(`/polizas/${parentPolicyId}`);
+      } else {
+        toast.success('Póliza eliminada');
+        router.push('/polizas');
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Error al eliminar la póliza';
       console.error('Error deleting policy:', err);
