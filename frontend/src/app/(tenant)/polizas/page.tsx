@@ -104,51 +104,61 @@ export default function PoliciesPage() {
         return;
       }
 
-      const policyNumbers = (data || []).map((p: Record<string, unknown>) => p.policy_number as string);
+      // Obtener IDs de las pólizas principales (anexo 00) mostradas
+      const policyIds = (data || []).map((p: Record<string, unknown>) => p.id as string);
 
-      let consolidatedPremiums: Record<string, { premium: number; count: number; maxEndDate: string | null }> = {};
+      // Consolidación por parent_policy_id (solo hijos directos de cada póliza)
+      let consolidatedData: Record<string, { premium: number; count: number; maxEndDate: string | null }> = {};
 
-      if (policyNumbers.length > 0) {
-        const { data: allRelatedPolicies } = await supabase
+      if (policyIds.length > 0) {
+        const { data: childPolicies } = await supabase
           .from('policies')
-          .select('policy_number, premium, anexo, end_date')
+          .select('parent_policy_id, premium, anexo, end_date')
           .eq('tenant_id', tenantId)
-          .in('policy_number', policyNumbers);
+          .in('parent_policy_id', policyIds);
 
-        if (allRelatedPolicies) {
-          allRelatedPolicies.forEach((p: Record<string, unknown>) => {
-            const pn = p.policy_number as string;
+        if (childPolicies) {
+          childPolicies.forEach((p: Record<string, unknown>) => {
+            const parentId = p.parent_policy_id as string;
             const premium = (p.premium as number) || 0;
-            const anexo = p.anexo as string;
             const endDate = p.end_date as string | null;
 
-            if (!consolidatedPremiums[pn]) {
-              consolidatedPremiums[pn] = { premium: 0, count: 0, maxEndDate: null };
+            if (!consolidatedData[parentId]) {
+              consolidatedData[parentId] = { premium: 0, count: 0, maxEndDate: null };
             }
-            consolidatedPremiums[pn].premium += premium;
+            consolidatedData[parentId].premium += premium;
+            consolidatedData[parentId].count += 1;
 
-            if (anexo && anexo !== '00') {
-              consolidatedPremiums[pn].count += 1;
-            }
-
-            if (endDate && (!consolidatedPremiums[pn].maxEndDate || endDate > consolidatedPremiums[pn].maxEndDate!)) {
-              consolidatedPremiums[pn].maxEndDate = endDate;
+            if (endDate && (!consolidatedData[parentId].maxEndDate || endDate > consolidatedData[parentId].maxEndDate!)) {
+              consolidatedData[parentId].maxEndDate = endDate;
             }
           });
         }
       }
 
       const mappedPolicies = (data || []).map((p: Record<string, unknown>) => {
-        const policyNumber = p.policy_number as string;
-        const consolidated = consolidatedPremiums[policyNumber];
+        const pId = p.id as string;
+        const ownPremium = (p.premium as number) || 0;
+        const ownEndDate = (p.end_date as string) || null;
+        const children = consolidatedData[pId];
+
+        // Prima consolidada = prima propia + suma de primas de anexos hijos
+        const totalPremium = ownPremium + (children?.premium || 0);
+        // Cantidad de anexos = solo hijos directos
+        const anexoCount = children?.count || 0;
+        // Vigencia consolidada = max entre propia y la de los hijos
+        let maxEndDate = ownEndDate;
+        if (children?.maxEndDate && (!maxEndDate || children.maxEndDate > maxEndDate)) {
+          maxEndDate = children.maxEndDate;
+        }
 
         return {
           ...p,
           client_name: (p.clients as { full_name: string })?.full_name,
           insurance_line: p.insurance_line as PolicyWithRelations['insurance_line'],
-          consolidated_premium: consolidated?.premium || (p.premium as number) || 0,
-          anexo_count: consolidated?.count || 0,
-          consolidated_end_date: consolidated?.maxEndDate || (p.end_date as string) || null
+          consolidated_premium: totalPremium,
+          anexo_count: anexoCount,
+          consolidated_end_date: maxEndDate
         };
       }) as PolicyWithRelations[];
 
