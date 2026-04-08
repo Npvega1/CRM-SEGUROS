@@ -105,6 +105,7 @@ function RenewPolicyContent() {
       id: '',
       status: 'activa' as PolicyStatus,
       anexo: '00',
+      tipo_movimiento: 'renovacion',
       policy_type: 'renovacion',
       renewed_from_policy_id: originalPolicyId,
       fecha_expedicion: new Date().toISOString().split('T')[0],
@@ -133,6 +134,7 @@ function RenewPolicyContent() {
           line_id: null,
           group_id: null,
           premium: 0,
+          valor_asegurado: 0,
           gastos_expedicion: 0,
           iva: 0,
           total_a_pagar: 0,
@@ -168,7 +170,9 @@ function RenewPolicyContent() {
           line_id: data.line_id || null,
           group_id: data.group_id || null,
           status: 'activa',
+          tipo_movimiento: 'renovacion',
           currency: data.currency || 'COP',
+          valor_asegurado: data.valor_asegurado || 0,
           premium: data.premium || 0,
           gastos_expedicion: data.gastos_expedicion || 0,
           iva: data.iva || 0,
@@ -177,6 +181,19 @@ function RenewPolicyContent() {
           fecha_expedicion: data.fecha_expedicion || null,
           start_date: data.start_date || null,
           end_date: data.end_date || null,
+          tomador_nombre: data.tomador_nombre || null,
+          tomador_tipo_identificacion: data.tomador_tipo_identificacion || null,
+          tomador_numero_identificacion: data.tomador_numero_identificacion || null,
+          asegurado_diferente: data.asegurado_diferente || false,
+          asegurado_nombre: data.asegurado_nombre || null,
+          asegurado_tipo_identificacion: data.asegurado_tipo_identificacion || null,
+          asegurado_numero_identificacion: data.asegurado_numero_identificacion || null,
+          beneficiarios: data.beneficiarios || null,
+          allied_agent_id: data.allied_agent_id || null,
+          allied_agent_pct: data.allied_agent_pct || 0,
+          comercial_id: data.comercial_id || null,
+          grupo_empresarial_id: data.grupo_empresarial_id || null,
+          usuario_id: data.usuario_id || null,
           notas: data.notas || null,
           policy_type: 'renovacion',
           renewed_from_policy_id: originalPolicyId,
@@ -196,7 +213,6 @@ function RenewPolicyContent() {
       }
 
       // 2. Llamar función RPC para desactivar pólizas de la vigencia anterior
-      //    SECURITY DEFINER bypasses RLS
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: rpcError } = await (supabase.rpc as any)('deactivate_old_policies', {
         p_policy_number: originalPolicy.policy_number,
@@ -206,7 +222,6 @@ function RenewPolicyContent() {
 
       if (rpcError) {
         console.error('Error deactivating old policies:', rpcError);
-        // No bloquear — la renovación ya se creó
       }
 
       // 3. Redirigir a la nueva póliza
@@ -232,9 +247,9 @@ function RenewPolicyContent() {
 
   if (!originalPolicy) {
     return (
-      <div className="container mx-auto py-6 px-4 text-center">
-        <h2 className="text-xl font-bold text-red-600">Error</h2>
-        <p className="text-muted-foreground mt-2">{error || 'Póliza no encontrada'}</p>
+      <div className="max-w-4xl mx-auto py-6 px-4">
+        <h2 className="text-xl font-bold mb-4">Error</h2>
+        <p className="text-muted-foreground">{error || 'Póliza no encontrada'}</p>
         <Link href="/polizas">
           <Button variant="outline" className="mt-4">Volver a Pólizas</Button>
         </Link>
@@ -258,15 +273,14 @@ function RenewPolicyContent() {
   const prefilledPolicy = buildPrefilledPolicy();
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-4xl space-y-6">
+    <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <button onClick={handleCancel} className="p-2 hover:bg-muted rounded-lg">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <RefreshCw className="h-6 w-6 text-blue-600" />
+      <div className="flex items-center gap-4">
+        <Link href={`/polizas/${originalPolicyId}`}>
+          <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>
+        </Link>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Renovar Póliza</h1>
+          <h1 className="text-2xl font-bold">Renovar Póliza</h1>
           <p className="text-sm text-muted-foreground">
             Renovación de {originalPolicy.policy_number} - {clientName}
           </p>
@@ -274,28 +288,24 @@ function RenewPolicyContent() {
       </div>
 
       {/* Info de la póliza original */}
-      <Card className="border-blue-200 bg-blue-50/50">
+      <Card>
         <CardContent className="pt-6">
-          <div className="flex items-center gap-2 mb-3">
-            <FileText className="h-4 w-4 text-blue-700" />
-            <span className="font-semibold text-blue-800">Póliza Original</span>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <span className="text-muted-foreground">Número</span>
-              <p className="font-medium">{originalPolicy.policy_number}</p>
+              <p className="text-xs text-muted-foreground">Número</p>
+              <p className="text-sm font-medium">{originalPolicy.policy_number}</p>
             </div>
             <div>
-              <span className="text-muted-foreground">Aseguradora</span>
-              <p className="font-medium">{opAny.insurance_company?.name || originalPolicy.insurer}</p>
+              <p className="text-xs text-muted-foreground">Aseguradora</p>
+              <p className="text-sm font-medium">{opAny.insurance_company?.name || originalPolicy.insurer}</p>
             </div>
             <div>
-              <span className="text-muted-foreground">Prima</span>
-              <p className="font-medium">{formatCurrency(originalPolicy.premium || 0)}</p>
+              <p className="text-xs text-muted-foreground">Prima</p>
+              <p className="text-sm font-medium">{formatCurrency(originalPolicy.premium || 0)}</p>
             </div>
             <div>
-              <span className="text-muted-foreground">Vencimiento</span>
-              <p className="font-medium">
+              <p className="text-xs text-muted-foreground">Vencimiento</p>
+              <p className="text-sm font-medium">
                 {originalPolicy.end_date
                   ? new Date(originalPolicy.end_date).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' })
                   : '-'}
@@ -306,7 +316,7 @@ function RenewPolicyContent() {
       </Card>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm">
           {error}
         </div>
       )}
@@ -329,10 +339,10 @@ function RenewPolicyContent() {
                 className="w-full text-left p-4 rounded-lg border hover:border-blue-300 hover:bg-blue-50/50 transition-all flex items-center justify-between group"
               >
                 <div>
-                  <p className="font-medium group-hover:text-blue-700">{option.label}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{option.description}</p>
+                  <p className="font-medium text-sm">{option.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{option.description}</p>
                 </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-blue-600" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 transition-colors" />
               </button>
             ))}
           </CardContent>
@@ -343,12 +353,10 @@ function RenewPolicyContent() {
       {selectedOption && (
         <>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-blue-700 border-blue-300 bg-blue-50">
+            <Badge variant="secondary">
               {RENEWAL_OPTIONS.find(o => o.value === selectedOption)?.label}
             </Badge>
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
               onClick={() => {
                 setSelectedOption(null);
                 setError(null);
@@ -356,15 +364,13 @@ function RenewPolicyContent() {
               className="text-xs text-muted-foreground"
             >
               Cambiar
-            </Button>
+            </button>
           </div>
 
           <Card>
             <CardHeader>
               <CardTitle>Datos de la Renovación</CardTitle>
-              <CardDescription>
-                Verifica y ajusta los datos de la nueva póliza. Las fechas se calculan automáticamente.
-              </CardDescription>
+              <CardDescription>Verifica y ajusta los datos de la nueva póliza. Las fechas se calculan automáticamente.</CardDescription>
             </CardHeader>
             <CardContent>
               {prefilledPolicy && (
