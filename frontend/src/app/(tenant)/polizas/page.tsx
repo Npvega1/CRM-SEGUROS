@@ -93,7 +93,7 @@ export default function PoliciesPage() {
         .range((page - 1) * pageSize, page * pageSize - 1);
 
       if (searchQuery) {
-        query = query.or(`policy_number.ilike.%${searchQuery}%,insurer.ilike.%${searchQuery}%`);
+        query = query.or(`policy_number.ilike.%${searchQuery}%,insurer.ilike.%${searchQuery}%,tomador_nombre.ilike.%${searchQuery}%`);
       }
       if (statusFilter) {
         query = query.eq('status', statusFilter);
@@ -302,7 +302,7 @@ export default function PoliciesPage() {
           'Anexo': p.anexo || '00',
           'Estado': POLICY_STATUS_LABELS[p.status as PolicyStatus] || p.status,
           'Tipo Movimiento': p.tipo_movimiento || '',
-          'Cliente': p.clients?.full_name || '',
+          'Tomador': p.tomador_nombre || p.clients?.full_name || '',
           'Aseguradora': p.insurance_company?.name || p.insurer || '',
           'Ramo': p.insurance_line?.name || p.line || '',
           'Grupo': p.insurance_group?.name || '',
@@ -436,10 +436,10 @@ export default function PoliciesPage() {
 
         {/* Search + Excel */}
         <div className="flex items-center justify-between gap-4">
-          <div className="relative max-w-sm">
+          <div className="relative max-w-lg flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por numero o aseguradora..."
+              placeholder="Buscar por numero, tomador o aseguradora..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -480,7 +480,7 @@ export default function PoliciesPage() {
                 <TableHeader>
                   <TableRow className="text-xs">
                     <TableHead className="py-2 px-3">Numero</TableHead>
-                    <TableHead className="py-2 px-3">Cliente</TableHead>
+                    <TableHead className="py-2 px-3">Tomador</TableHead>
                     <TableHead className="py-2 px-3">Aseguradora</TableHead>
                     <TableHead className="py-2 px-3">Ramo</TableHead>
                     <TableHead className="py-2 px-3 text-right">Prima Consolidada</TableHead>
