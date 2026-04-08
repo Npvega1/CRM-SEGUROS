@@ -825,7 +825,7 @@ export function PolicyForm({
               </Select>
             ) : (
               <Input
-                value="Expedición"
+                value={(policy as any)?.tipo_movimiento === 'renovacion' ? 'Renovación' : 'Expedición'}
                 disabled
                 className="bg-gray-50"
                 data-testid="tipo-movimiento-fixed"
