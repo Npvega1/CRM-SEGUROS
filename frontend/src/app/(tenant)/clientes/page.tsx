@@ -75,10 +75,11 @@ export default function ClientsPage() {
           
           if (clientIds.length > 0) {
             const { data: policiesCount } = await (supabase as any)
-              .from('policies')
-              .select('client_id')
-              .eq('tenant_id', tenantId)
-              .in('client_id', clientIds);
+                  .from('policies')
+                  .select('client_id')
+                  .eq('tenant_id', tenantId)
+                  .eq('status', 'activa')
+                  .in('client_id', clientIds);
             
             const countMap: Record<string, number> = {};
             if (policiesCount) {
