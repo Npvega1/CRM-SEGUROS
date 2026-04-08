@@ -47,14 +47,13 @@ interface PolicyWithRelations extends Policy {
   };
   consolidated_premium?: number;
   anexo_count?: number;
-  consolidated_end_date?: string | null;
 }
 
 interface StatusCount {
   all: number;
   activa: number;
   no_renovada: number;
-  vencida: number;
+  inactiva: number;
   cancelada: number;
 }
 
@@ -68,7 +67,7 @@ export default function PoliciesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
-  const [statusCounts, setStatusCounts] = useState<StatusCount>({ all: 0, activa: 0, no_renovada: 0, vencida: 0, cancelada: 0 });
+  const [statusCounts, setStatusCounts] = useState<StatusCount>({ all: 0, activa: 0, no_renovada: 0, inactiva: 0, cancelada: 0 });
 
   const loadPolicies = useCallback(async () => {
     if (!tenantId) return;
@@ -104,61 +103,45 @@ export default function PoliciesPage() {
         return;
       }
 
-      // Obtener IDs de las pólizas principales (anexo 00) mostradas
-      const policyIds = (data || []).map((p: Record<string, unknown>) => p.id as string);
+      const policyNumbers = (data || []).map((p: Record<string, unknown>) => p.policy_number as string);
 
-      // Consolidación por parent_policy_id (solo hijos directos de cada póliza)
-      let consolidatedData: Record<string, { premium: number; count: number; maxEndDate: string | null }> = {};
+      let consolidatedPremiums: Record<string, { premium: number; count: number }> = {};
 
-      if (policyIds.length > 0) {
-        const { data: childPolicies } = await supabase
+      if (policyNumbers.length > 0) {
+        const { data: allRelatedPolicies } = await supabase
           .from('policies')
-          .select('parent_policy_id, premium, anexo, end_date')
+          .select('policy_number, premium, anexo')
           .eq('tenant_id', tenantId)
-          .in('parent_policy_id', policyIds);
+          .in('policy_number', policyNumbers);
 
-        if (childPolicies) {
-          childPolicies.forEach((p: Record<string, unknown>) => {
-            const parentId = p.parent_policy_id as string;
+        if (allRelatedPolicies) {
+          allRelatedPolicies.forEach((p: Record<string, unknown>) => {
+            const pn = p.policy_number as string;
             const premium = (p.premium as number) || 0;
-            const endDate = p.end_date as string | null;
+            const anexo = p.anexo as string;
 
-            if (!consolidatedData[parentId]) {
-              consolidatedData[parentId] = { premium: 0, count: 0, maxEndDate: null };
+            if (!consolidatedPremiums[pn]) {
+              consolidatedPremiums[pn] = { premium: 0, count: 0 };
             }
-            consolidatedData[parentId].premium += premium;
-            consolidatedData[parentId].count += 1;
+            consolidatedPremiums[pn].premium += premium;
 
-            if (endDate && (!consolidatedData[parentId].maxEndDate || endDate > consolidatedData[parentId].maxEndDate!)) {
-              consolidatedData[parentId].maxEndDate = endDate;
+            if (anexo && anexo !== '00') {
+              consolidatedPremiums[pn].count += 1;
             }
           });
         }
       }
 
       const mappedPolicies = (data || []).map((p: Record<string, unknown>) => {
-        const pId = p.id as string;
-        const ownPremium = (p.premium as number) || 0;
-        const ownEndDate = (p.end_date as string) || null;
-        const children = consolidatedData[pId];
-
-        // Prima consolidada = prima propia + suma de primas de anexos hijos
-        const totalPremium = ownPremium + (children?.premium || 0);
-        // Cantidad de anexos = solo hijos directos
-        const anexoCount = children?.count || 0;
-        // Vigencia consolidada = max entre propia y la de los hijos
-        let maxEndDate = ownEndDate;
-        if (children?.maxEndDate && (!maxEndDate || children.maxEndDate > maxEndDate)) {
-          maxEndDate = children.maxEndDate;
-        }
+        const policyNumber = p.policy_number as string;
+        const consolidated = consolidatedPremiums[policyNumber];
 
         return {
           ...p,
           client_name: (p.clients as { full_name: string })?.full_name,
           insurance_line: p.insurance_line as PolicyWithRelations['insurance_line'],
-          consolidated_premium: totalPremium,
-          anexo_count: anexoCount,
-          consolidated_end_date: maxEndDate
+          consolidated_premium: consolidated?.premium || (p.premium as number) || 0,
+          anexo_count: consolidated?.count || 0
         };
       }) as PolicyWithRelations[];
 
@@ -184,15 +167,15 @@ export default function PoliciesPage() {
         .or('anexo.eq.00,anexo.is.null');
 
       if (data) {
-        let activa = 0, no_renovada = 0, vencida = 0, cancelada = 0;
+        let activa = 0, no_renovada = 0, inactiva = 0, cancelada = 0;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         data.forEach((p: any) => {
           if (p.status === 'activa') activa++;
           else if (p.status === 'no_renovada') no_renovada++;
-          else if (p.status === 'vencida') vencida++;
+          else if (p.status === 'inactiva') inactiva++;
           else if (p.status === 'cancelada') cancelada++;
         });
-        setStatusCounts({ all: data.length, activa, no_renovada, vencida, cancelada });
+        setStatusCounts({ all: data.length, activa, no_renovada, inactiva, cancelada });
       }
     } catch (error) {
       console.error('Error loading counts:', error);
@@ -212,11 +195,12 @@ export default function PoliciesPage() {
     const isNegative = value < 0;
     const formatted = formatPremium(value);
     return (
-      <span className={`inline-flex items-center gap-1 ${isNegative ? 'text-red-600' : ''}`}>
+      <span className={isNegative ? 'text-red-600' : ''}>
         {formatted}
         {typeof anexoCount === 'number' && anexoCount > 0 && (
-          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
-            <Layers className="w-2.5 h-2.5 mr-0.5" />{anexoCount}
+          <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 font-normal">
+            <Layers className="h-2.5 w-2.5 mr-0.5" />
+            {anexoCount}
           </Badge>
         )}
       </span>
@@ -228,18 +212,19 @@ export default function PoliciesPage() {
   }
 
   return (
-    <div className="flex flex-col h-full" data-testid="polizas-page">
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Header fijo */}
-      <div className="flex-shrink-0 p-4 md:p-6 pb-0 space-y-4 bg-background">
+      <div className="flex-shrink-0 space-y-4 pb-4">
+
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Polizas</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Polizas</h1>
             <p className="text-sm text-muted-foreground">{tenantName}</p>
           </div>
           <Link href="/polizas/nueva">
-            <Button className="gap-2" data-testid="new-policy-button">
-              <Plus className="w-4 h-4" />
+            <Button data-testid="new-policy-btn">
+              <Plus className="h-4 w-4 mr-2" />
               Nueva Poliza
             </Button>
           </Link>
@@ -251,8 +236,8 @@ export default function PoliciesPage() {
             { key: 'all', label: 'Todas', count: statusCounts.all },
             { key: 'activa', label: 'Activas', count: statusCounts.activa },
             { key: 'no_renovada', label: 'No renovadas', count: statusCounts.no_renovada },
-            { key: 'vencida', label: 'Inactivas', count: statusCounts.vencida },
-            { key: 'cancelada', label: 'Canceladas', count: statusCounts.cancelada },
+            { key: 'inactiva', label: 'Inactivas', count: statusCounts.inactiva },
+            { key: 'cancelada', label: 'Revocadas', count: statusCounts.cancelada },
           ].map(tab => (
             <button
               key={tab.key}
@@ -270,8 +255,8 @@ export default function PoliciesPage() {
         </div>
 
         {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por numero o aseguradora..."
             value={searchQuery}
@@ -283,54 +268,54 @@ export default function PoliciesPage() {
       </div>
 
       {/* Tabla scrolleable */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-4 pt-4">
+      <div className="flex-1 overflow-auto">
         <Card>
           <CardContent className="p-0">
             {isLoading ? (
-              <div className="flex justify-center p-12">
-                <FileText className="w-8 h-8 animate-pulse text-muted-foreground" />
+              <div className="flex justify-center py-12">
+                <LoadingScreen />
               </div>
             ) : policies.length === 0 ? (
-              <div className="text-center text-muted-foreground p-12">
-                <Shield className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <div className="text-center py-12 text-muted-foreground">
+                <FileText className="h-12 w-12 mx-auto mb-4 opacity-20" />
                 <p>No se encontraron polizas</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow className="text-xs">
-                    <TableHead className="text-xs">Numero</TableHead>
-                    <TableHead className="text-xs">Cliente</TableHead>
-                    <TableHead className="text-xs">Aseguradora</TableHead>
-                    <TableHead className="text-xs">Ramo</TableHead>
-                    <TableHead className="text-xs text-right">Prima Consolidada</TableHead>
-                    <TableHead className="text-xs">Estado</TableHead>
-                    <TableHead className="text-xs">Vencimiento</TableHead>
-                    <TableHead className="text-xs text-right">Acciones</TableHead>
+                  <TableRow>
+                    <TableHead>Numero</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Aseguradora</TableHead>
+                    <TableHead>Ramo</TableHead>
+                    <TableHead className="text-right">Prima Consolidada</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Vencimiento</TableHead>
+                    <TableHead className="text-center">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {policies.map((policy) => (
-                    <TableRow key={policy.id} className="text-xs">
-                      <TableCell className="py-2 font-medium text-xs">{policy.policy_number}</TableCell>
-                      <TableCell className="py-2 text-xs whitespace-nowrap">{policy.client_name || 'N/A'}</TableCell>
-                      <TableCell className="py-2 text-xs">{policy.insurer}</TableCell>
-                      <TableCell className="py-2 text-xs">
+                    <TableRow key={policy.id}>
+                      <TableCell className="font-medium">{policy.policy_number}</TableCell>
+                      <TableCell>{policy.client_name || 'N/A'}</TableCell>
+                      <TableCell>{policy.insurer}</TableCell>
+                      <TableCell>
                         {policy.insurance_line?.name || POLICY_LINE_LABELS[policy.line as PolicyLine] || policy.line || '-'}
                       </TableCell>
-                      <TableCell className="py-2 text-xs text-right font-medium">
+                      <TableCell className="text-right">
                         {formatPremiumDisplay(policy.consolidated_premium || policy.premium, policy.anexo_count)}
                       </TableCell>
-                      <TableCell className="py-2">
-                        <Badge variant="outline" className={`text-[10px] ${POLICY_STATUS_COLORS[policy.status as PolicyStatus]}`}>
+                      <TableCell>
+                        <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus]}>
                           {POLICY_STATUS_LABELS[policy.status as PolicyStatus]}
                         </Badge>
                       </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">{formatDate(policy.consolidated_end_date || policy.end_date)}</TableCell>
-                      <TableCell className="py-2 text-right">
+                      <TableCell>{formatDate(policy.end_date)}</TableCell>
+                      <TableCell className="text-center">
                         <Link href={`/polizas/${policy.id}`}>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`ver-poliza-${policy.id}`}>
-                            <Eye className="w-3.5 h-3.5" />
+                          <Button variant="ghost" size="icon" data-testid={`view-policy-${policy.id}`}>
+                            <Eye className="h-4 w-4" />
                           </Button>
                         </Link>
                       </TableCell>
@@ -341,27 +326,25 @@ export default function PoliciesPage() {
             )}
           </CardContent>
         </Card>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-4">
-            <p className="text-sm text-muted-foreground">
-              Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, total)} de {total}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <span className="text-sm">Pagina {page} de {totalPages}</span>
-              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex-shrink-0 flex items-center justify-between pt-4">
+          <p className="text-sm text-muted-foreground">
+            Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, total)} de {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm">Pagina {page} de {totalPages}</span>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
