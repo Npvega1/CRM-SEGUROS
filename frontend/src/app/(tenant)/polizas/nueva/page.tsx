@@ -172,6 +172,7 @@ function NewPolicyContent() {
               policy_id: newPolicy.id,
               tenant_id: tenantId,
               document_type: doc.document_type,
+              document_name: doc.file_name,
               file_name: doc.file_name,
               file_url: doc.file_url,
               file_size: doc.file_size
