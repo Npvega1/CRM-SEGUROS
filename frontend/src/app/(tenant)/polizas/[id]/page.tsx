@@ -697,7 +697,7 @@ export default function DetallePolizaPage() {
             <Button variant="outline" size="sm" className="gap-1.5"><Edit className="h-4 w-4" />Editar</Button>
           </Link>
           {isPrincipal && (
-            <Link href={`/polizas/modificar?parentId=${policyId}`}>
+            <Link href={`/polizas/modificar?poliza=${policyId}`}>
               <Button variant="outline" size="sm" className="gap-1.5"><Plus className="h-4 w-4" />Incluir Anexo</Button>
             </Link>
           )}
