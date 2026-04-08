@@ -743,9 +743,11 @@ export default function DetallePolizaPage() {
       {/* STATUS STEPPER                                */}
       {/* ============================================= */}
       <PolicyStatusStepper
-        currentStatus={policy.status as PolicyStatus}
-        onStatusChange={handleStatusChange}
-        isLoading={statusLoading}
+        {...({
+          currentStatus: policy.status as PolicyStatus,
+          onStatusChange: handleStatusChange,
+          isLoading: statusLoading
+        } as any)}
       />
 
       {/* ============================================= */}
