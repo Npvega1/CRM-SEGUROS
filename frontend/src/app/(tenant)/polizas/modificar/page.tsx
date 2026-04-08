@@ -27,6 +27,9 @@ interface ParentPolicyInfo {
   commission_pct: number;
   allied_agent_id: string | null;
   allied_agent_pct: number;
+  usuario_id: string | null;
+  comercial_id: string | null;
+  grupo_empresarial_id: string | null;
 }
 
 export default function ModificarPolizaPage() {
@@ -80,6 +83,9 @@ export default function ModificarPolizaPage() {
           commission_pct,
           allied_agent_id,
           allied_agent_pct,
+          usuario_id,
+          comercial_id,
+          grupo_empresarial_id,
           clients!inner(full_name)
         `)
         .eq('id', polizaId)
@@ -136,7 +142,10 @@ export default function ModificarPolizaPage() {
         premium: policyData.premium || 0,
         commission_pct: policyData.commission_pct || 0,
         allied_agent_id: policyData.allied_agent_id || null,
-        allied_agent_pct: policyData.allied_agent_pct || 0
+        allied_agent_pct: policyData.allied_agent_pct || 0,
+        usuario_id: policyData.usuario_id || null,
+        comercial_id: policyData.comercial_id || null,
+        grupo_empresarial_id: policyData.grupo_empresarial_id || null
       });
 
     } catch (err) {
@@ -183,6 +192,9 @@ export default function ModificarPolizaPage() {
         commission_pct: data.commission_pct || 0,
         allied_agent_id: parentPolicy.allied_agent_id || null,
         allied_agent_pct: parentPolicy.allied_agent_pct || 0,
+        usuario_id: parentPolicy.usuario_id || null,
+        comercial_id: parentPolicy.comercial_id || null,
+        grupo_empresarial_id: parentPolicy.grupo_empresarial_id || null,
         start_date: data.start_date || null,
         end_date: data.end_date || null,
         fecha_expedicion: data.fecha_expedicion || null,
