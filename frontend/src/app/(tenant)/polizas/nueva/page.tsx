@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PolicyForm, type PolicyFormData } from '@/components/modules/policies/PolicyForm';
 import type { Client } from '@/lib/validations/clients';
-import { ArrowLeft, Shield, AlertCircle, Search, Loader2, Plus, X } from 'lucide-react';
+import { ArrowLeft, Shield, AlertCircle, Search, Loader2, Plus, X, UserSearch } from 'lucide-react';
 import { useTenant } from '@/lib/context/TenantContext';
 import { LoadingScreen } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
@@ -214,75 +215,90 @@ function NewPolicyContent() {
         </div>
       )}
 
-      {/* Buscador de Tomador */}
-      <div>
-        <Label className="text-base font-semibold">Buscar Tomador *</Label>
-        <div className="relative mt-2" ref={searchRef}>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Escribe el nombre o documento del tomador..."
-              value={clientSearch}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              onFocus={() => { if (clientSearch.length >= 2 && !selectedClientId) setShowResults(true); }}
-              className="pl-10"
-            />
-            {selectedClientId && (
-              <button
-                type="button"
-                onClick={handleClearSelection}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
+      {/* Buscador de Tomador dentro de Card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Search className="h-4 w-4" />
+            Buscar Tomador *
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="relative" ref={searchRef}>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Escribe el nombre o documento del tomador..."
+                value={clientSearch}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onFocus={() => { if (clientSearch.length >= 2 && !selectedClientId) setShowResults(true); }}
+                className="pl-10"
+              />
+              {selectedClientId && (
+                <button
+                  type="button"
+                  onClick={handleClearSelection}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {showResults && !selectedClientId && (
+              <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {isLoadingClients ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                    Cargando...
+                  </div>
+                ) : filteredClients.length > 0 ? (
+                  filteredClients.map((client) => (
+                    <button
+                      key={client.id}
+                      onClick={() => handleSelectClient(client)}
+                      className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0"
+                    >
+                      <p className="font-medium">{client.full_name}</p>
+                      <p className="text-xs text-muted-foreground">{client.doc_number}</p>
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-4 text-center space-y-2">
+                    <p className="text-sm text-muted-foreground">No se encontró &quot;{clientSearch}&quot;</p>
+                    <Link href="/clientes/nuevo">
+                      <Button variant="outline" size="sm" className="gap-1.5">
+                        <Plus className="h-4 w-4" />
+                        Crear nuevo cliente
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
-          {showResults && !selectedClientId && (
-            <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-              {isLoadingClients ? (
-                <div className="p-4 text-center text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
-                  Cargando...
-                </div>
-              ) : filteredClients.length > 0 ? (
-                filteredClients.map((client) => (
-                  <button
-                    key={client.id}
-                    onClick={() => handleSelectClient(client)}
-                    className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0"
-                  >
-                    <p className="font-medium">{client.full_name}</p>
-                    <p className="text-xs text-muted-foreground">{client.doc_number}</p>
-                  </button>
-                ))
-              ) : (
-                <div className="p-4 text-center space-y-2">
-                  <p className="text-sm text-muted-foreground">No se encontró &quot;{clientSearch}&quot;</p>
-                  <Link href="/clientes/nuevo">
-                    <Button variant="outline" size="sm" className="gap-1.5">
-                      <Plus className="h-4 w-4" />
-                      Crear nuevo cliente
-                    </Button>
-                  </Link>
-                </div>
-              )}
+          {/* Estado vacío cuando no hay cliente seleccionado */}
+          {!selectedClientId && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="rounded-full bg-muted p-4 mb-4">
+                <UserSearch className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium text-muted-foreground">Busca y selecciona un tomador para comenzar</p>
+              <p className="text-xs text-muted-foreground mt-1">Escribe al menos 2 caracteres para buscar</p>
             </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {selectedClientId && selectedClient ? (
+      {/* Formulario solo cuando hay cliente seleccionado */}
+      {selectedClientId && selectedClient && (
         <PolicyForm
           clientId={selectedClientId}
           selectedClient={selectedClient}
           onSubmit={handleSubmit}
           isLoading={isLoading}
         />
-      ) : (
-        <p className="text-sm text-muted-foreground text-center py-8">
-          Selecciona un tomador para crear la póliza
-        </p>
       )}
     </div>
   );
