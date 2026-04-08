@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTenant } from '@/lib/context/TenantContext';
 import { createClient } from '@/lib/supabase/client';
@@ -12,22 +12,14 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { PolicyStatusStepper } from '@/components/modules/policies/PolicyStatusStepper';
 import {
   type PolicyStatus,
   POLICY_STATUS_LABELS,
   POLICY_STATUS_COLORS,
-  formatDate,
-  formatPremium
+  formatDate
 } from '@/lib/validations/policies';
 import {
   ArrowLeft,
@@ -38,20 +30,17 @@ import {
   User,
   Users,
   Edit,
+  Download,
   RefreshCw,
   Trash2,
   Building,
   Clock,
-  Paperclip,
-  Plus,
-  XCircle,
-  Download,
-  File,
   Upload,
-  Eye,
-  Layers,
-  ArrowUp,
-  History
+  X,
+  Paperclip,
+  History,
+  Plus,
+  Eye
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -70,133 +59,405 @@ const formatCurrency = (value: number | null | undefined): string => {
 };
 
 // =====================================================
-// Interfaces
+// COMPONENTE: Historial de Renovaciones
+// FIX: Tipado explícito en destructuring de Supabase
 // =====================================================
-interface PolicyDoc {
-  id: string;
-  document_type: string;
-  document_name: string;
-  file_name: string;
-  file_url: string;
-}
-
-interface AnexoRecord {
-  id: string;
-  anexo: string;
-  premium: number;
-  start_date: string | null;
-  end_date: string | null;
-  status: string;
-  created_at: string;
-}
-
-// =====================================================
-// Componente: Historial de Vigencias
-// =====================================================
-function RenewalHistory({ policyId, tenantId }: { policyId: string; tenantId: string }) {
+function RenewalHistory({
+  policyId,
+  policyNumber,
+  tenantId
+}: {
+  policyId: string;
+  policyNumber: string;
+  tenantId: string;
+}) {
   const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadHistory() {
-      if (!tenantId || !policyId) return;
-      try {
-        // Cargar la póliza actual
-        const { data: currentPolicy } = await (supabase as any)
+  const loadHistory = useCallback(async () => {
+    try {
+      // Pólizas que fueron renovadas DESDE esta (vigencias futuras)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: nextPolicies }: { data: any[] | null } = await (supabase as any)
+        .from('policies')
+        .select('id, policy_number, anexo, status, start_date, end_date, premium, policy_type, renewed_from_policy_id')
+        .eq('renewed_from_policy_id', policyId)
+        .eq('tenant_id', tenantId)
+        .eq('anexo', '00')
+        .order('start_date', { ascending: true });
+
+      // Buscar la póliza padre (de dónde se renovó esta)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: currentPolicy }: { data: any | null } = await (supabase as any)
+        .from('policies')
+        .select('renewed_from_policy_id')
+        .eq('id', policyId)
+        .single();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let previousPolicies: any[] = [];
+      if (currentPolicy?.renewed_from_policy_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: prevData }: { data: any[] | null } = await (supabase as any)
           .from('policies')
-          .select('id, policy_number, anexo, start_date, end_date, status, policy_type, renewed_from_policy_id')
-          .eq('id', policyId)
-          .eq('tenant_id', tenantId)
-          .single();
+          .select('id, policy_number, anexo, status, start_date, end_date, premium, policy_type, renewed_from_policy_id')
+          .eq('id', currentPolicy.renewed_from_policy_id)
+          .eq('tenant_id', tenantId);
 
-        if (!currentPolicy) { setLoading(false); return; }
-
-        // Ir hacia atrás por renewed_from_policy_id
-        const backwards: any[] = [];
-        let lookbackId = currentPolicy.renewed_from_policy_id;
-        while (lookbackId) {
-          const { data: prevPolicy } = await (supabase as any)
-            .from('policies')
-            .select('id, policy_number, anexo, start_date, end_date, status, policy_type, renewed_from_policy_id')
-            .eq('id', lookbackId)
-            .eq('tenant_id', tenantId)
-            .single();
-          if (!prevPolicy) break;
-          backwards.unshift(prevPolicy);
-          lookbackId = prevPolicy.renewed_from_policy_id;
-        }
-
-        // Ir hacia adelante (pólizas que renovaron esta)
-        const forwards: any[] = [];
-        let lookforwardId: string | null = policyId;
-        while (lookforwardId) {
-          const { data: nextPolicies } = await (supabase as any)
-            .from('policies')
-            .select('id, policy_number, anexo, start_date, end_date, status, policy_type, renewed_from_policy_id')
-            .eq('renewed_from_policy_id', lookforwardId)
-            .eq('tenant_id', tenantId)
-            .eq('anexo', '00')
-            .limit(1);
-          if (nextPolicies && nextPolicies.length > 0) {
-            forwards.push(nextPolicies[0]);
-            lookforwardId = nextPolicies[0].id;
-          } else {
-            lookforwardId = null;
-          }
-        }
-
-        const fullChain = [...backwards, currentPolicy, ...forwards];
-
-        // Solo mostrar si hay más de 1 vigencia
-        if (fullChain.length > 1) {
-          setHistory(fullChain);
-        }
-      } catch (err) {
-        console.error('Error loading renewal history:', err);
+        previousPolicies = prevData || [];
       }
+
+      setHistory([...previousPolicies, ...(nextPolicies || [])]);
+    } catch (err) {
+      console.error('Error loading renewal history:', err);
+    } finally {
       setLoading(false);
     }
-    loadHistory();
   }, [policyId, tenantId, supabase]);
 
-  if (loading || history.length === 0) return null;
+  useEffect(() => {
+    if (policyId && tenantId) {
+      loadHistory();
+    }
+  }, [policyId, tenantId, loadHistory]);
+
+  if (loading) return null;
+  if (history.length === 0) return null;
 
   return (
     <Card>
       <CardHeader className="py-3 px-4">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <History className="w-4 h-4" />
-          Historial de Vigencias ({history.length})
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <History className="h-4 w-4" />
+          Historial de Vigencias
         </CardTitle>
       </CardHeader>
-      <CardContent className="px-4 pb-3 pt-0">
-        <div className="flex items-center gap-1 flex-wrap">
-          {history.map((h, idx) => {
-            const isCurrent = h.id === policyId;
-            const startYear = h.start_date ? new Date(h.start_date).getFullYear() : '?';
-            const endYear = h.end_date ? new Date(h.end_date).getFullYear() : '?';
-
-            return (
-              <div key={h.id} className="flex items-center gap-1">
-                {idx > 0 && <span className="text-muted-foreground text-xs mx-1">→</span>}
-                {isCurrent ? (
-                  <span className="text-xs font-semibold bg-primary/10 text-primary px-2 py-1 rounded">
-                    {h.policy_number} ({startYear}-{endYear}) - Actual
-                  </span>
-                ) : (
-                  <Link href={`/polizas/${h.id}`}>
-                    <span className="text-xs text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50 cursor-pointer">
-                      {h.policy_number} ({startYear}-{endYear})
-                    </span>
-                  </Link>
+      <CardContent className="px-4 pb-4">
+        <div className="space-y-2">
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+          {history.map((p: any) => (
+            <Link
+              key={p.id}
+              href={`/polizas/${p.id}`}
+              className={`flex items-center justify-between p-2 rounded-lg border transition-colors text-xs ${
+                p.id === policyId
+                  ? 'border-primary bg-primary/5'
+                  : 'hover:bg-muted/50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className={
+                    p.policy_type === 'renovacion'
+                      ? 'border-blue-500 text-blue-700 bg-blue-50'
+                      : 'border-green-500 text-green-700 bg-green-50'
+                  }
+                >
+                  {p.policy_type === 'renovacion' ? 'R' : 'N'}
+                </Badge>
+                <span className="font-medium">{p.policy_number}</span>
+                {p.id === policyId && (
+                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                    Actual
+                  </Badge>
                 )}
               </div>
-            );
-          })}
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground">
+                  {formatDate(p.start_date)} → {formatDate(p.end_date)}
+                </span>
+                <Badge className={POLICY_STATUS_COLORS[p.status as PolicyStatus] || 'bg-gray-100 text-gray-800'}>
+                  {POLICY_STATUS_LABELS[p.status as PolicyStatus] || p.status}
+                </Badge>
+              </div>
+            </Link>
+          ))}
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// =====================================================
+// COMPONENTE: Diálogo de Documentos Adjuntos
+// Copia de póliza (máx 1) + Soportes (máx 5)
+// =====================================================
+function PolicyDocumentsDialog({
+  policyId,
+  tenantId
+}: {
+  policyId: string;
+  tenantId: string;
+}) {
+  const supabase = createClient();
+  const [isOpen, setIsOpen] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const loadDocuments = useCallback(async () => {
+    setLoading(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data }: { data: any[] | null } = await (supabase as any)
+        .from('policy_documents')
+        .select('*')
+        .eq('policy_id', policyId)
+        .order('created_at', { ascending: false });
+
+      setDocuments(data || []);
+    } catch (err) {
+      console.error('Error loading documents:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [policyId, supabase]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadDocuments();
+    }
+  }, [isOpen, loadDocuments]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const copiaPoliza = documents.filter((d: any) => d.document_type === 'copia_poliza');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const soportes = documents.filter((d: any) => d.document_type === 'soporte');
+
+  const handleUpload = async (file: File, docType: string) => {
+    setUploading(true);
+    try {
+      const filePath = `${tenantId}/${policyId}/${docType}_${Date.now()}_${file.name}`;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: uploadError } = await (supabase as any).storage
+        .from('policy-documents')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        toast.error('Error al subir archivo: ' + uploadError.message);
+        setUploading(false);
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: insertError } = await (supabase as any)
+        .from('policy_documents')
+        .insert({
+          policy_id: policyId,
+          tenant_id: tenantId,
+          document_type: docType,
+          file_name: file.name,
+          file_url: filePath,
+          file_size: file.size
+        });
+
+      if (insertError) {
+        toast.error('Error al registrar documento');
+      } else {
+        toast.success('Documento subido exitosamente');
+        loadDocuments();
+      }
+    } catch (err) {
+      console.error('Error uploading document:', err);
+      toast.error('Error de conexión al subir documento');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleDownload = async (doc: any) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data }: { data: any | null } = await (supabase as any).storage
+        .from('policy-documents')
+        .createSignedUrl(doc.file_url, 60);
+
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      } else {
+        toast.error('No se pudo generar el enlace de descarga');
+      }
+    } catch (err) {
+      console.error('Error downloading document:', err);
+      toast.error('Error al descargar');
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleDeleteDoc = async (doc: any) => {
+    if (!confirm(`¿Eliminar el documento "${doc.file_name}"?`)) return;
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).storage
+        .from('policy-documents')
+        .remove([doc.file_url]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('policy_documents')
+        .delete()
+        .eq('id', doc.id);
+
+      toast.success('Documento eliminado');
+      loadDocuments();
+    } catch (err) {
+      console.error('Error deleting document:', err);
+      toast.error('Error al eliminar documento');
+    }
+  };
+
+  const handleFileSelect = (docType: string, maxCount: number) => {
+    const currentCount = documents.filter(d => d.document_type === docType).length;
+    if (currentCount >= maxCount) {
+      toast.error(
+        docType === 'copia_poliza'
+          ? 'Ya existe una copia de póliza. Elimínala primero para subir otra.'
+          : `Máximo ${maxCount} soportes permitidos.`
+      );
+      return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        handleUpload(file, docType);
+      }
+    };
+    input.click();
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderDocumentRow = (doc: any) => (
+    <div
+      key={doc.id}
+      className="flex items-center justify-between p-2 rounded border text-xs"
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+        <span className="truncate">{doc.file_name}</span>
+      </div>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0"
+          onClick={() => handleDownload(doc)}
+        >
+          <Download className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+          onClick={() => handleDeleteDoc(doc)}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5">
+          <Paperclip className="h-4 w-4" />
+          Documentos
+          {documents.length > 0 && (
+            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+              {documents.length}
+            </Badge>
+          )}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Paperclip className="h-5 w-5" />
+            Documentos Adjuntos
+          </DialogTitle>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Copia de Póliza (máx 1) */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium">Copia de Póliza</h4>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => handleFileSelect('copia_poliza', 1)}
+                  disabled={uploading || copiaPoliza.length >= 1}
+                >
+                  <Upload className="h-3 w-3" />
+                  Subir
+                </Button>
+              </div>
+              {copiaPoliza.length > 0 ? (
+                <div className="space-y-1">
+                  {copiaPoliza.map(renderDocumentRow)}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  Sin copia de póliza adjunta
+                </p>
+              )}
+            </div>
+
+            {/* Soportes (máx 5) */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium">
+                  Soportes ({soportes.length}/5)
+                </h4>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => handleFileSelect('soporte', 5)}
+                  disabled={uploading || soportes.length >= 5}
+                >
+                  <Upload className="h-3 w-3" />
+                  Subir
+                </Button>
+              </div>
+              {soportes.length > 0 ? (
+                <div className="space-y-1">
+                  {soportes.map(renderDocumentRow)}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  Sin soportes adjuntos
+                </p>
+              )}
+            </div>
+
+            {uploading && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Subiendo documento...
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -206,36 +467,26 @@ function RenewalHistory({ policyId, tenantId }: { policyId: string; tenantId: st
 export default function DetallePolizaPage() {
   const params = useParams();
   const router = useRouter();
-  const { tenantId, role } = useTenant();
+  const { tenantId, tenantSlug } = useTenant();
   const supabase = createClient();
   const policyId = params.id as string;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [policy, setPolicy] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [hasRemision, setHasRemision] = useState(false);
-  const [hasRecaudo, setHasRecaudo] = useState(false);
-
-  // Anexos
-  const [anexos, setAnexos] = useState<AnexoRecord[]>([]);
+  const [statusLoading, setStatusLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [anexos, setAnexos] = useState<any[]>([]);
   const [consolidatedEndDate, setConsolidatedEndDate] = useState<string | null>(null);
 
-  // Documentos
-  const [showDocPanel, setShowDocPanel] = useState(false);
-  const [policyDocs, setPolicyDocs] = useState<PolicyDoc[]>([]);
-  const [loadingDocs, setLoadingDocs] = useState(false);
-  const [uploadingDoc, setUploadingDoc] = useState(false);
-  const copiaInputRef = useRef<HTMLInputElement>(null);
-  const soporteInputRef = useRef<HTMLInputElement>(null);
-
-  const isAdmin = role === 'admin' || role === 'superadmin';
-
   // =====================================================
-  // Cargar poliza con relaciones
+  // Cargar póliza con relaciones
   // =====================================================
   async function loadPolicy() {
     if (!policyId || !tenantId) return;
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('policies')
         .select(`
@@ -251,6 +502,11 @@ export default function DetallePolizaPage() {
 
       if (error) throw error;
       setPolicy(data);
+
+      // Si es póliza principal (anexo 00), cargar anexos y vigencia consolidada
+      if (data && (data.anexo === '00' || !data.anexo)) {
+        await loadAnexos(data.id, data.policy_number);
+      }
     } catch (err) {
       console.error('Error loading policy:', err);
       toast.error('Error al cargar la póliza');
@@ -259,206 +515,92 @@ export default function DetallePolizaPage() {
     }
   }
 
-  useEffect(() => {
-    loadPolicy();
-  }, [policyId, tenantId]);
-
   // =====================================================
-  // Cargar estado de producción (Remisión y Cartera)
+  // Cargar anexos de la póliza principal
   // =====================================================
-  useEffect(() => {
-    async function loadProductionStatus() {
-      if (!policyId || !tenantId) return;
-      try {
-        const { data: remisionData } = await (supabase as any)
-          .from('remisiones')
-          .select('id, numero_remision')
-          .eq('policy_id', policyId)
-          .eq('tenant_id', tenantId)
-          .limit(1);
-
-        const remisionRecord = remisionData && remisionData.length > 0 ? remisionData[0] : null;
-        setHasRemision(
-          remisionRecord !== null &&
-          remisionRecord.numero_remision !== null &&
-          remisionRecord.numero_remision !== ''
-        );
-
-        const { data: carteraData } = await (supabase as any)
-          .from('cartera')
-          .select('id, saldo_pendiente')
-          .eq('policy_id', policyId)
-          .eq('tenant_id', tenantId)
-          .limit(1);
-
-        if (carteraData && carteraData.length > 0) {
-          setHasRecaudo(carteraData[0].saldo_pendiente <= 0);
-        } else {
-          setHasRecaudo(false);
-        }
-      } catch (err) {
-        console.error('Error loading production status:', err);
-      }
-    }
-    if (policy) {
-      loadProductionStatus();
-    }
-  }, [policy, policyId, tenantId]);
-
-  // =====================================================
-  // Cargar anexos relacionados + vigencia consolidada
-  // =====================================================
-  useEffect(() => {
-    async function loadAnexos() {
-      if (!policy || !tenantId) return;
-      try {
-        const { data } = await (supabase as any)
-          .from('policies')
-          .select('id, anexo, premium, start_date, end_date, status, created_at')
-          .eq('parent_policy_id', policyId)
-          .eq('tenant_id', tenantId)
-          .order('anexo', { ascending: true });
-
-        const anexosList = (data || []) as AnexoRecord[];
-        setAnexos(anexosList);
-
-        let maxEndDate = policy.end_date || null;
-        anexosList.forEach((a) => {
-          if (a.end_date && (!maxEndDate || a.end_date > maxEndDate)) {
-            maxEndDate = a.end_date;
-          }
-        });
-        setConsolidatedEndDate(maxEndDate);
-      } catch (err) {
-        console.error('Error loading anexos:', err);
-      }
-    }
-    if (policy) {
-      loadAnexos();
-    }
-  }, [policy, policyId, tenantId]);
-
-  // =====================================================
-  // Cargar documentos de la póliza
-  // =====================================================
-  async function loadDocs() {
-    if (!policyId || !tenantId) return;
-    setLoadingDocs(true);
+  async function loadAnexos(parentId: string, policyNumber: string) {
     try {
-      const { data } = await (supabase as any)
-        .from('policy_documents')
-        .select('id, document_type, document_name, file_name, file_url')
-        .eq('policy_id', policyId)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: anexosData }: { data: any[] | null } = await (supabase as any)
+        .from('policies')
+        .select('id, policy_number, anexo, tipo_movimiento, premium, gastos_expedicion, iva, total_a_pagar, status, start_date, end_date')
+        .eq('parent_policy_id', parentId)
         .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: true });
+        .order('anexo', { ascending: true });
 
-      setPolicyDocs(data || []);
+      const validAnexos = anexosData || [];
+      setAnexos(validAnexos);
+
+      // Calcular vigencia consolidada (max end_date entre principal y todos los anexos)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allEndDates = [policy?.end_date, ...validAnexos.map((a: any) => a.end_date)].filter(Boolean);
+      if (allEndDates.length > 0) {
+        const maxDate = allEndDates.reduce((max: string, d: string) =>
+          new Date(d) > new Date(max) ? d : max
+        );
+        setConsolidatedEndDate(maxDate);
+      }
     } catch (err) {
-      console.error('Error loading docs:', err);
+      console.error('Error loading anexos:', err);
     }
-    setLoadingDocs(false);
   }
 
   useEffect(() => {
-    if (policy) {
-      loadDocs();
-    }
-  }, [policy]);
+    loadPolicy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [policyId, tenantId]);
 
   // =====================================================
-  // Subir documento
+  // Cambiar estado de la póliza
   // =====================================================
-  const handleUploadDoc = async (file: globalThis.File, docType: string, docName: string) => {
-    if (!tenantId || !policyId) return;
-    setUploadingDoc(true);
+  const handleStatusChange = async (newStatus: PolicyStatus, note?: string) => {
+    if (!policyId || !tenantId) return;
+    setStatusLoading(true);
 
     try {
-      const timestamp = Date.now();
-      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const path = `${tenantId}/policies/${policyId}/documentos/${timestamp}_${safeName}`;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from('policies')
+        .update({
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', policyId)
+        .eq('tenant_id', tenantId);
 
-      const { error: uploadError } = await supabase.storage
-        .from('policy-documents')
-        .upload(path, file, { cacheControl: '3600', upsert: true });
+      if (error) throw error;
 
-      if (uploadError) {
-        toast.error(`Error al subir: ${uploadError.message}`);
-        setUploadingDoc(false);
-        return;
-      }
-
-      const { error: insertError } = await (supabase as any)
-        .from('policy_documents')
+      // Registrar en historial
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('policy_history')
         .insert({
-          tenant_id: tenantId,
           policy_id: policyId,
-          document_type: docType,
-          document_name: docName,
-          file_url: path,
-          file_name: file.name
+          old_status: policy.status,
+          new_status: newStatus,
+          note: note || null,
+          changed_at: new Date().toISOString()
         });
 
-      if (insertError) {
-        toast.error(`Error al guardar: ${insertError.message}`);
-      } else {
-        toast.success('Documento subido correctamente');
-        await loadDocs();
-      }
-    } catch {
-      toast.error('Error al subir documento');
-    }
-    setUploadingDoc(false);
-  };
-
-  // =====================================================
-  // Eliminar documento
-  // =====================================================
-  const handleDeleteDoc = async (doc: PolicyDoc) => {
-    if (!confirm(`¿Eliminar "${doc.file_name}"?`)) return;
-
-    try {
-      await supabase.storage
-        .from('policy-documents')
-        .remove([doc.file_url]);
-
-      await (supabase as any)
-        .from('policy_documents')
-        .delete()
-        .eq('id', doc.id);
-
-      toast.success('Documento eliminado');
-      await loadDocs();
-    } catch {
-      toast.error('Error al eliminar documento');
+      toast.success(`Estado cambiado a ${POLICY_STATUS_LABELS[newStatus]}`);
+      await loadPolicy();
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error al cambiar estado';
+      console.error('Error changing status:', err);
+      toast.error(errorMessage);
+    } finally {
+      setStatusLoading(false);
     }
   };
 
   // =====================================================
-  // Descargar documento
-  // =====================================================
-  const handleDownloadDoc = async (doc: PolicyDoc) => {
-    try {
-      const { data, error } = await supabase.storage
-        .from('policy-documents')
-        .createSignedUrl(doc.file_url, 60);
-
-      if (error || !data?.signedUrl) {
-        toast.error('Error al generar enlace de descarga');
-        return;
-      }
-      window.open(data.signedUrl, '_blank');
-    } catch {
-      toast.error('Error al descargar');
-    }
-  };
-
-  // =====================================================
-  // Eliminar poliza
+  // Eliminar póliza
   // =====================================================
   const handleDelete = async () => {
     if (!confirm('¿Estás seguro de eliminar esta póliza? Esta acción no se puede deshacer.')) return;
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('policies')
         .delete()
@@ -469,9 +611,10 @@ export default function DetallePolizaPage() {
 
       toast.success('Póliza eliminada');
       router.push('/polizas');
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error al eliminar la póliza';
       console.error('Error deleting policy:', err);
-      toast.error(err.message || 'Error al eliminar la póliza');
+      toast.error(errorMessage);
     }
   };
 
@@ -480,598 +623,476 @@ export default function DetallePolizaPage() {
   // =====================================================
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (!policy) {
     return (
-      <div className="container mx-auto py-6 px-4">
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">Póliza no encontrada</p>
-          <Link href="/polizas">
-            <Button variant="outline" className="mt-4">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Volver a Pólizas
-            </Button>
-          </Link>
-        </div>
+      <div className="text-center py-20">
+        <p className="text-muted-foreground">Póliza no encontrada</p>
+        <Link href="/polizas">
+          <Button variant="link" className="mt-2">Volver a Pólizas</Button>
+        </Link>
       </div>
     );
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const policyAny = policy as any;
-  const isAnexo = policyAny.anexo && policyAny.anexo !== '00';
   const displayTotal = policyAny.total_a_pagar || (
     (policy.premium || 0) + (policyAny.gastos_expedicion || 0) + (policyAny.iva || 0)
   );
-
-  // Documentos separados por tipo
-  const copiaPoliza = policyDocs.find(d => d.document_type === 'copia_poliza');
-  const soportes = policyDocs.filter(d => d.document_type === 'soporte');
+  const isPrincipal = !policyAny.anexo || policyAny.anexo === '00';
+  const isRenewal = policyAny.policy_type === 'renovacion';
 
   // =====================================================
   // RENDER
   // =====================================================
   return (
-    <div className="container mx-auto py-4 px-4">
+    <div className="space-y-6">
+
       {/* ============================================= */}
-      {/* HEADER + BOTONES DE ACCION */}
+      {/* HEADER + BOTONES DE ACCIÓN                    */}
       {/* ============================================= */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3">
-          <Link href={isAnexo && policyAny.parent_policy_id ? `/polizas/${policyAny.parent_policy_id}` : '/polizas'}>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+      <div>
+        <Link
+          href="/polizas"
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Volver a Pólizas
+        </Link>
+
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold">
                 Póliza {policy.policy_number}
-                {isAnexo && <span className="text-muted-foreground"> - Anexo {policyAny.anexo}</span>}
               </h1>
-              <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus]}>
+              {/* Badge de estado */}
+              <Badge className={POLICY_STATUS_COLORS[policy.status as PolicyStatus] || 'bg-gray-100 text-gray-800'}>
                 {POLICY_STATUS_LABELS[policy.status as PolicyStatus] || policy.status}
               </Badge>
-              {policyAny.policy_type === 'renovacion' ? (
-                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-300">R</Badge>
-              ) : (
-                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-300">N</Badge>
+              {/* Badge R/N (Renovación / Nueva) */}
+              {isRenewal && (
+                <Badge variant="outline" className="border-blue-500 text-blue-700 bg-blue-50">
+                  R - Renovación
+                </Badge>
+              )}
+              {/* Badge de Anexo */}
+              {!isPrincipal && (
+                <Badge variant="outline">Anexo {policyAny.anexo}</Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground mt-1">
               {policy.insurance_company?.name || policy.insurer} - {policy.client?.full_name || 'Sin cliente'}
             </p>
           </div>
-        </div>
 
-        {/* Botones de acción */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowDocPanel(true)}>
-            <Paperclip className="h-3.5 w-3.5 mr-1.5" />
-            Documentos
-          </Button>
-          <Link href={`/polizas/${policyId}/editar`}>
-            <Button variant="outline" size="sm" className="h-8 text-xs">
-              <Edit className="h-3.5 w-3.5 mr-1.5" />
-              Editar
-            </Button>
-          </Link>
-          {!isAnexo && (
-            <>
+          {/* Botones de acción */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Documentos (Dialog) */}
+            <PolicyDocumentsDialog policyId={policyId} tenantId={tenantId} />
+
+            {/* Editar */}
+            <Link href={`/polizas/${policyId}/editar`}>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Edit className="h-4 w-4" />
+                Editar
+              </Button>
+            </Link>
+
+            {/* Incluir Anexo (solo para póliza principal) */}
+            {isPrincipal && (
               <Link href={`/polizas/modificar?poliza=${policyId}`}>
-                <Button variant="outline" size="sm" className="h-8 text-xs">
-                  <Plus className="h-3.5 w-3.5 mr-1.5" />
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <Plus className="h-4 w-4" />
                   Incluir Anexo
                 </Button>
               </Link>
+            )}
+
+            {/* Renovar (solo para póliza principal) */}
+            {isPrincipal && (
               <Link href={`/polizas/renovar?poliza=${policyId}`}>
-                <Button variant="outline" size="sm" className="h-8 text-xs">
-                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <RefreshCw className="h-4 w-4" />
                   Renovar
                 </Button>
               </Link>
-              <Link href={`/polizas/cancelar?poliza=${policyId}`}>
-                <Button variant="outline" size="sm" className="h-8 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50">
-                  <XCircle className="h-3.5 w-3.5 mr-1.5" />
-                  Cancelar
-                </Button>
-              </Link>
-            </>
-          )}
-          {isAdmin && (
+            )}
+
+            {/* Eliminar */}
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+              className="gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
               onClick={handleDelete}
             >
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              <Trash2 className="h-4 w-4" />
               Eliminar
             </Button>
-          )}
+          </div>
         </div>
       </div>
 
       {/* ============================================= */}
-      {/* LINK A PÓLIZA PADRE (si es anexo) */}
+      {/* STATUS STEPPER                                */}
       {/* ============================================= */}
-      {isAnexo && policyAny.parent_policy_id && (
-        <div className="mb-3">
-          <Link href={`/polizas/${policyAny.parent_policy_id}`}>
-            <Button variant="ghost" size="sm" className="h-7 text-xs text-primary">
-              <ArrowUp className="h-3 w-3 mr-1" />
-              Ver póliza principal (Anexo 00)
-            </Button>
-          </Link>
-        </div>
+      <PolicyStatusStepper
+        currentStatus={policy.status as PolicyStatus}
+        onStatusChange={handleStatusChange}
+        isLoading={statusLoading}
+      />
+
+      {/* ============================================= */}
+      {/* HISTORIAL DE VIGENCIAS (Renovaciones)         */}
+      {/* ============================================= */}
+      {isPrincipal && (
+        <RenewalHistory
+          policyId={policyId}
+          policyNumber={policy.policy_number}
+          tenantId={tenantId}
+        />
       )}
 
       {/* ============================================= */}
-      {/* STATUS STEPPER (solo para anexo 00) */}
+      {/* LINK A PÓLIZA PRINCIPAL (para anexos)         */}
       {/* ============================================= */}
-      {!isAnexo && (
-        <Card className="mb-4">
-          <CardContent className="pt-3 pb-3">
-            <PolicyStatusStepper
-              hasRemision={hasRemision}
-              hasRecaudo={hasRecaudo}
-            />
+      {!isPrincipal && policyAny.parent_policy_id && (
+        <Card className="border-dashed">
+          <CardContent className="py-3 px-4">
+            <Link
+              href={`/polizas/${policyAny.parent_policy_id}`}
+              className="flex items-center gap-2 text-sm text-primary hover:underline"
+            >
+              <Eye className="h-4 w-4" />
+              Ver póliza principal ({policy.policy_number} - Anexo 00)
+            </Link>
           </CardContent>
         </Card>
       )}
 
-      <div className="space-y-3">
-        {/* ============================================= */}
-        {/* DETALLES DE LA POLIZA (compacto) */}
-        {/* ============================================= */}
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <FileText className="w-4 h-4" />
-              Detalles de la Póliza
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Número</p>
-                <p className="text-sm font-medium">{policy.policy_number}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Anexo</p>
-                <p className="text-sm font-medium">{policyAny.anexo || '00'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Aseguradora</p>
-                <p className="text-sm font-medium">{policy.insurance_company?.name || policy.insurer}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Ramo</p>
-                <p className="text-sm font-medium">{policy.insurance_line?.name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Grupo</p>
-                <p className="text-sm font-medium">{policy.insurance_group?.name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Tipo Movimiento</p>
-                <p className="text-sm font-medium capitalize">{policyAny.tipo_movimiento || '-'}</p>
-              </div>
+      {/* ============================================= */}
+      {/* DETALLES DE LA PÓLIZA                         */}
+      {/* ============================================= */}
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Detalles de la Póliza
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Número</p>
+              <p className="text-sm font-medium">{policy.policy_number}</p>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* ============================================= */}
-        {/* VIGENCIA (compacto) */}
-        {/* ============================================= */}
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Calendar className="w-4 h-4" />
-              Vigencia
-              {!isAnexo && consolidatedEndDate && consolidatedEndDate !== policy.end_date && (
-                <Badge variant="outline" className="text-xs ml-2">Vigencia consolidada</Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Fecha Expedición</p>
-                <p className="text-sm font-medium">{formatDate(policyAny.fecha_expedicion)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Vigencia Desde</p>
-                <p className="text-sm font-medium">{formatDate(policy.start_date)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Vigencia Hasta</p>
-                <p className="text-sm font-medium">{formatDate(policy.end_date)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Días de Vigencia</p>
-                <p className="text-sm font-medium">
-                  {policy.start_date && policy.end_date
-                    ? Math.ceil((new Date(policy.end_date).getTime() - new Date(policy.start_date).getTime()) / (1000 * 60 * 60 * 24))
-                    : '-'}
-                </p>
-              </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Anexo</p>
+              <p className="text-sm font-medium">{policyAny.anexo || '00'}</p>
             </div>
-            {!isAnexo && consolidatedEndDate && consolidatedEndDate !== policy.end_date && (
-              <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
-                Vigencia consolidada (con anexos): hasta <strong>{formatDate(consolidatedEndDate)}</strong>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            <div>
+              <p className="text-xs text-muted-foreground">Aseguradora</p>
+              <p className="text-sm font-medium">{policy.insurance_company?.name || policy.insurer}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Ramo</p>
+              <p className="text-sm font-medium">{policy.insurance_line?.name || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Grupo</p>
+              <p className="text-sm font-medium">{policy.insurance_group?.name || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Tipo Movimiento</p>
+              <p className="text-sm font-medium capitalize">{policyAny.tipo_movimiento || '-'}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* ============================================= */}
-        {/* TOMADOR (compacto) */}
-        {/* ============================================= */}
+      {/* ============================================= */}
+      {/* VIGENCIA                                      */}
+      {/* ============================================= */}
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Vigencia
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Fecha Expedición</p>
+              <p className="text-sm font-medium">{formatDate(policyAny.fecha_expedicion)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Vigencia Desde</p>
+              <p className="text-sm font-medium">{formatDate(policy.start_date)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Vigencia Hasta</p>
+              <p className="text-sm font-medium">{formatDate(policy.end_date)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Días de Vigencia</p>
+              <p className="text-sm font-medium">{policyAny.dias_vigencia || '-'}</p>
+            </div>
+          </div>
+          {/* Vigencia consolidada para póliza principal con anexos */}
+          {isPrincipal && consolidatedEndDate && consolidatedEndDate !== policy.end_date && (
+            <div className="mt-3 pt-3 border-t">
+              <p className="text-xs text-muted-foreground">Vigencia Consolidada (con anexos)</p>
+              <p className="text-sm font-medium text-primary">
+                {formatDate(policy.start_date)} → {formatDate(consolidatedEndDate)}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ============================================= */}
+      {/* TOMADOR                                       */}
+      {/* ============================================= */}
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Tomador
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Nombre / Razón Social</p>
+              <p className="text-sm font-medium">
+                {policyAny.tomador_nombre || policy.client?.full_name || '-'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Tipo Identificación</p>
+              <p className="text-sm font-medium">
+                {(policyAny.tomador_tipo_identificacion || policy.client?.doc_type || '-').replace(/_/g, ' ')}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Número Identificación</p>
+              <p className="text-sm font-medium">
+                {policyAny.tomador_numero_identificacion || policy.client?.doc_number || '-'}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ============================================= */}
+      {/* ASEGURADO (solo si es diferente al tomador)   */}
+      {/* ============================================= */}
+      {policyAny.asegurado_diferente && (
         <Card>
           <CardHeader className="py-3 px-4">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <User className="w-4 h-4" />
-              Tomador
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Asegurado
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <div className="grid grid-cols-3 gap-3">
+          <CardContent className="px-4 pb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <p className="text-xs text-muted-foreground">Nombre / Razón Social</p>
-                <p className="text-sm font-medium">{policyAny.tomador_nombre || policy.client?.full_name || '-'}</p>
+                <p className="text-xs text-muted-foreground">Nombre</p>
+                <p className="text-sm font-medium">{policyAny.asegurado_nombre || '-'}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Tipo Identificación</p>
-                <p className="text-sm font-medium capitalize">
-                  {(policyAny.tomador_tipo_identificacion || policy.client?.doc_type || '-').replace(/_/g, ' ')}
+                <p className="text-sm font-medium">
+                  {(policyAny.asegurado_tipo_identificacion || '-').replace(/_/g, ' ')}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Número Identificación</p>
-                <p className="text-sm font-medium">{policyAny.tomador_numero_identificacion || policy.client?.doc_number || '-'}</p>
+                <p className="text-sm font-medium">{policyAny.asegurado_numero_identificacion || '-'}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-
-        {/* ============================================= */}
-        {/* ASEGURADO (solo si es diferente) */}
-        {/* ============================================= */}
-        {policyAny.asegurado_diferente && (
-          <Card>
-            <CardHeader className="py-3 px-4">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Users className="w-4 h-4" />
-                Asegurado
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-3 pt-0">
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Nombre</p>
-                  <p className="text-sm font-medium">{policyAny.asegurado_nombre || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Tipo Identificación</p>
-                  <p className="text-sm font-medium capitalize">
-                    {(policyAny.asegurado_tipo_identificacion || '-').replace(/_/g, ' ')}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Número Identificación</p>
-                  <p className="text-sm font-medium">{policyAny.asegurado_numero_identificacion || '-'}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ============================================= */}
-        {/* VALORES (compacto) */}
-        {/* ============================================= */}
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <DollarSign className="w-4 h-4" />
-              Valores de la Póliza
-              {isAnexo && ` (Anexo ${policyAny.anexo})`}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Valor Asegurado</p>
-                <p className="text-sm font-medium">{formatCurrency(policyAny.valor_asegurado)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Prima Neta</p>
-                <p className="text-sm font-medium">{formatCurrency(policy.premium)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Gastos Exp.</p>
-                <p className="text-sm font-medium">{formatCurrency(policyAny.gastos_expedicion)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">IVA</p>
-                <p className="text-sm font-medium">{formatCurrency(policyAny.iva)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total a Pagar</p>
-                <p className="text-sm font-medium text-emerald-600">{formatCurrency(displayTotal)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Comisión</p>
-                <p className="text-sm font-medium">{policyAny.commission_pct || 0}%</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ============================================= */}
-        {/* CLIENTE (compacto) */}
-        {/* ============================================= */}
-        {policy.client && (
-          <Card>
-            <CardHeader className="py-3 px-4">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Building className="w-4 h-4" />
-                Cliente
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-3 pt-0">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Nombre</p>
-                  <p className="text-sm font-medium">{policy.client.full_name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Documento</p>
-                  <p className="text-sm font-medium">{policy.client.doc_number}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium">{policy.client.email || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Teléfono</p>
-                  <p className="text-sm font-medium">{policy.client.phone || '-'}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ============================================= */}
-        {/* NOTAS */}
-        {/* ============================================= */}
-        {policyAny.notas && (
-          <Card>
-            <CardHeader className="py-3 px-4">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <FileText className="w-4 h-4" />
-                Notas
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-3 pt-0">
-              <p className="text-xs whitespace-pre-wrap">{policyAny.notas}</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ============================================= */}
-        {/* REGISTRO */}
-        {/* ============================================= */}
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Clock className="w-4 h-4" />
-              Registro
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Creado</p>
-                <p className="text-sm font-medium">{formatDate(policy.created_at)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Última Actualización</p>
-                <p className="text-sm font-medium">{formatDate(policy.updated_at)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ============================================= */}
-        {/* HISTORIAL DE VIGENCIAS */}
-        {/* ============================================= */}
-        <RenewalHistory policyId={policyId} tenantId={tenantId || ''} />
-
-        {/* ============================================= */}
-        {/* TABLA DE ANEXOS (solo en póliza principal) */}
-        {/* ============================================= */}
-        {!isAnexo && (
-          <Card>
-            <CardHeader className="py-3 px-4">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Layers className="w-4 h-4" />
-                Anexos ({anexos.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-3 pt-0">
-              {anexos.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">No hay anexos para esta póliza</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Anexo</TableHead>
-                        <TableHead className="text-xs">Prima</TableHead>
-                        <TableHead className="text-xs">Vigencia Desde</TableHead>
-                        <TableHead className="text-xs">Vigencia Hasta</TableHead>
-                        <TableHead className="text-xs">Estado</TableHead>
-                        <TableHead className="text-xs">Creado</TableHead>
-                        <TableHead className="text-xs">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {anexos.map((anexo) => (
-                        <TableRow key={anexo.id}>
-                          <TableCell className="text-xs font-medium">{anexo.anexo}</TableCell>
-                          <TableCell className={`text-xs ${anexo.premium < 0 ? 'text-red-600' : ''}`}>
-                            {formatCurrency(anexo.premium)}
-                          </TableCell>
-                          <TableCell className="text-xs">{formatDate(anexo.start_date)}</TableCell>
-                          <TableCell className="text-xs">{formatDate(anexo.end_date)}</TableCell>
-                          <TableCell>
-                            <Badge className={`text-xs ${POLICY_STATUS_COLORS[anexo.status as PolicyStatus]}`}>
-                              {POLICY_STATUS_LABELS[anexo.status as PolicyStatus] || anexo.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs">{formatDate(anexo.created_at)}</TableCell>
-                          <TableCell>
-                            <Link href={`/polizas/${anexo.id}`}>
-                              <Button variant="ghost" size="icon" className="h-7 w-7">
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
-                            </Link>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      )}
 
       {/* ============================================= */}
-      {/* DIALOG: ADJUNTAR DOCUMENTOS */}
+      {/* VALORES DE LA PÓLIZA                          */}
       {/* ============================================= */}
-      <Dialog open={showDocPanel} onOpenChange={setShowDocPanel}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Paperclip className="h-5 w-5" />
-              Documentos {isAnexo ? `(Anexo ${policyAny.anexo})` : 'de la Póliza'}
-            </DialogTitle>
-          </DialogHeader>
-
-          {loadingDocs ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin" />
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            Valores de la Póliza
+            {!isPrincipal && ` (Anexo ${policyAny.anexo})`}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Valor Asegurado</p>
+              <p className="text-sm font-medium">{formatCurrency(policyAny.valor_asegurado)}</p>
             </div>
-          ) : (
-            <div className="space-y-6">
-              {/* ---- Copia de la Póliza ---- */}
-              <div>
-                <h4 className="text-sm font-semibold mb-2">Copia {isAnexo ? 'del Anexo' : 'de la Póliza'}</h4>
-                {copiaPoliza ? (
-                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <span className="text-sm truncate">{copiaPoliza.file_name}</span>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownloadDoc(copiaPoliza)}>
-                        <Download className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => handleDeleteDoc(copiaPoliza)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <input
-                      ref={copiaInputRef}
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png,.docx"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleUploadDoc(file, 'copia_poliza', 'Copia de la póliza');
-                        e.target.value = '';
-                      }}
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      disabled={uploadingDoc}
-                      onClick={() => copiaInputRef.current?.click()}
-                    >
-                      {uploadingDoc ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                      Subir copia
-                    </Button>
-                  </div>
-                )}
-              </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Prima Neta</p>
+              <p className="text-sm font-medium">{formatCurrency(policy.premium)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Gastos Exp.</p>
+              <p className="text-sm font-medium">{formatCurrency(policyAny.gastos_expedicion)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">IVA</p>
+              <p className="text-sm font-medium">{formatCurrency(policyAny.iva)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total a Pagar</p>
+              <p className="text-sm font-bold">{formatCurrency(displayTotal)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Comisión</p>
+              <p className="text-sm font-medium">{policyAny.commission_pct || 0}%</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-              {/* ---- Soportes ---- */}
-              <div>
-                <h4 className="text-sm font-semibold mb-2">Soportes ({soportes.length}/5)</h4>
-                <div className="space-y-2">
-                  {soportes.map((doc) => (
-                    <div key={doc.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <span className="text-sm truncate">{doc.file_name}</span>
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownloadDoc(doc)}>
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => handleDeleteDoc(doc)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+      {/* ============================================= */}
+      {/* TABLA DE ANEXOS (solo póliza principal)       */}
+      {/* ============================================= */}
+      {isPrincipal && anexos.length > 0 && (
+        <Card>
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Anexos ({anexos.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="pb-2 pr-3 font-medium">Anexo</th>
+                    <th className="pb-2 pr-3 font-medium">Tipo Mov.</th>
+                    <th className="pb-2 pr-3 font-medium">Prima</th>
+                    <th className="pb-2 pr-3 font-medium">Total</th>
+                    <th className="pb-2 pr-3 font-medium">Vigencia</th>
+                    <th className="pb-2 font-medium">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {anexos.map((anexo: any) => (
+                    <tr key={anexo.id} className="border-b last:border-0">
+                      <td className="py-2 pr-3">
+                        <Link
+                          href={`/polizas/${anexo.id}`}
+                          className="text-primary hover:underline font-medium"
+                        >
+                          {anexo.anexo}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-3 capitalize">{anexo.tipo_movimiento || '-'}</td>
+                      <td className="py-2 pr-3">{formatCurrency(anexo.premium)}</td>
+                      <td className="py-2 pr-3">{formatCurrency(anexo.total_a_pagar)}</td>
+                      <td className="py-2 pr-3">
+                        {formatDate(anexo.start_date)} → {formatDate(anexo.end_date)}
+                      </td>
+                      <td className="py-2">
+                        <Badge
+                          className={`text-[10px] ${POLICY_STATUS_COLORS[anexo.status as PolicyStatus] || 'bg-gray-100 text-gray-800'}`}
+                        >
+                          {POLICY_STATUS_LABELS[anexo.status as PolicyStatus] || anexo.status}
+                        </Badge>
+                      </td>
+                    </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-                  {soportes.length < 5 && (
-                    <div>
-                      <input
-                        ref={soporteInputRef}
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleUploadDoc(file, 'soporte', `Soporte ${soportes.length + 1}`);
-                          e.target.value = '';
-                        }}
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        disabled={uploadingDoc}
-                        onClick={() => soporteInputRef.current?.click()}
-                      >
-                        {uploadingDoc ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                        Subir soporte
-                      </Button>
-                    </div>
-                  )}
-
-                  {soportes.length === 0 && (
-                    <p className="text-xs text-muted-foreground text-center py-2">No hay soportes adjuntos</p>
-                  )}
-                </div>
+      {/* ============================================= */}
+      {/* CLIENTE                                       */}
+      {/* ============================================= */}
+      {policy.client && (
+        <Card>
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Cliente
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Nombre</p>
+                <p className="text-sm font-medium">{policy.client.full_name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Documento</p>
+                <p className="text-sm font-medium">{policy.client.doc_number}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Email</p>
+                <p className="text-sm font-medium">{policy.client.email || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Teléfono</p>
+                <p className="text-sm font-medium">{policy.client.phone || '-'}</p>
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ============================================= */}
+      {/* NOTAS                                         */}
+      {/* ============================================= */}
+      {policyAny.notas && (
+        <Card>
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="text-sm font-semibold">Notas</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <p className="text-sm whitespace-pre-wrap">{policyAny.notas}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ============================================= */}
+      {/* REGISTRO / TIMESTAMPS                         */}
+      {/* ============================================= */}
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            Registro
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Creado</p>
+              <p className="text-sm font-medium">{formatDate(policy.created_at)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Última Actualización</p>
+              <p className="text-sm font-medium">{formatDate(policy.updated_at)}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
